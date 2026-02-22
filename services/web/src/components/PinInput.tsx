@@ -2,13 +2,13 @@
 
 import React, { useRef } from "react";
 
-export default function PinInput({
-  value,
-  onChange,
-}: {
+export default ({
+                  value,
+                  onChange,
+                }: {
   value: string[];
   onChange: (v: string[]) => void;
-}) {
+}) => {
   const refs = [
     useRef<HTMLInputElement>(null),
     useRef<HTMLInputElement>(null),

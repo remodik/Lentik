@@ -25,6 +25,15 @@ class Family(Base):
     invites: Mapped[list["Invite"]] = relationship(
         back_populates="family", cascade="all, delete-orphan"
     )
+    chats: Mapped[list["Chat"]] = relationship(
+        back_populates="family", cascade="all, delete-orphan"
+    )
+    channels: Mapped[list["Channel"]] = relationship(
+        back_populates="family", cascade="all, delete-orphan"
+    )
+    gallery_items: Mapped[list["GalleryItem"]] = relationship(
+        back_populates="family", cascade="all, delete-orphan"
+    )
 
     def __repr__(self) -> str:
         return f"<Family {self.name!r}>"

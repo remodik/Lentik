@@ -1,0 +1,20 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: lentik_db
+    environment:
+      POSTGRES_DB: lentik
+      POSTGRES_USER: lentik
+      POSTGRES_PASSWORD: lentik
+    ports:
+      - "5432:5432"
+    volumes:
+      - lentik_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lentik -d lentik"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  lentik_pgdata:

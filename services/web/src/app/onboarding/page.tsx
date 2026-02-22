@@ -44,16 +44,12 @@ function OnboardingContent() {
     setError("");
     setLoading(true);
     try {
-      // Извлекаем токен из ссылки если вставили полную ссылку
       let t = token.trim();
       try {
         const url = new URL(t);
         t = url.searchParams.get("token") ?? t;
-      } catch {
-        // уже просто токен
-      }
+      } catch { }
 
-      // Присоединяемся к семье через уже существующий аккаунт
       const res = await fetch("/api/families/join", {
         method: "POST",
         credentials: "include",
@@ -80,7 +76,6 @@ function OnboardingContent() {
     router.push("/app");
   }
 
-  // ── Семья создана — показываем инвайт-ссылку ──────────────────
   if (inviteLink) {
     return (
       <div className="bg-white rounded-3xl shadow-sm border border-cream-200 p-8 text-center">

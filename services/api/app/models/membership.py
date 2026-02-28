@@ -30,7 +30,9 @@ class Membership(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
     role: Mapped[Role] = mapped_column(
-        Enum(Role, name="role_enum"), default=Role.MEMBER, nullable=False
+        Enum(Role, name="role_enum", values_callable=lambda obj: [e.value for e in obj]),
+        default=Role.MEMBER,
+        nullable=False,
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

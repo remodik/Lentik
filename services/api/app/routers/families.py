@@ -1,11 +1,12 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.auth.deps import get_current_user
+from app.core.jwt import COOKIE_NAME, decode_access_token
 from app.db.deps import get_db
 from app.models.family import Family
 from app.models.membership import Membership, Role
@@ -16,6 +17,7 @@ from app.schemas.families import (
     FamilyMemberResponse,
     FamilyResponse,
 )
+from app.ws.manager import ws_manager
 
 router = APIRouter(prefix="/families", tags=["families"])
 
@@ -77,7 +79,10 @@ async def get_family(
         FamilyMemberResponse(
             user_id=m.user_id,
             username=m.user.username,
+            display_name=m.user.display_name,
             avatar_url=m.user.avatar_url,
+            bio=m.user.bio,
+            birthday=m.user.birthday,
             role=m.role,
             joined_at=m.created_at,
         )
@@ -134,6 +139,16 @@ async def kick_member(
     await db.delete(m)
     await db.commit()
 
+    kicked_user = await db.get(User, member_id)
+    await ws_manager.broadcast_to_family(
+        family_id,
+        {
+            "type": "member_kicked",
+            "user_id": str(member_id),
+            "display_name": kicked_user.display_name if kicked_user else "Участник",
+        },
+    )
+
 
 @router.patch("/{family_id}/members/{member_id}/role", response_model=FamilyMemberResponse)
 async def change_member_role(
@@ -163,7 +178,45 @@ async def change_member_role(
     return FamilyMemberResponse(
         user_id=m.user_id,
         username=m.user.username,
+        display_name=m.user.display_name,
         avatar_url=m.user.avatar_url,
         role=m.role,
         joined_at=m.created_at,
     )
+
+
+@router.websocket("/{family_id}/ws")
+async def family_ws(
+    websocket: WebSocket,
+    family_id: UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    token = websocket.cookies.get(COOKIE_NAME)
+    user_id = decode_access_token(token) if token else None
+    if not user_id:
+        await websocket.close(code=4001)
+        return
+
+    user = await db.scalar(select(User).where(User.id == user_id))
+    if not user:
+        await websocket.close(code=4001)
+        return
+
+    m = await db.scalar(
+        select(Membership).where(
+            Membership.family_id == family_id,
+            Membership.user_id == user.id,
+        )
+    )
+    if not m:
+        await websocket.close(code=4003)
+        return
+
+    await ws_manager.connect_family(family_id, websocket)
+    try:
+        while True:
+            data = await websocket.receive_text()
+            if data == "ping":
+                await websocket.send_text("pong")
+    except WebSocketDisconnect:
+        ws_manager.disconnect_family(family_id, websocket)

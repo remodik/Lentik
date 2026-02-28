@@ -1,25 +1,27 @@
+import re
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.auth.deps import get_current_user
+from app.core.jwt import COOKIE_NAME, decode_access_token
 from app.db.deps import get_db
 from app.models.chat import Chat
 from app.models.membership import Membership
 from app.models.message import Message
 from app.models.user import User
 from app.schemas.chats import (
-    ChatCreate,
-    ChatResponse,
-    MessageCreate,
-    MessageResponse,
-    MessageUpdate,
+    ChatCreate, ChatResponse,
+    MessageCreate, MessageResponse, MessageUpdate,
 )
 from app.ws.manager import ws_manager
 
 router = APIRouter(prefix="/families/{family_id}/chats", tags=["chats"])
+
+MENTION_RE = re.compile(r"@([\w_]+)")
 
 
 async def _require_member(family_id: UUID, user: User, db: AsyncSession) -> Membership:
@@ -32,6 +34,40 @@ async def _require_member(family_id: UUID, user: User, db: AsyncSession) -> Memb
     if not m:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not a family member")
     return m
+
+
+def _parse_mentions(text: str) -> list[str]:
+    return list(set(MENTION_RE.findall(text)))
+
+
+def _msg_to_dict(msg: Message) -> dict:
+    return {
+        "id": str(msg.id),
+        "chat_id": str(msg.chat_id),
+        "author_id": str(msg.author_id) if msg.author_id else None,
+        "author_username": msg.author.username if msg.author else None,
+        "author_display_name": msg.author.display_name if msg.author else None,
+        "text": msg.text,
+        "edited": msg.edited,
+        "reply_to_id": str(msg.reply_to_id) if msg.reply_to_id else None,
+        "mentions": msg.mentions or [],
+        "created_at": msg.created_at.isoformat(),
+    }
+
+
+def _msg_response(msg: Message, display_name: str | None = None) -> MessageResponse:
+    return MessageResponse(
+        id=msg.id,
+        chat_id=msg.chat_id,
+        author_id=msg.author_id,
+        author_username=msg.author.username if msg.author else None,
+        author_display_name=display_name or (msg.author.display_name if msg.author else None),
+        text=msg.text,
+        edited=msg.edited,
+        reply_to_id=msg.reply_to_id,
+        mentions=msg.mentions or [],
+        created_at=msg.created_at,
+    )
 
 
 @router.get("", response_model=list[ChatResponse])
@@ -96,6 +132,7 @@ async def get_messages(
     query = (
         select(Message)
         .where(Message.chat_id == chat_id)
+        .options(selectinload(Message.author))
         .order_by(Message.created_at.desc())
         .limit(limit)
     )
@@ -105,7 +142,8 @@ async def get_messages(
             query = query.where(Message.created_at < anchor.created_at)
 
     result = await db.scalars(query)
-    return list(reversed(result.all()))
+    messages = list(reversed(result.all()))
+    return [_msg_response(m) for m in messages]
 
 
 @router.post("/{chat_id}/messages", response_model=MessageResponse, status_code=status.HTTP_201_CREATED)
@@ -122,27 +160,37 @@ async def send_message(
     if not chat or chat.family_id != family_id:
         raise HTTPException(status_code=404, detail="Chat not found")
 
-    msg = Message(chat_id=chat_id, author_id=user.id, text=body.text, reply_to_id=body.reply_to_id)
-    db.add(msg)
-    await db.commit()
-    await db.refresh(msg)
+    mentions = _parse_mentions(body.text)
 
-    await ws_manager.broadcast_to_chat(
-        chat_id,
-        {
-            "type": "new_message",
-            "message": {
-                "id": str(msg.id),
-                "chat_id": str(msg.chat_id),
-                "author_id": str(msg.author_id),
-                "text": msg.text,
-                "created_at": msg.created_at.isoformat(),
-                "reply_to_id": str(msg.reply_to_id) if msg.reply_to_id else None,
-                "edited": False,
-            },
-        },
+    msg = Message(
+        chat_id=chat_id,
+        author_id=user.id,
+        text=body.text,
+        reply_to_id=body.reply_to_id,
+        mentions=mentions,
     )
-    return msg
+    db.add(msg)
+    await db.flush()
+    await db.refresh(msg, ["author"])
+    await db.commit()
+
+    msg_dict = _msg_to_dict(msg)
+    await ws_manager.broadcast_to_chat(chat_id, {"type": "new_message", "message": msg_dict})
+
+    if mentions:
+        await ws_manager.broadcast_to_family(
+            family_id,
+            {
+                "type": "mention",
+                "from": user.display_name,
+                "chat_id": str(chat_id),
+                "chat_name": chat.name,
+                "text": body.text[:100],
+                "mentions": mentions,
+            },
+        )
+
+    return _msg_response(msg, user.display_name)
 
 
 @router.patch("/{chat_id}/messages/{message_id}", response_model=MessageResponse)
@@ -156,30 +204,24 @@ async def edit_message(
 ):
     await _require_member(family_id, user, db)
 
-    msg = await db.get(Message, message_id)
+    msg = await db.scalar(
+        select(Message).where(Message.id == message_id).options(selectinload(Message.author))
+    )
     if not msg or msg.chat_id != chat_id:
         raise HTTPException(status_code=404, detail="Message not found")
-
     if msg.author_id != user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Can only edit your own messages")
 
     msg.text = body.text
     msg.edited = True
+    msg.mentions = _parse_mentions(body.text)
     await db.commit()
-    await db.refresh(msg)
 
     await ws_manager.broadcast_to_chat(
         chat_id,
-        {
-            "type": "message_edited",
-            "message": {
-                "id": str(msg.id),
-                "text": msg.text,
-                "edited": True,
-            },
-        },
+        {"type": "message_edited", "message": {"id": str(msg.id), "text": msg.text, "edited": True}},
     )
-    return msg
+    return _msg_response(msg)
 
 
 @router.delete("/{chat_id}/messages/{message_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -195,7 +237,6 @@ async def delete_message(
     msg = await db.get(Message, message_id)
     if not msg or msg.chat_id != chat_id:
         raise HTTPException(status_code=404, detail="Message not found")
-
     if msg.author_id != user.id and m.role != "owner":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not allowed")
 
@@ -215,9 +256,14 @@ async def chat_ws(
     chat_id: UUID,
     db: AsyncSession = Depends(get_db),
 ):
-    try:
-        user = await get_current_user(db=db, lentik_session=websocket.cookies.get("lentik_session"))
-    except HTTPException:
+    token = websocket.cookies.get(COOKIE_NAME)
+    user_id = decode_access_token(token) if token else None
+    if not user_id:
+        await websocket.close(code=4001)
+        return
+
+    user = await db.scalar(select(User).where(User.id == user_id))
+    if not user:
         await websocket.close(code=4001)
         return
 

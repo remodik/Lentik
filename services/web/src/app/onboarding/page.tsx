@@ -110,7 +110,6 @@ function OnboardingContent() {
 
   return (
     <>
-      {/* ── Выбор ─────────────────────────────────────────────── */}
       {step === "choice" && (
         <div className="bg-white rounded-3xl shadow-sm border border-cream-200 p-8">
           <h2 className="font-display text-2xl text-ink-900 mb-1">Добро пожаловать!</h2>
@@ -140,7 +139,6 @@ function OnboardingContent() {
         </div>
       )}
 
-      {/* ── Создать семью ──────────────────────────────────────── */}
       {step === "create" && (
         <div className="bg-white rounded-3xl shadow-sm border border-cream-200 p-8">
           <button
@@ -180,7 +178,6 @@ function OnboardingContent() {
         </div>
       )}
 
-      {/* ── Войти по инвайту ───────────────────────────────────── */}
       {step === "join" && (
         <div className="bg-white rounded-3xl shadow-sm border border-cream-200 p-8">
           <button

@@ -1,3 +1,4 @@
+from .calendar_event import CalendarEvent
 from .channel import Channel
 from .chat import Chat
 from .family import Family
@@ -10,6 +11,7 @@ from .session import Session
 from .user import User
 
 __all__ = [
+    "CalendarEvent",
     "Family",
     "User",
     "Membership",

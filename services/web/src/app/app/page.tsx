@@ -9,15 +9,17 @@ import {
 import ChatView from "@/components/ChatView";
 import GalleryView from "@/components/GalleryView";
 import MembersList from "@/components/MembersList";
+import CalendarView from "@/components/CalendarView";
 import ProfileMenu from "@/components/ProfileMenu";
 import { useNotifications, ToastContainer } from "@/components/NotificationSystem";
 
-type Section = "chats" | "gallery" | "members";
+type Section = "chats" | "gallery" | "members" | "calendar";
 
 const NAV_ITEMS: { id: Section; icon: string; label: string; sub: string }[] = [
-  { id: "chats",   icon: "💬", label: "Чаты",      sub: "Общение семьи" },
-  { id: "gallery", icon: "🖼️", label: "Галерея",   sub: "Фото и видео"  },
-  { id: "members", icon: "👥", label: "Участники", sub: "Члены семьи"   },
+  { id: "chats", icon: "💬", label: "Чаты", sub: "Общение семьи" },
+  { id: "gallery", icon: "🖼️", label: "Галерея", sub: "Фото и видео" },
+  { id: "members", icon: "👥", label: "Участники", sub: "Члены семьи" },
+  { id: "calendar", icon: "📅", label: "Календарь", sub: "События и даты" },
 ];
 
 export default function AppPage() {
@@ -148,32 +150,22 @@ export default function AppPage() {
       <aside className="w-72 flex flex-col bg-cream-50 border-r border-cream-200 shrink-0">
 
         <div className="px-3 pt-4 pb-3 border-b border-cream-200" ref={dropdownRef}>
-          <p className="text-xs font-semibold text-ink-300 uppercase tracking-widest mb-1 px-2 font-body">
-            Семья
-          </p>
-
+          <p className="text-xs font-semibold text-ink-300 uppercase tracking-widest mb-1 px-2 font-body">Семья</p>
           <button
             onClick={() => setDropdownOpen(v => !v)}
-            className="w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-2xl
-                       hover:bg-cream-100 transition-colors group text-left"
+            className="w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-2xl hover:bg-cream-100 transition-colors text-left"
           >
             <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-8 h-8 rounded-xl bg-warm-200 flex items-center justify-center text-sm shrink-0">
-                🏠
-              </div>
+              <div className="w-8 h-8 rounded-xl bg-warm-200 flex items-center justify-center text-sm shrink-0">🏠</div>
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-ink-900 truncate font-body leading-tight">
-                  {family?.name}
-                </p>
+                <p className="text-sm font-semibold text-ink-900 truncate font-body leading-tight">{family?.name}</p>
                 {myFamilies.length > 1 && (
                   <p className="text-xs text-ink-400 font-body">{myFamilies.length} семьи</p>
                 )}
               </div>
             </div>
-            <svg
-              className={`w-4 h-4 text-ink-400 shrink-0 transition-transform ${dropdownOpen ? "rotate-180" : ""}`}
-              fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
-            >
+            <svg className={`w-4 h-4 text-ink-400 shrink-0 transition-transform ${dropdownOpen ? "rotate-180" : ""}`}
+              fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
             </svg>
           </button>
@@ -182,18 +174,11 @@ export default function AppPage() {
             <div className="mt-1 bg-white border border-cream-200 rounded-2xl shadow-lg overflow-hidden">
               <div className="py-1">
                 {myFamilies.map(f => (
-                  <button
-                    key={f.family_id}
-                    onClick={() => switchFamily(f.family_id)}
+                  <button key={f.family_id} onClick={() => switchFamily(f.family_id)}
                     className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm text-left transition-colors ${
-                      f.family_id === familyId
-                        ? "bg-warm-50 text-ink-900 font-semibold"
-                        : "text-ink-700 hover:bg-cream-50"
-                    }`}
-                  >
-                    <div className="w-7 h-7 rounded-lg bg-cream-100 flex items-center justify-center text-xs shrink-0">
-                      🏠
-                    </div>
+                      f.family_id === familyId ? "bg-warm-50 text-ink-900 font-semibold" : "text-ink-700 hover:bg-cream-50"
+                    }`}>
+                    <div className="w-7 h-7 rounded-lg bg-cream-100 flex items-center justify-center text-xs shrink-0">🏠</div>
                     <span className="truncate font-body">{f.family_name}</span>
                     {f.family_id === familyId && (
                       <svg className="w-4 h-4 text-warm-400 ml-auto shrink-0" fill="currentColor" viewBox="0 0 20 20">
@@ -203,23 +188,15 @@ export default function AppPage() {
                   </button>
                 ))}
               </div>
-
               <div className="border-t border-cream-100" />
-
               <div className="py-1">
-                <button
-                  onClick={() => { setDropdownOpen(false); router.push("/onboarding"); }}
-                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-ink-600 hover:bg-cream-50 transition-colors font-body"
-                >
-                  <span className="text-base">＋</span>
-                  Создать семью
+                <button onClick={() => { setDropdownOpen(false); router.push("/onboarding"); }}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-ink-600 hover:bg-cream-50 transition-colors font-body">
+                  <span className="text-base">＋</span> Создать семью
                 </button>
-                <button
-                  onClick={() => { setDropdownOpen(false); router.push("/onboarding?join=1"); }}
-                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-ink-600 hover:bg-cream-50 transition-colors font-body"
-                >
-                  <span className="text-base">🔗</span>
-                  Войти по инвайту
+                <button onClick={() => { setDropdownOpen(false); router.push("/onboarding?join=1"); }}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-ink-600 hover:bg-cream-50 transition-colors font-body">
+                  <span className="text-base">🔗</span> Войти по инвайту
                 </button>
               </div>
             </div>
@@ -230,22 +207,15 @@ export default function AppPage() {
           {NAV_ITEMS.map(({ id, icon, label, sub }) => {
             const active = section === id;
             return (
-              <button
-                key={id}
-                onClick={() => setSection(id)}
+              <button key={id} onClick={() => setSection(id)}
                 className={`w-full flex items-center gap-3 px-3 py-3 rounded-2xl text-left transition-all ${
                   active ? "bg-warm-100 shadow-sm" : "hover:bg-cream-100"
-                }`}
-              >
+                }`}>
                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg shrink-0 transition-all ${
                   active ? "bg-warm-400 shadow-md" : "bg-cream-200"
-                }`}>
-                  {icon}
-                </div>
+                }`}>{icon}</div>
                 <div className="min-w-0">
-                  <p className={`text-sm font-semibold leading-tight font-body ${active ? "text-ink-900" : "text-ink-700"}`}>
-                    {label}
-                  </p>
+                  <p className={`text-sm font-semibold leading-tight font-body ${active ? "text-ink-900" : "text-ink-700"}`}>{label}</p>
                   <p className="text-xs text-ink-300 mt-0.5 truncate font-body">{sub}</p>
                 </div>
                 {id === "chats" && (
@@ -258,9 +228,7 @@ export default function AppPage() {
                     {chats.length > 0 && (
                       <span className={`text-xs font-medium px-2 py-0.5 rounded-full font-body ${
                         active ? "bg-warm-400 text-white" : "bg-cream-200 text-ink-400"
-                      }`}>
-                        {chats.length}
-                      </span>
+                      }`}>{chats.length}</span>
                     )}
                   </div>
                 )}
@@ -274,20 +242,15 @@ export default function AppPage() {
             <div className="flex items-center justify-between px-2 mb-2">
               <span className="text-xs font-semibold text-ink-300 uppercase tracking-wider font-body">Каналы</span>
               {isOwner && (
-                <button
-                  onClick={() => setShowNewChat(v => !v)}
+                <button onClick={() => setShowNewChat(v => !v)}
                   className="w-5 h-5 flex items-center justify-center text-ink-300 hover:text-ink-700 transition-colors text-xl leading-none"
-                  title="Новый чат"
-                >+</button>
+                  title="Новый чат">+</button>
               )}
             </div>
 
             {showNewChat && (
               <form onSubmit={handleCreateChat} className="mb-3">
-                <input
-                  autoFocus
-                  value={newChatName}
-                  onChange={e => setNewChatName(e.target.value)}
+                <input autoFocus value={newChatName} onChange={e => setNewChatName(e.target.value)}
                   onKeyDown={e => e.key === "Escape" && setShowNewChat(false)}
                   placeholder="Название канала"
                   className="w-full bg-white text-ink-900 text-sm px-3 py-2 rounded-xl outline-none border-2 border-warm-400 placeholder-ink-300 font-body"
@@ -344,9 +307,7 @@ export default function AppPage() {
           <div className="flex-1 flex flex-col items-center justify-center text-center p-8 gap-3 bg-cream-50">
             <div className="w-16 h-16 rounded-2xl bg-cream-200 flex items-center justify-center text-3xl">💬</div>
             <p className="text-ink-700 font-semibold font-display">Выбери чат слева</p>
-            <p className="text-ink-400 text-sm font-body">
-              {isOwner ? "Или создай новый через +" : "Чаты появятся здесь"}
-            </p>
+            <p className="text-ink-400 text-sm font-body">{isOwner ? "Или создай новый через +" : "Чаты появятся здесь"}</p>
           </div>
         )}
         {section === "gallery" && me && <GalleryView familyId={familyId} meId={me.id} />}
@@ -357,6 +318,13 @@ export default function AppPage() {
             const updated = await import("@/lib/api").then(m => m.getFamily(familyId));
             setFamily(updated);
           }} />
+        )}
+        {section === "calendar" && me && (
+          <CalendarView
+            familyId={familyId}
+            meId={me.id}
+            members={family?.members ?? []}
+          />
         )}
         {section === null && (
           <div className="flex-1 flex items-center justify-center bg-cream-50">

@@ -41,7 +41,7 @@ export function logout() {
 export function joinByInvite(token: string, display_name: string, pin: string) {
   return request<{ user_id: string; family_id: string }>("/auth/invite", {
     method: "POST",
-    body: JSON.stringify({token, display_name, pin}),
+    body: JSON.stringify({ token, display_name, pin }),
   });
 }
 
@@ -184,4 +184,48 @@ export type GalleryItem = {
 
 export function getGallery(familyId: string) {
   return request<GalleryItem[]>(`/families/${familyId}/gallery`);
+}
+
+export type CalendarEvent = {
+  id: string;
+  family_id: string;
+  created_by: string | null;
+  creator_name: string | null;
+  title: string;
+  description: string | null;
+  starts_at: string;
+  ends_at: string | null;
+  color: "red" | "green" | "blue" | "yellow" | "purple" | "orange";
+  created_at: string;
+};
+
+export type CalendarEventCreate = {
+  title: string;
+  description?: string | null;
+  starts_at: string;
+  ends_at?: string | null;
+  color?: CalendarEvent["color"];
+};
+
+export function getCalendarEvents(familyId: string, year?: number, month?: number) {
+  const params = year && month ? `?year=${year}&month=${month}` : "";
+  return request<CalendarEvent[]>(`/families/${familyId}/calendar${params}`);
+}
+
+export function createCalendarEvent(familyId: string, data: CalendarEventCreate) {
+  return request<CalendarEvent>(`/families/${familyId}/calendar`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateCalendarEvent(familyId: string, eventId: string, data: Partial<CalendarEventCreate>) {
+  return request<CalendarEvent>(`/families/${familyId}/calendar/${eventId}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteCalendarEvent(familyId: string, eventId: string) {
+  return request<void>(`/families/${familyId}/calendar/${eventId}`, { method: "DELETE" });
 }

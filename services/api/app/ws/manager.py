@@ -1,6 +1,7 @@
 import json
 from collections import defaultdict
 from uuid import UUID
+from typing import Any
 
 from fastapi import WebSocket
 
@@ -28,7 +29,7 @@ class ConnectionManager:
         if not self._family_connections[family_id]:
             del self._family_connections[family_id]
 
-    async def broadcast_to_chat(self, chat_id: UUID, payload: dict) -> None:
+    async def broadcast_to_chat(self, chat_id: UUID, payload: dict[str, Any]) -> None:
         dead: list[WebSocket] = []
         for ws in list(self._chat_connections.get(chat_id, [])):
             try:
@@ -38,7 +39,7 @@ class ConnectionManager:
         for ws in dead:
             self.disconnect(chat_id, ws)
 
-    async def broadcast_to_family(self, family_id: UUID, payload: dict) -> None:
+    async def broadcast_to_family(self, family_id: UUID, payload: dict[str, Any]) -> None:
         dead: list[WebSocket] = []
         for ws in list(self._family_connections.get(family_id, [])):
             try:

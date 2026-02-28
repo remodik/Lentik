@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from app.routers.auth import router as auth_router
+from app.routers.calendar import router as calendar_router
 from app.routers.channels import router as channels_router
 from app.routers.chats import router as chats_router
 from app.routers.families import router as families_router
@@ -18,7 +19,7 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="Lentik API", version="0.2.0")
+    app = FastAPI(title="Lentik API", version="0.3.0")
 
     app.mount("/static/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 
@@ -29,6 +30,7 @@ def create_app() -> FastAPI:
     app.include_router(chats_router)
     app.include_router(channels_router)
     app.include_router(gallery_router)
+    app.include_router(calendar_router)
     app.include_router(families_join_router)
 
     return app

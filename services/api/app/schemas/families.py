@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -21,7 +21,10 @@ class FamilyResponse(BaseModel):
 class FamilyMemberResponse(BaseModel):
     user_id: UUID
     username: str
+    display_name: str
     avatar_url: str | None
+    bio: str | None = None
+    birthday: date | None = None
     role: Role
     joined_at: datetime
 

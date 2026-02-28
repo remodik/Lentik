@@ -33,7 +33,10 @@ class MessageResponse(BaseModel):
     id: UUID
     chat_id: UUID
     author_id: UUID | None
+    author_username: str | None
+    author_display_name: str | None
     text: str
     edited: bool
     reply_to_id: UUID | None
+    mentions: list[str] = []
     created_at: datetime

@@ -7,4 +7,5 @@
 *.pyd
 *.db
 /venv/
-services/web/.next/cache/webpack/server-development/6.pack.gz
+/services/web/.next/
+/services/web/node_modules/

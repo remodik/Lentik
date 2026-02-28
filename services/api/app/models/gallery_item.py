@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, String, Text, func
+from sqlalchemy import BigInteger, DateTime, Enum, ForeignKey, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -27,9 +27,13 @@ class GalleryItem(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     media_type: Mapped[MediaType] = mapped_column(
-        Enum(MediaType, name="media_type_enum"), nullable=False, default=MediaType.IMAGE
+        Enum(MediaType, name="media_type_enum", values_callable=lambda obj: [e.value for e in obj]),
+        nullable=False,
+        default=MediaType.IMAGE,
     )
     url: Mapped[str] = mapped_column(String(1024), nullable=False)
+    file_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    file_size: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     caption: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

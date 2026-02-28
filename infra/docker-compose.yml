@@ -16,5 +16,36 @@ services:
       timeout: 3s
       retries: 20
 
+  api:
+    build:
+      context: ../services/api
+      dockerfile: Dockerfile
+    container_name: lentik_api
+    environment:
+      DATABASE_URL: postgresql+asyncpg://lentik:lentik@db:5432/lentik
+      UPLOAD_DIR: /uploads
+      JWT_SECRET: change-me-in-production
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../services/cloud/uploads:/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ../services/web
+      dockerfile: Dockerfile
+      args:
+        API_URL: http://api:8000
+    container_name: lentik_web
+    environment:
+      API_URL: http://api:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
 volumes:
   lentik_pgdata:

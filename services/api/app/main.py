@@ -11,6 +11,7 @@ from app.routers.families import router as families_router
 from app.routers.gallery import router as gallery_router
 from app.routers.invites import router as invites_router
 from app.routers.me import router as me_router
+from app.routers.families_join import router as families_join_router
 
 UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "uploads"))
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
@@ -28,6 +29,7 @@ def create_app() -> FastAPI:
     app.include_router(chats_router)
     app.include_router(channels_router)
     app.include_router(gallery_router)
+    app.include_router(families_join_router)
 
     return app
 

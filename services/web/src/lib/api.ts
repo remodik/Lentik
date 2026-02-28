@@ -9,6 +9,10 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: "Ошибка сервера" }));
+    if (Array.isArray(err.detail)) {
+      const msg = err.detail.map((e: { msg?: string }) => e.msg ?? "Ошибка").join(", ");
+      throw new Error(msg);
+    }
     throw new Error(err.detail ?? "Ошибка сервера");
   }
 
@@ -16,10 +20,10 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json();
 }
 
-export function register(username: string, pin: string) {
+export function register(display_name: string, username: string, pin: string) {
   return request<{ user_id: string }>("/auth/register", {
     method: "POST",
-    body: JSON.stringify({ username, pin }),
+    body: JSON.stringify({ display_name, username, pin }),
   });
 }
 
@@ -30,18 +34,32 @@ export function loginByPin(username: string, pin: string) {
   });
 }
 
-export function joinByInviteToken(token: string) {
-  return request<{ user_id: string; family_id: string }>("/auth/invite/join", {
+export function logout() {
+  return request<void>("/auth/logout", { method: "POST" });
+}
+
+export function joinByInvite(token: string, display_name: string, pin: string) {
+  return request<{ user_id: string; family_id: string }>("/auth/invite", {
     method: "POST",
-    body: JSON.stringify({ token }),
+    body: JSON.stringify({token, display_name, pin}),
   });
 }
 
 export type Me = {
   id: string;
   username: string;
+  display_name: string;
   avatar_url: string | null;
+  bio: string | null;
+  birthday: string | null;
   created_at: string;
+};
+
+export type MyFamily = {
+  family_id: string;
+  family_name: string;
+  role: "owner" | "member";
+  joined_at: string;
 };
 
 export function getMe() {
@@ -49,13 +67,20 @@ export function getMe() {
 }
 
 export function getMyFamilies() {
-  return request<{ family_id: string; role: string; joined_at: string }[]>("/me/families");
+  return request<MyFamily[]>("/me/families");
+}
+
+export function leaveFamily(familyId: string) {
+  return request<void>(`/me/families/${familyId}`, { method: "DELETE" });
 }
 
 export type FamilyMember = {
   user_id: string;
   username: string;
+  display_name: string;
   avatar_url: string | null;
+  bio: string | null;
+  birthday: string | null;
   role: "owner" | "member";
   joined_at: string;
 };
@@ -78,6 +103,10 @@ export function createFamily(name: string) {
   });
 }
 
+export function kickMember(familyId: string, userId: string) {
+  return request<void>(`/families/${familyId}/members/${userId}`, { method: "DELETE" });
+}
+
 export function createInvite(familyId: string, expiresInHours = 72) {
   return request<{ token: string; expires_at: string; join_url: string }>("/invites", {
     method: "POST",
@@ -85,14 +114,30 @@ export function createInvite(familyId: string, expiresInHours = 72) {
   });
 }
 
-export type Chat = { id: string; name: string; family_id: string; created_at: string };
+export function joinFamilyByToken(token: string) {
+  return request<{ family_id: string }>("/families/join", {
+    method: "POST",
+    body: JSON.stringify({ token }),
+  });
+}
+
+export type Chat = {
+  id: string;
+  name: string;
+  family_id: string;
+  created_at: string;
+};
+
 export type Message = {
   id: string;
   chat_id: string;
   author_id: string | null;
+  author_username: string | null;
+  author_display_name: string | null;
   text: string;
   edited: boolean;
   reply_to_id: string | null;
+  mentions: string[];
   created_at: string;
 };
 
@@ -126,10 +171,14 @@ export function deleteMessage(familyId: string, chatId: string, messageId: strin
 
 export type GalleryItem = {
   id: string;
+  family_id: string;
+  uploaded_by: string | null;
+  uploaded_by_name: string | null;
   media_type: "image" | "video";
   url: string;
+  file_name: string | null;
+  file_size: number | null;
   caption: string | null;
-  uploaded_by: string | null;
   created_at: string;
 };
 

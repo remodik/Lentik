@@ -1,57 +1,75 @@
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@300;400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@300;400;500;600&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-:root {
-    --bg: #fdfaf5;
-    --ink: #1c1714;
-}
+* { box-sizing: border-box; }
 
 body {
-    background-color: var(--bg);
-    color: var(--ink);
+    background-color: #f0f2f5;
+    color: #1a1a1a;
     font-family: 'DM Sans', sans-serif;
     -webkit-font-smoothing: antialiased;
+    margin: 0;
 }
 
 @keyframes fadeUp {
     from { opacity: 0; transform: translateY(16px); }
     to { opacity: 1; transform: translateY(0); }
 }
-
 @keyframes fadeIn {
     from { opacity: 0; }
     to { opacity: 1; }
 }
-
-.animate-fade-up {
-    animation: fadeUp 0.5s ease forwards;
-}
-
-.animate-fade-in {
-    animation: fadeIn 0.4s ease forwards;
-}
+.animate-fade-up { animation: fadeUp 0.5s ease forwards; }
+.animate-fade-in { animation: fadeIn 0.4s ease forwards; }
+.font-display { font-family: 'Playfair Display', serif; }
+.font-body { font-family: 'DM Sans', sans-serif; }
 
 .pin-input {
     width: 3rem;
     height: 3.5rem;
     text-align: center;
     font-size: 1.5rem;
-    font-family: 'Playfair Display', serif;
     border: 2px solid #f0e4cc;
     border-radius: 0.75rem;
     background: #fff;
+    color: #1c1714;
     outline: none;
     transition: border-color 0.2s, box-shadow 0.2s;
 }
-
 .pin-input:focus {
-    border-color: #c4956a;
-    box-shadow: 0 0 0 3px rgba(196, 149, 106, 0.15);
+    border-color: #5865f2;
+    box-shadow: 0 0 0 3px rgba(88, 101, 242, 0.12);
 }
 
-.chat-scroll::-webkit-scrollbar { width: 4px; }
+.chat-scroll { scrollbar-width: thin; scrollbar-color: #e5e7eb transparent; }
+.chat-scroll::-webkit-scrollbar { width: 6px; }
 .chat-scroll::-webkit-scrollbar-track { background: transparent; }
-.chat-scroll::-webkit-scrollbar-thumb { background: #f0e4cc; border-radius: 99px; }
+.chat-scroll::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 99px; }
+
+nav { scrollbar-width: thin; scrollbar-color: #e5e7eb transparent; }
+nav::-webkit-scrollbar { width: 4px; }
+nav::-webkit-scrollbar-track { background: transparent; }
+nav::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 99px; }
+
+.input-field {
+    width: 100%;
+    padding: 0.625rem 0.875rem;
+    background: #fdf6ec;
+    border: 2px solid #f0e4cc;
+    border-radius: 0.75rem;
+    color: #1c1714;
+    font-size: 0.875rem;
+    font-family: 'DM Sans', sans-serif;
+    outline: none;
+    transition: border-color 0.2s, background 0.2s;
+}
+.input-field:focus {
+    border-color: #c9a96e;
+    background: #fff;
+}
+.input-field::placeholder {
+    color: #b8a898;
+}

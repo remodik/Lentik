@@ -1,0 +1,10 @@
+/.idea/
+.env
+/.venv/
+/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.db
+/venv/
+services/web/.next/cache/webpack/server-development/6.pack.gz

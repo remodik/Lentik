@@ -1,0 +1,312 @@
+/* Design tokens and shared CSS custom properties. */
+
+:root {
+  /* ─── Background ─── */
+  --bg-page:              #f2e8d9;
+  --bg-surface:           rgba(255, 255, 255, 0.58);
+  --bg-surface-strong:    rgba(255, 255, 255, 0.78);
+  --bg-surface-subtle:    rgba(255, 255, 255, 0.42);
+  --bg-sidebar:           rgba(253, 250, 245, 0.74);
+  --bg-topbar:            rgba(253, 250, 245, 0.62);
+  --bg-elevated:          rgba(255, 255, 255, 0.88);
+  --bg-overlay:           rgba(28, 23, 20, 0.32);
+
+  /* ─── Border ─── */
+  --border-glass:         rgba(255, 255, 255, 0.52);
+  --border-glass-strong:  rgba(255, 255, 255, 0.70);
+  --border-glass-dim:     rgba(255, 255, 255, 0.30);
+  --border-warm:          rgba(240, 228, 204, 0.50);
+  --border-warm-dim:      rgba(240, 228, 204, 0.35);
+
+  /* ─── Accent ─── */
+  --accent:               #c4956a;
+  --accent-hover:         #b07d52;
+  --accent-soft:          rgba(196, 149, 106, 0.18);
+  --accent-medium:        rgba(196, 149, 106, 0.22);
+  --accent-border:        rgba(196, 149, 106, 0.45);
+  --accent-focus-ring:    rgba(196, 149, 106, 0.26);
+
+  /* ─── Text ─── */
+  --text-primary:         #1c1714;
+  --text-secondary:       #3d342c;
+  --text-tertiary:        #6b5a4e;
+  --text-muted:           #a89080;
+  --text-faint:           #8a7068;
+  --text-on-dark:         #fdfaf5;
+  --text-on-dark-dim:     rgba(253, 250, 245, 0.70);
+
+  /* ─── Blur ─── */
+  --blur-sm:    blur(12px) saturate(140%);
+  --blur-md:    blur(24px) saturate(160%);
+  --blur-lg:    blur(40px) saturate(180%);
+  --blur-xl:    blur(48px) saturate(190%);
+
+  /* ─── Radius ─── */
+  --radius-sm:   0.5rem;
+  --radius-md:   0.75rem;
+  --radius-lg:   1rem;
+  --radius-xl:   1.25rem;
+  --radius-2xl:  1.5rem;
+  --radius-3xl:  2rem;
+
+  /* ─── Typography ─── */
+  --font-display: 'Playfair Display', Georgia, serif;
+  --font-body:    'DM Sans', sans-serif;
+
+  /* ─── Shadows (keep existing var names, extend) ─── */
+  --shadow-xs:    0 1px 2px rgba(28, 23, 20, 0.05);
+  --shadow-sm:    0 1px 4px rgba(28, 23, 20, 0.06), 0 4px 14px rgba(28, 23, 20, 0.04);
+  --shadow-md:    0 4px 16px rgba(28, 23, 20, 0.09), 0 8px 28px rgba(28, 23, 20, 0.05);
+  --shadow-lg:    0 8px 32px rgba(28, 23, 20, 0.12), 0 2px 8px rgba(28, 23, 20, 0.06);
+  --shadow-float: 0 16px 48px rgba(28, 23, 20, 0.14), 0 4px 12px rgba(28, 23, 20, 0.07);
+  --shadow-deep:  0 24px 72px rgba(28, 23, 20, 0.18), 0 6px 16px rgba(28, 23, 20, 0.08);
+  --shadow-glass: 0 2px 12px rgba(28, 23, 20, 0.07), 0 8px 32px rgba(28, 23, 20, 0.04),
+                  inset 0 1px 0 rgba(255, 255, 255, 0.75);
+  --shadow-glass-float: 0 12px 40px rgba(28, 23, 20, 0.14), 0 4px 12px rgba(28, 23, 20, 0.06),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.90);
+  --shadow-inset-top: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+
+  /* ─── Animation ─── */
+  --ease-spring:    cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-out-expo:  cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-smooth:    cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-fast:   120ms;
+  --dur-normal: 220ms;
+  --dur-slow:   340ms;
+  --dur-enter:  480ms;
+
+  /* ─── Focus ─── */
+  --focus-ring: 0 0 0 3px rgba(196, 149, 106, 0.26), 0 0 0 1px rgba(196, 149, 106, 0.12);
+
+  /* ─── Compatibility Aliases ─── */
+  --r-sm: var(--radius-sm);
+  --r-md: var(--radius-md);
+  --r-lg: var(--radius-lg);
+  --r-xl: var(--radius-xl);
+  --r-2xl: var(--radius-2xl);
+  --r-3xl: var(--radius-3xl);
+  --glass-bg: var(--bg-surface);
+  --glass-bg-strong: var(--bg-surface-strong);
+  --glass-bg-sidebar: var(--bg-sidebar);
+  --glass-border: var(--border-glass);
+  --glass-border-dim: var(--border-glass-dim);
+  --glass-blur-sm: var(--blur-sm);
+  --glass-blur: var(--blur-md);
+  --glass-blur-lg: var(--blur-lg);
+  /* ─── Extended Color Tokens ─── */
+  --color-extra-001: transparent;
+  --color-extra-002: rgba(245, 213, 176, 0.55);
+  --color-extra-003: rgba(232, 213, 184, 0.4);
+  --color-extra-004: rgba(250, 235, 215, 0.45);
+  --color-extra-005: rgba(196, 149, 106, 0.14);
+  --color-extra-006: rgba(232, 213, 184, 0.6);
+  --color-extra-007: rgba(232, 213, 184, 0.7);
+  --color-extra-008: rgba(196, 149, 106, 0.6);
+  --color-extra-009: rgba(28, 23, 20, 0.9);
+  --color-extra-010: rgba(255, 255, 255, 0.12);
+  --color-extra-011: rgba(28, 23, 20, 0.2);
+  --color-extra-012: white;
+  --color-extra-013: rgba(255, 255, 255, 0.6);
+  --color-extra-014: rgba(28, 23, 20, 0.06);
+  --color-extra-015: rgba(255, 255, 255, 0.8);
+  --color-extra-016: rgba(196, 149, 106, 0.4);
+  --color-extra-017: rgba(196, 149, 106, 0.1);
+  --color-extra-018: rgba(240, 228, 204, 0.4);
+  --color-extra-019: rgba(255, 255, 255, 0.1);
+  --color-extra-020: rgba(28, 23, 20, 0.24);
+  --color-extra-021: rgba(255, 255, 255, 0.16);
+  --color-extra-022: rgba(255, 220, 240, 0.46);
+  --color-extra-023: rgba(255, 182, 220, 0.44);
+  --color-extra-024: rgba(255, 255, 255, 0.72);
+  --color-extra-025: rgba(255, 255, 255, 0.56);
+  --color-extra-026: rgba(240, 228, 204, 0.42);
+  --color-extra-027: rgba(249, 242, 231, 0.25);
+  --color-extra-028: rgba(245, 213, 176, 0.28);
+  --color-extra-029: rgba(255, 220, 240, 0.55);
+  --color-extra-030: rgba(255, 182, 220, 0.45);
+  --color-extra-031: rgba(240, 228, 204, 0.3);
+  --color-extra-032: rgba(255, 255, 255, 0.22);
+  --color-extra-033: rgba(255, 255, 255, 0.32);
+  --color-extra-034: rgba(255, 255, 255, 0.5);
+  --color-extra-035: rgba(245, 213, 176, 0.24);
+  --color-extra-036: rgba(196, 149, 106, 0.36);
+  --color-extra-037: rgba(61, 52, 44, 0.16);
+  --color-extra-038: #4a3b30;
+  --color-extra-039: #fff;
+  --color-extra-040: rgba(255, 255, 255, 0.4);
+  --color-extra-041: rgba(255, 255, 255, 0.55);
+  --color-extra-042: rgba(255, 255, 255, 0.38);
+  --color-extra-043: rgba(255, 255, 255, 0.48);
+  --color-extra-044: rgba(196, 149, 106, 0.55);
+  --color-extra-045: rgba(17, 24, 39, 0.12);
+  --color-extra-046: rgba(255, 255, 255, 0.75);
+  --color-extra-047: rgba(28, 23, 20, 0.04);
+  --color-extra-048: rgba(255, 255, 255, 0.26);
+  --color-extra-049: rgba(255, 255, 255, 0.9);
+  --color-extra-050: rgba(255, 255, 255, 0.62);
+  --color-extra-051: rgba(17, 24, 39, 0.09);
+  --color-extra-052: rgba(255, 237, 213, 0.75);
+  --color-extra-053: rgba(28, 23, 20, 0.12);
+  --color-extra-054: rgba(255, 255, 255, 0.85);
+  --color-extra-055: rgba(254, 226, 226, 0.75);
+  --color-extra-056: rgb(248 113 113);
+  --color-extra-057: rgba(255, 255, 255, 0.65);
+  --color-extra-058: rgba(17, 24, 39, 0.1);
+  --color-extra-059: rgba(17, 24, 39, 0.14);
+  --color-extra-060: rgba(255, 255, 255, 0.82);
+  --color-extra-061: rgba(255, 255, 255, 0.68);
+  --color-extra-062: rgba(255, 255, 255, 0.74);
+  --color-extra-063: rgba(28, 23, 20, 0.07);
+  --color-extra-064: rgba(28, 23, 20, 0.08);
+  --color-extra-065: rgba(17, 24, 39, 0.18);
+  --color-extra-066: rgba(255, 255, 255, 0.18);
+  --color-extra-067: rgba(17, 24, 39, 0.2);
+  --color-extra-068: rgba(255, 255, 255, 0.2);
+  --color-extra-069: rgba(255, 255, 255, 0.14);
+  --color-extra-070: rgba(255, 255, 255, 0.86);
+  --color-extra-071: rgba(255, 255, 255, 0.7);
+  --color-extra-072: rgba(245, 213, 176, 0.35);
+  --color-extra-073: rgba(196, 149, 106, 0.34);
+  --color-extra-074: rgba(253, 250, 245, 0.5);
+  --color-extra-075: rgba(28, 23, 20, 0);
+  --color-extra-076: rgba(28, 23, 20, 0.35);
+  --color-extra-077: rgba(245, 158, 11, 0.7);
+  --color-extra-078: rgba(255, 247, 237, 0.88);
+  --color-extra-079: rgba(17, 24, 39, 0.06);
+  --color-extra-080: rgb(220 38 38);
+  --color-extra-081: rgba(248, 113, 113, 0.35);
+  --color-extra-082: rgba(254, 202, 202, 0.85);
+  --color-extra-083: rgba(17, 24, 39, 0.92);
+  --color-extra-084: rgba(255, 255, 255, 0);
+  --color-extra-085: rgba(255, 255, 255, 0.15);
+  --color-extra-086: rgba(245, 158, 11, 0.65);
+  --color-extra-087: rgba(245, 158, 11, 0.14);
+  --color-extra-088: rgba(245, 158, 11, 0.9);
+  --color-extra-089: rgba(245, 158, 11, 0.22);
+  --color-extra-090: rgba(0, 0, 0, 0);
+  --color-extra-091: rgba(0, 0, 0, 0.45);
+  --color-extra-092: rgba(255, 255, 255, 0.95);
+  --color-extra-093: rgba(17, 24, 39, 0.16);
+  --color-extra-094: rgb(239 68 68);
+  --color-extra-095: rgba(255, 255, 255, 0.92);
+  --color-extra-096: rgba(0, 0, 0, 0.35);
+  --color-extra-097: rgba(17, 24, 39, 0.08);
+  --color-extra-098: rgba(245, 158, 11, 0.45);
+  --color-extra-099: rgba(255, 247, 237, 0.8);
+  --color-extra-100: rgba(245, 158, 11, 0.12);
+  --color-extra-101: rgba(255, 255, 255, 0.35);
+  --color-extra-102: rgba(255, 255, 255, 0.45);
+  --color-extra-103: rgba(219, 234, 254, 0.75);
+  --color-extra-104: rgb(37 99 235);
+  --color-extra-105: rgba(147, 197, 253, 0.55);
+  --color-extra-106: rgba(243, 232, 255, 0.75);
+  --color-extra-107: rgb(147 51 234);
+  --color-extra-108: rgba(216, 180, 254, 0.55);
+  --color-extra-109: rgba(0, 0, 0, 0.88);
+  --color-extra-110: rgba(255, 255, 255, 0.08);
+  --color-extra-111: rgba(248, 113, 113, 0.9);
+  --color-extra-112: rgba(255, 255, 255, 0.04);
+  --color-extra-113: rgba(0, 0, 0, 0.5);
+  --color-extra-114: rgba(28, 23, 20, 0.52);
+  --color-extra-115: rgba(18, 16, 14, 0.84);
+  --color-extra-116: rgba(0, 0, 0, 0.46);
+  --color-extra-117: rgba(0, 0, 0, 0.24);
+  --color-extra-118: rgba(0, 0, 0, 0.18);
+  --color-extra-119: rgba(0, 0, 0, 0.16);
+  --color-extra-120: rgba(28, 23, 20, 0.05);
+  --color-extra-121: rgba(28, 23, 20, 0.09);
+  --color-extra-122: rgba(255, 255, 255, 0.66);
+  --color-extra-123: rgba(28, 23, 20, 0.1);
+  --color-extra-124: rgba(251, 191, 36, 0.16);
+  --color-extra-125: rgba(251, 191, 36, 0.22);
+  --color-extra-126: rgba(255, 237, 213, 0.65);
+  --color-extra-127: rgba(251, 191, 36, 0.2);
+  --color-extra-128: rgba(251, 191, 36, 0.14);
+  --color-extra-129: rgba(28, 23, 20, 0.28);
+  --color-extra-130: rgba(28, 23, 20, 0.18);
+  --color-extra-131: rgba(255, 255, 255, 0.34);
+  --color-extra-132: rgba(196, 149, 106, 0.06);
+  --color-extra-133: rgba(255, 255, 255, 0.64);
+  --color-extra-134: rgba(253, 250, 245, 0.9);
+  --color-extra-135: rgba(240, 228, 204, 0.5);
+  --color-extra-136: rgba(74, 222, 128, 0.55);
+  --color-extra-137: rgba(255, 255, 255, 0.46);
+  --color-extra-138: rgba(17, 24, 39, 0.22);
+  --color-extra-139: rgba(28, 23, 20, 0.3);
+  --color-extra-140: rgba(240, 228, 204, 0.52);
+  --color-extra-141: rgba(28, 23, 20, 0.11);
+  --color-extra-142: rgba(255, 255, 255, 0.84);
+  --color-extra-143: #e05e3a;
+  --color-extra-144: #4ade80;
+  --color-extra-145: #f87171;
+  --color-extra-146: #60a5fa;
+  --color-extra-147: #94a3b8;
+  --color-extra-148: #fbbf24;
+  --color-extra-149: rgba(240, 228, 204, 0.38);
+  --color-extra-150: rgba(254, 226, 226, 0.65);
+  --color-extra-151: rgba(254, 226, 226, 0.7);
+  --color-extra-152: rgba(254, 202, 202, 0.75);
+  --color-extra-153: rgba(28, 23, 20, 0.34);
+  --color-extra-154: rgba(255, 255, 255, 0.54);
+  --color-extra-155: rgba(240, 228, 204, 0.44);
+  --color-extra-156: #d4a574;
+  --color-extra-157: rgba(240, 228, 204, 0.9);
+  --color-extra-158: rgba(196, 149, 106, 0.7);
+  --color-extra-159: rgba(254, 226, 226, 0.78);
+  --color-extra-160: rgba(248, 113, 113, 0.38);
+  --color-extra-161: rgba(248, 113, 113, 0.12);
+  --color-extra-162: rgba(254, 202, 202, 0.88);
+  --color-extra-163: rgba(248, 113, 113, 0.45);
+  --color-extra-164: rgba(255, 255, 255, 0.28);
+  --color-extra-165: rgba(255, 255, 255, 0.06);
+  --color-extra-166: rgba(253, 250, 245, 0.6);
+  --color-extra-167: rgba(196, 149, 106, 0.05);
+  --color-extra-168: rgba(196, 149, 106, 0.2);
+  --color-extra-169: rgba(196, 149, 106, 0.12);
+  --color-extra-170: rgba(240, 228, 204, 0.85);
+  --color-extra-171: rgba(28, 23, 20, 0.03);
+  --color-extra-172: rgba(196, 149, 106, 0.85);
+  --color-extra-173: rgba(28, 23, 20, 0.02);
+  --color-extra-174: rgba(255, 255, 255, 0.98);
+  --color-extra-175: rgba(232, 213, 184, 0.9);
+  --color-extra-176: rgba(196, 149, 106, 0.65);
+  --color-extra-177: rgba(28, 23, 20, 0.26);
+
+  /* ─── Extended Blur Tokens ─── */
+  --blur-extra-001: blur(2px);
+  --blur-extra-002: blur(0);
+  --blur-extra-003: blur(8px);
+  --blur-extra-004: blur(12px);
+  --blur-extra-005: blur(14px);
+  --blur-extra-006: blur(10px);
+  --blur-extra-007: blur(16px);
+  --blur-extra-008: blur(18px);
+  --blur-extra-009: blur(0px);
+  --blur-extra-010: blur(4px) saturate(115%);
+  --blur-extra-011: blur(8px) saturate(120%);
+  --blur-extra-012: blur(10px) saturate(130%);
+  --blur-extra-013: blur(28px) saturate(165%);
+  --blur-extra-014: blur(22px) saturate(165%);
+  --blur-extra-015: blur(1px);
+  --blur-extra-016: blur(6px) saturate(125%);
+  --blur-extra-017: blur(34px) saturate(185%);
+  --blur-extra-018: blur(16px) saturate(165%);
+  --blur-extra-019: blur(42px) saturate(190%);
+  --blur-extra-020: blur(24px) saturate(180%);
+  --blur-extra-021: blur(12px) saturate(150%);
+  --blur-extra-022: blur(20px) saturate(160%);
+  /* ─── Legacy RGB Palette Tokens ─── */
+  --cream-50: 255 251 235;
+  --ink-300: 209 213 219;
+  --ink-900: 17 24 39;
+  --warm-400: 245 158 11;
+  --ink-600: 75 85 99;
+  --ink-200: 229 231 235;
+  --warm-500: 234 88 12;
+  --ink-700: 55 65 81;
+  --ink-800: 31 41 55;
+  --warm-700: 154 52 18;
+  --ink-400: 156 163 175;
+  --warm-50: 255 247 237;
+  --ink-500: 107 114 128;
+}

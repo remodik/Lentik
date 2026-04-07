@@ -1,0 +1,96 @@
+/* Global reset, document defaults, and shared base behavior. */
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+html {
+    scroll-behavior: smooth;
+}
+body {
+    background-color: var(--bg-page);
+    background-image:
+        radial-gradient(
+            ellipse at 12% 55%,
+            var(--color-extra-002) 0%,
+            var(--color-extra-001) 58%
+        ),
+        radial-gradient(
+            ellipse at 88% 12%,
+            var(--color-extra-003) 0%,
+            var(--color-extra-001) 52%
+        ),
+        radial-gradient(
+            ellipse at 62% 88%,
+            var(--color-extra-004) 0%,
+            var(--color-extra-001) 50%
+        ),
+        radial-gradient(
+            ellipse at 42% 28%,
+            var(--color-extra-005) 0%,
+            var(--color-extra-001) 38%
+        );
+    background-attachment: fixed;
+    color: var(--text-primary);
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    margin: 0;
+}
+*:focus-visible {
+    outline: none;
+    box-shadow: var(--focus-ring);
+}
+.chat-scroll,
+.sidebar-scroll,
+nav {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-extra-006) var(--color-extra-001);
+    scroll-behavior: smooth;
+}
+.chat-scroll::-webkit-scrollbar,
+.sidebar-scroll::-webkit-scrollbar,
+nav::-webkit-scrollbar {
+    width: 5px;
+}
+.chat-scroll::-webkit-scrollbar-track,
+.sidebar-scroll::-webkit-scrollbar-track,
+nav::-webkit-scrollbar-track {
+    background: var(--color-extra-001);
+}
+.chat-scroll::-webkit-scrollbar-thumb,
+.sidebar-scroll::-webkit-scrollbar-thumb,
+nav::-webkit-scrollbar-thumb {
+    background: var(--color-extra-007);
+    border-radius: 99px;
+}
+.chat-scroll::-webkit-scrollbar-thumb:hover,
+.sidebar-scroll::-webkit-scrollbar-thumb:hover,
+nav::-webkit-scrollbar-thumb:hover {
+    background: var(--color-extra-008);
+}
+[data-tooltip] {
+    position: relative;
+}
+[data-tooltip]:hover::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: calc(100% + 7px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--color-extra-009);
+    backdrop-filter: var(--blur-extra-003);
+    -webkit-backdrop-filter: var(--blur-extra-003);
+    color: var(--text-on-dark);
+    font-size: 0.7rem;
+    font-family: var(--font-body);
+    white-space: nowrap;
+    padding: 0.3rem 0.65rem;
+    border-radius: 0.5rem;
+    border: 1px solid var(--color-extra-010);
+    pointer-events: none;
+    z-index: 100;
+    animation: fadeIn 0.15s ease;
+    box-shadow: 0 4px 12px var(--color-extra-011);
+}

@@ -1,0 +1,35 @@
+/* Cyberpunk theme token overrides. */
+
+[data-theme="cyberpunk"] {
+  --bg-page:              #080b0f;
+  --bg-surface:           rgba(0, 255, 200, 0.05);
+  --bg-surface-strong:    rgba(0, 255, 200, 0.10);
+  --bg-surface-subtle:    rgba(0, 255, 200, 0.03);
+  --bg-sidebar:           rgba(5, 10, 15, 0.95);
+  --bg-topbar:            rgba(5, 10, 15, 0.90);
+  --bg-elevated:          rgba(0, 20, 15, 0.98);
+  --bg-overlay:           rgba(0, 0, 0, 0.70);
+  --border-glass:         rgba(0, 255, 200, 0.20);
+  --border-glass-strong:  rgba(0, 255, 200, 0.40);
+  --border-glass-dim:     rgba(0, 255, 200, 0.10);
+  --border-warm:          rgba(0, 255, 200, 0.15);
+  --border-warm-dim:      rgba(0, 255, 200, 0.08);
+  --accent:               #00ffc8;
+  --accent-hover:         #00e6b0;
+  --accent-soft:          rgba(0, 255, 200, 0.10);
+  --accent-medium:        rgba(0, 255, 200, 0.18);
+  --accent-border:        rgba(0, 255, 200, 0.50);
+  --accent-focus-ring:    rgba(0, 255, 200, 0.30);
+  --text-primary:         #e0fff8;
+  --text-secondary:       #a0e8d8;
+  --text-tertiary:        #60b8a8;
+  --text-muted:           #308878;
+  --text-faint:           #206858;
+  --text-on-dark:         #080b0f;
+  --blur-sm:  blur(6px) saturate(120%);
+  --blur-md:  blur(10px) saturate(130%);
+  --blur-lg:  blur(16px) saturate(140%);
+  --focus-ring: 0 0 0 3px rgba(0, 255, 200, 0.30), 0 0 0 1px rgba(0, 255, 200, 0.15);
+  --shadow-glass: 0 2px 12px rgba(0, 255, 200, 0.08), 0 8px 32px rgba(0, 0, 0, 0.40),
+                  inset 0 1px 0 rgba(0, 255, 200, 0.15);
+}

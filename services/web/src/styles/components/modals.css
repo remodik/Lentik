@@ -1,0 +1,25 @@
+/* Shared modal overlay and panel styles. */
+
+.glass-overlay {
+    background: var(--bg-overlay);
+    backdrop-filter: var(--blur-extra-011);
+    -webkit-backdrop-filter: var(--blur-extra-011);
+}
+
+.glass-modal-overlay {
+    background: var(--color-extra-129);
+    backdrop-filter: var(--blur-extra-012);
+    -webkit-backdrop-filter: var(--blur-extra-012);
+}
+
+.glass-modal-panel {
+    background: var(--bg-surface-strong);
+    backdrop-filter: var(--blur-xl);
+    -webkit-backdrop-filter: var(--blur-xl);
+    border: 1px solid var(--color-extra-050);
+    border-radius: 1.75rem;
+    box-shadow:
+        0 32px 80px var(--color-extra-130),
+        0 8px 20px var(--color-extra-064),
+        inset 0 1px 0 var(--color-extra-095);
+}

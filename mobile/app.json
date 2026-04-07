@@ -1,0 +1,40 @@
+{
+  "expo": {
+    "name": "Lentik",
+    "slug": "lentik",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "backgroundColor": "#FFF8F0",
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.lentik.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#FFF8F0"
+      },
+      "package": "com.lentik.app",
+      "minSdkVersion": 33,
+      "targetSdkVersion": 34,
+      "permissions": [
+        "CAMERA",
+        "INTERNET",
+        "READ_MEDIA_IMAGES",
+        "READ_MEDIA_VIDEO"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Приложению нужен доступ к вашим фотографиям для загрузки в галерею."
+        }
+      ],
+      [
+        "expo-secure-store"
+      ]
+    ]
+  }
+}

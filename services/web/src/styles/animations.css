@@ -1,0 +1,175 @@
+/* Keyframes and animation utility classes. */
+
+@keyframes fadeUp {
+    from {
+        opacity: 0;
+        transform: translateY(18px) scale(0.985);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px) scale(0.965);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+@keyframes slideLeft {
+    from {
+        opacity: 0;
+        transform: translateX(18px) scale(0.975);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0) scale(1);
+    }
+}
+@keyframes slideRight {
+    from {
+        opacity: 0;
+        transform: translateX(-18px) scale(0.975);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0) scale(1);
+    }
+}
+@keyframes popIn {
+    0% {
+        transform: scale(0.88) translateY(8px);
+        opacity: 0;
+    }
+    55% {
+        transform: scale(1.03) translateY(-1px);
+        opacity: 1;
+    }
+    100% {
+        transform: scale(1) translateY(0);
+        opacity: 1;
+    }
+}
+@keyframes toastIn {
+    from {
+        opacity: 0;
+        transform: translateX(28px) scale(0.93);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0) scale(1);
+    }
+}
+@keyframes notifPulse {
+    0% {
+        transform: scale(1);
+    }
+    40% {
+        transform: scale(1.45);
+    }
+    100% {
+        transform: scale(1);
+    }
+}
+@keyframes wsDot {
+    0%,
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.45;
+        transform: scale(0.82);
+    }
+}
+@keyframes shimmer {
+    0% {
+        background-position: -200% center;
+    }
+    100% {
+        background-position: 200% center;
+    }
+}
+@keyframes activeSlide {
+    from {
+        transform: scaleY(0.5);
+        opacity: 0;
+    }
+    to {
+        transform: scaleY(1);
+        opacity: 1;
+    }
+}
+.animate-fade-up {
+    animation: fadeUp 0.5s var(--ease-out-expo) forwards;
+}
+.animate-fade-in {
+    animation: fadeIn 0.3s ease forwards;
+}
+.animate-slide-down {
+    animation: slideDown 0.22s var(--ease-out-expo) forwards;
+}
+.animate-slide-left {
+    animation: slideLeft 0.28s var(--ease-out-expo) forwards;
+}
+.animate-slide-right {
+    animation: slideRight 0.28s var(--ease-out-expo) forwards;
+}
+.animate-pop {
+    animation: popIn 0.34s var(--ease-spring) forwards;
+}
+.animate-toast {
+    animation: toastIn 0.38s var(--ease-out-expo) forwards;
+}
+.stagger-1 {
+    animation-delay: 60ms;
+}
+.stagger-2 {
+    animation-delay: 120ms;
+}
+.stagger-3 {
+    animation-delay: 180ms;
+}
+.stagger-4 {
+    animation-delay: 240ms;
+}
+.stagger-5 {
+    animation-delay: 300ms;
+}
+@keyframes activeSlide {
+    from {
+        transform: scaleY(0.4);
+        opacity: 0;
+    }
+    to {
+        transform: scaleY(1);
+        opacity: 1;
+    }
+}
+@keyframes msgHighlight {
+    0% {
+        background: var(--accent-soft);
+    }
+    100% {
+        background: var(--color-extra-001);
+    }
+}
+.page-enter {
+    animation: fadeUp 0.4s var(--ease-out-expo) forwards;
+}
+@keyframes pop-in {           from {             opacity: 0;             transform: translateY(6px) scale(0.98);             filter: var(--blur-extra-001);           }           to {             opacity: 1;             transform: translateY(0) scale(1);             filter: var(--blur-extra-002);           }         }
+@keyframes notif-pop {           from {             opacity: 0;             transform: translateY(-6px) scale(0.985);           }           to {             opacity: 1;             transform: translateY(0) scale(1);           }         }
+@keyframes notif-item-in {           from {             opacity: 0;             transform: translateY(6px);           }           to {             opacity: 1;             transform: translateY(0);           }         }
+@keyframes profile-pop {           from {             opacity: 0;             transform: translateY(8px) scale(0.985);           }           to {             opacity: 1;             transform: translateY(0) scale(1);           }         }

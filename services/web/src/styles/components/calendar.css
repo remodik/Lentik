@@ -1,0 +1,141 @@
+/* Calendar and day panel component styles. */
+
+.cal-day {
+    transition:
+        background var(--dur-fast) var(--ease-smooth),
+        box-shadow var(--dur-normal) var(--ease-smooth),
+        transform var(--dur-fast) var(--ease-smooth);
+    border-radius: 0.75rem;
+}
+.cal-day:hover {
+    background: var(--color-extra-013);
+    box-shadow:
+        0 2px 8px var(--color-extra-014),
+        inset 0 1px 0 var(--color-extra-015);
+    transform: scale(1.01);
+}
+.cal-day.today-ring .day-num {
+    background: var(--accent);
+    color: var(--color-extra-012);
+    border-radius: 50%;
+    box-shadow: 0 2px 8px var(--color-extra-016);
+}
+.cal-day.has-events:hover {
+    box-shadow:
+        0 2px 12px var(--accent-soft),
+        0 6px 24px var(--color-extra-017),
+        inset 0 1px 0 var(--color-extra-015);
+}
+.cal-event-panel {
+    animation: slideLeft 0.28s var(--ease-out-expo);
+}
+.cal-day-panel-head {
+    border-bottom: 1px solid var(--color-extra-018);
+}
+.cal-daypanel-add {
+    background: var(--text-primary);
+    color: var(--text-on-dark);
+    border-color: var(--color-extra-019);
+    box-shadow:
+        0 10px 28px var(--color-extra-020),
+        inset 0 1px 0 var(--color-extra-021);
+}
+.cal-daypanel-add:hover {
+    background: var(--text-secondary);
+}
+.cal-daypanel-close {
+    color: var(--text-faint);
+}
+.cal-birthday-card {
+    background: var(--color-extra-022);
+    border: 1px solid var(--color-extra-023);
+    backdrop-filter: var(--blur-extra-004);
+    box-shadow: inset 0 1px 0 var(--color-extra-024);
+}
+.cal-event-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--color-extra-025);
+    backdrop-filter: var(--blur-extra-005);
+    box-shadow:
+        0 2px 12px var(--color-extra-014),
+        inset 0 1px 0 var(--color-extra-015);
+}
+.cal-nav-btn {
+    color: var(--color-extra-038);
+}
+.calendar-weekdays {
+    border-bottom: 1px solid var(--color-extra-026);
+    border-left: none;
+    border-right: none;
+    border-top: none;
+    border-radius: 0;
+}
+.cal-day {
+    border-color: var(--border-warm-dim);
+}
+.cal-day-out {
+    opacity: 0.3;
+    background: var(--color-extra-027);
+}
+.cal-day-selected {
+    background: var(--color-extra-028);
+}
+.cal-day-birthday-chip {
+    background: var(--color-extra-029);
+    border: 1px solid var(--color-extra-030);
+    backdrop-filter: var(--blur-extra-003);
+}
+.calendar-side-head {
+    border-bottom: 1px solid var(--border-warm-dim);
+}
+.calendar-side-divider {
+    border-top: 1px solid var(--color-extra-031);
+}
+.calendar-layout {
+    background: var(--color-extra-032);
+}
+.calendar-grid {
+    background: var(--color-extra-033);
+}
+.cal-day {
+    min-height: 110px;
+    padding: 0.6rem;
+    border-radius: 0;
+    border-color: var(--border-warm-dim);
+}
+.cal-day:hover {
+    transform: none;
+    background: var(--color-extra-034);
+    box-shadow: none;
+}
+.cal-day.has-events:hover {
+    box-shadow: none;
+}
+.cal-day-today {
+    background: var(--color-extra-025);
+}
+.cal-day-selected {
+    background: var(--color-extra-035);
+}
+.cal-day-num-today {
+    background: var(--accent);
+    color: var(--color-extra-039);
+    box-shadow: 0 2px 10px var(--color-extra-036);
+}
+.cal-day-num-selected {
+    background: var(--color-extra-037);
+    color: var(--text-primary);
+}
+.cal-day-event-chip {
+    border-color: var(--color-extra-024);
+}
+.calendar-side-panel {
+    border-left: 1px solid var(--color-extra-018);
+    background: var(--bg-surface-subtle);
+}
+.cal-event-panel {
+    border: 0;
+    border-left: 1px solid var(--color-extra-018);
+    border-radius: 0;
+    box-shadow: none;
+}

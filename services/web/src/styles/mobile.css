@@ -1,0 +1,169 @@
+/* ── Mobile PWA styles for Lentik ─────────────────────────────────────── */
+/* Elderly-friendly: large text, big touch targets, clear labels          */
+
+/* ── Bottom navigation bar ──────────────────────────────────────────── */
+.mobile-bottom-nav {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  /* Show bottom nav */
+  .mobile-bottom-nav {
+    display: flex;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 200;
+    height: 72px;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    padding-top: 6px;
+    background: rgba(253, 250, 245, 0.97);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border-top: 1px solid rgba(255, 255, 255, 0.7);
+    box-shadow: 0 -4px 24px rgba(28, 23, 20, 0.10);
+    align-items: flex-start;
+    justify-content: space-around;
+  }
+
+  .mobile-nav-tab {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    padding: 6px 4px 4px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    border-radius: 12px;
+    transition: color 0.15s ease;
+    color: #a89080;
+    min-height: 52px;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .mobile-nav-tab.active {
+    color: #1c1714;
+  }
+
+  .mobile-nav-tab.active .mobile-nav-icon-wrap {
+    background: rgba(28, 23, 20, 0.08);
+    border-radius: 10px;
+  }
+
+  .mobile-nav-icon-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 32px;
+    border-radius: 10px;
+    transition: background 0.15s ease;
+  }
+
+  .mobile-nav-label {
+    font-size: 11px;
+    font-weight: 600;
+    font-family: 'DM Sans', sans-serif;
+    letter-spacing: 0.01em;
+    line-height: 1;
+  }
+
+  /* ── Hide desktop sidebar on mobile ─────────────────────────────── */
+  .app-sidebar,
+  .chat-channel-panel {
+    display: none !important;
+  }
+
+  /* ── Full-width app layout ───────────────────────────────────────── */
+  .app-layout {
+    display: flex !important;
+    flex-direction: column !important;
+    grid-template-columns: unset !important;
+  }
+
+  /* ── Padding to avoid content behind bottom nav ──────────────────── */
+  .app-main {
+    padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  /* ── Simplified topbar ───────────────────────────────────────────── */
+  .app-topbar {
+    padding: 10px 16px !important;
+  }
+
+  /* ── Gallery: 2-column grid on mobile ───────────────────────────── */
+  .gallery-shell .grid-wrap {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 3px !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
+  }
+
+  .gallery-shell .tile {
+    border-radius: 0 !important;
+  }
+
+  .gallery-head {
+    padding: 10px 16px !important;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .gallery-head .head-row {
+    gap: 8px !important;
+  }
+
+  /* ── Elderly-friendly input sizes on auth pages ──────────────────── */
+  .glass-input {
+    font-size: 1.05rem !important;
+    min-height: 3.25rem !important;
+    padding: 0.75rem 1rem !important;
+  }
+
+  /* ── Elderly-friendly button sizes on auth pages ────────────────── */
+  .btn-primary {
+    min-height: 3.5rem !important;
+    font-size: 1.05rem !important;
+    border-radius: 1.25rem !important;
+  }
+
+  /* ── Elderly-friendly PIN inputs ─────────────────────────────────── */
+  .pin-input {
+    width: 62px !important;
+    height: 70px !important;
+    font-size: 1.65rem !important;
+    border-radius: 18px !important;
+  }
+
+  .pin-root {
+    gap: 12px !important;
+  }
+
+  /* ── Mobile-only elderly class ───────────────────────────────────── */
+  .mobile-elderly-title {
+    font-size: 1.75rem !important;
+  }
+
+  .mobile-elderly-label {
+    font-size: 0.875rem !important;
+    font-weight: 600;
+    text-transform: none !important;
+    letter-spacing: 0 !important;
+  }
+
+  .glass-page-card {
+    border-radius: 1.5rem !important;
+  }
+
+  /* ── Landscape safe areas ────────────────────────────────────────── */
+  @supports (padding-left: env(safe-area-inset-left)) {
+    .app-main {
+      padding-left: env(safe-area-inset-left);
+      padding-right: env(safe-area-inset-right);
+    }
+  }
+}

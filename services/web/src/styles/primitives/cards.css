@@ -1,0 +1,81 @@
+/* Shared card primitives and elevated surfaces. */
+
+.glass-card {
+    background: var(--color-extra-061);
+    backdrop-filter: var(--blur-sm);
+    -webkit-backdrop-filter: var(--blur-sm);
+    border: 1px solid var(--bg-surface);
+    box-shadow: var(--shadow-glass);
+    border-radius: var(--radius-2xl);
+    transition:
+        box-shadow var(--dur-normal) var(--ease-smooth),
+        border-color var(--dur-normal) var(--ease-smooth),
+        transform var(--dur-fast) var(--ease-smooth),
+        background var(--dur-normal) var(--ease-smooth);
+}
+.glass-card:hover {
+    background: var(--bg-surface-strong);
+    border-color: var(--color-extra-071);
+    box-shadow:
+        0 4px 20px var(--color-extra-123),
+        0 16px 48px var(--color-extra-014),
+        inset 0 1px 0 var(--color-extra-049);
+    transform: translateY(-1px);
+}
+.glass-elevated {
+    background: var(--bg-elevated);
+    backdrop-filter: var(--blur-lg);
+    -webkit-backdrop-filter: var(--blur-lg);
+    border: 1px solid var(--color-extra-013);
+    box-shadow: var(--shadow-glass-float);
+}
+.card {
+    background: var(--color-extra-024);
+    backdrop-filter: var(--blur-extra-004);
+    -webkit-backdrop-filter: var(--blur-extra-004);
+    border-radius: 1.25rem;
+    border: 1px solid var(--color-extra-041);
+    box-shadow: var(--shadow-glass);
+    transition:
+        box-shadow var(--dur-normal) var(--ease-smooth),
+        border-color var(--dur-normal) var(--ease-smooth),
+        transform var(--dur-fast) var(--ease-smooth);
+}
+.card:hover {
+    box-shadow:
+        0 4px 20px var(--color-extra-123),
+        0 16px 48px var(--color-extra-014),
+        inset 0 1px 0 var(--color-extra-015);
+    border-color: var(--color-extra-061);
+    transform: translateY(-1px);
+}
+.glass-page-card {
+    background: var(--color-extra-013);
+    backdrop-filter: var(--blur-lg);
+    -webkit-backdrop-filter: var(--blur-lg);
+    border: 1px solid var(--color-extra-041);
+    border-radius: 1.75rem;
+    box-shadow:
+        0 8px 40px var(--color-extra-123),
+        0 2px 10px var(--color-extra-120),
+        inset 0 1px 0 var(--bg-elevated),
+        inset 0 0 0 1px var(--color-extra-032);
+    position: relative;
+    overflow: hidden;
+}
+.glass-page-card::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 50%;
+    pointer-events: none;
+    border-radius: inherit;
+    background: linear-gradient(
+        180deg,
+        var(--color-extra-164) 0%,
+        var(--color-extra-165) 50%,
+        var(--color-extra-084) 100%
+    );
+}

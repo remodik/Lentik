@@ -1,0 +1,23 @@
+/* Dark warm theme token overrides. */
+
+[data-theme="dark"] {
+  --bg-page:              #1a1410;
+  --bg-surface:           rgba(40, 32, 26, 0.80);
+  --bg-surface-strong:    rgba(50, 40, 32, 0.92);
+  --bg-surface-subtle:    rgba(40, 32, 26, 0.55);
+  --bg-sidebar:           rgba(28, 22, 17, 0.88);
+  --bg-topbar:            rgba(28, 22, 17, 0.82);
+  --bg-elevated:          rgba(55, 44, 35, 0.95);
+  --border-glass:         rgba(255, 255, 255, 0.10);
+  --border-glass-strong:  rgba(255, 255, 255, 0.18);
+  --border-glass-dim:     rgba(255, 255, 255, 0.06);
+  --border-warm:          rgba(196, 149, 106, 0.20);
+  --border-warm-dim:      rgba(196, 149, 106, 0.12);
+  --text-primary:         #f0e6d9;
+  --text-secondary:       #c8b4a0;
+  --text-tertiary:        #a08878;
+  --text-muted:           #6b5a4e;
+  --text-faint:           #5a4a40;
+  --shadow-glass: 0 2px 12px rgba(0, 0, 0, 0.20), 0 8px 32px rgba(0, 0, 0, 0.15),
+                  inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}

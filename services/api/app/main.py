@@ -33,33 +33,32 @@ async def _check_migrations() -> None:
         from alembic.config import Config
         from alembic.runtime.migration import MigrationContext
         from alembic.script import ScriptDirectory
-        from sqlalchemy import text
 
         from app.db.session import engine
 
         alembic_cfg = Config("alembic.ini")
         script = ScriptDirectory.from_config(alembic_cfg)
-        head_revision = script.get_current_head()
+        expected_heads = set(script.get_heads())
 
         async with engine.connect() as conn:
             def _get_current(sync_conn):
                 ctx = MigrationContext.configure(sync_conn)
-                return ctx.get_current_revision()
+                return set(ctx.get_current_heads())
 
-            current_revision = await conn.run_sync(_get_current)
+            current_heads = await conn.run_sync(_get_current)
 
-        if current_revision != head_revision:
+        if current_heads != expected_heads:
             msg = (
                 f"Database migration drift detected! "
-                f"current={current_revision!r}, head={head_revision!r}. "
-                f"Run: alembic upgrade head"
+                f"current={sorted(current_heads)!r}, expected={sorted(expected_heads)!r}. "
+                f"Run: alembic upgrade heads"
             )
             if settings.strict_migrations:
                 raise RuntimeError(msg)
             else:
                 logger.warning("⚠️  %s", msg)
         else:
-            logger.info("✅ DB revision up to date: %s", current_revision)
+            logger.info("✅ DB revisions up to date: %s", sorted(current_heads))
 
     except RuntimeError:
         raise
@@ -73,17 +72,19 @@ async def _auto_migrate() -> None:
         import asyncio
         from alembic.config import Config
         from alembic import command
+
         alembic_cfg = Config("alembic.ini")
-        await asyncio.get_event_loop().run_in_executor(None, command.upgrade, alembic_cfg, "head")
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, command.upgrade, alembic_cfg, "heads")
         logger.info("✅ Alembic migrations applied")
     except Exception as exc:
         logger.warning("Auto-migration failed (non-fatal): %s", exc)
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="Lentik API", version="0.3.0")
+    app_ = FastAPI(title="Lentik API", version="0.3.0")
     
-    app.add_middleware(
+    app_.add_middleware(
         CORSMiddleware,
         allow_origin_regex=r"https?://.*",
         allow_credentials=True,
@@ -91,22 +92,24 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    app.mount("/static/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
+    app_.mount("/static/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 
-    app.include_router(auth_router)
-    app.include_router(invites_router)
-    app.include_router(families_router)
-    app.include_router(me_router)
-    app.include_router(chats_router)
-    app.include_router(channels_router)
-    app.include_router(gallery_router)
-    app.include_router(calendar_router)
-    app.include_router(families_join_router)
-    app.include_router(notes_family_router)
-    app.include_router(notes_note_router)
+    app_.include_router(auth_router)
+    app_.include_router(invites_router)
+    app_.include_router(families_router)
+    app_.include_router(me_router)
+    app_.include_router(chats_router)
+    app_.include_router(channels_router)
+    app_.include_router(gallery_router)
+    app_.include_router(calendar_router)
+    app_.include_router(families_join_router)
+    app_.include_router(notes_family_router)
+    app_.include_router(notes_note_router)
 
-    @app.on_event("startup")
-    async def on_shutdown() -> None:
+    @app_.on_event("startup")
+    async def on_startup() -> None:
+        await _auto_migrate()
+        await _check_migrations()
         await stop_calendar_reminder_scheduler()
         async with AsyncSessionLocal() as db:
             await db.execute(
@@ -116,11 +119,11 @@ def create_app() -> FastAPI:
             )
             await db.commit()
 
-    @app.on_event("shutdown")
+    @app_.on_event("shutdown")
     async def on_shutdown() -> None:
         await stop_calendar_reminder_scheduler()
 
-    return app
+    return app_
 
 
 app = create_app()

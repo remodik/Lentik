@@ -1,4 +1,3 @@
-from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -8,9 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_current_user
 from app.db.deps import get_db
-from app.models.invite import Invite
 from app.models.membership import Membership, Role
 from app.models.user import User
+from app.services.invites import consume_invite, lock_active_invite
 
 router = APIRouter(prefix="/families", tags=["families"])
 
@@ -30,16 +29,7 @@ async def join_family(
     user: User = Depends(get_current_user),
 ):
     """Присоединиться к семье по токену (для уже авторизованных)."""
-    invite = await db.scalar(select(Invite).where(Invite.token == body.token))
-    if not invite:
-        raise HTTPException(status_code=404, detail="Инвайт не найден")
-
-    now = datetime.now(timezone.utc)
-    expires = invite.expires_at
-    if expires.tzinfo is None:
-        expires = expires.replace(tzinfo=timezone.utc)
-    if now > expires:
-        raise HTTPException(status_code=400, detail="Инвайт истёк")
+    invite = await lock_active_invite(db, body.token)
 
     existing = await db.scalar(
         select(Membership).where(
@@ -56,7 +46,7 @@ async def join_family(
         role=Role.MEMBER,
     )
     db.add(membership)
-    await db.delete(invite)
+    consume_invite(invite)
     await db.commit()
 
     return JoinResponse(family_id=invite.family_id)

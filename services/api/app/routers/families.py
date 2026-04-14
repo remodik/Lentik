@@ -288,6 +288,9 @@ async def family_ws(
     db: AsyncSession = Depends(get_db),
 ):
     token = websocket.cookies.get(COOKIE_NAME)
+    if not token:
+        token = websocket.query_params.get("token")
+
     user_id = decode_access_token(token) if token else None
     if not user_id:
         await websocket.close(code=4001)
@@ -311,7 +314,7 @@ async def family_ws(
     await websocket.accept()
     await ws_manager.connect_family(family_id, websocket)
     became_online = ws_manager.register_presence_connection(family_id, user.id, websocket)
-    if became_online:
+    if became_online or not user.is_online:
         user.is_online = True
         await db.commit()
         await ws_manager.broadcast_to_family(
@@ -323,6 +326,16 @@ async def family_ws(
                 last_seen_at=user.last_seen_at,
             ),
         )
+
+    # Always send the caller's current presence state to avoid stale UI on connect races.
+    await websocket.send_json(
+        _presence_payload(
+            family_id=family_id,
+            user_id=user.id,
+            is_online=user.is_online,
+            last_seen_at=user.last_seen_at,
+        )
+    )
 
     try:
         while True:

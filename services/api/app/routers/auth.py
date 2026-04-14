@@ -1,6 +1,5 @@
 import random
 import string
-from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
@@ -10,11 +9,11 @@ from app.auth.deps import get_current_user
 from app.core.jwt import COOKIE_NAME, create_access_token
 from app.core.security import hash_pin, verify_pin
 from app.db.deps import get_db
-from app.models.invite import Invite
 from app.models.membership import Membership, Role
 from app.models.user import User
 from app.schemas.auth import JoinByInviteRequest, JoinByInviteResponse, RegisterRequest
 from app.schemas.auth_pin import AuthPinRequest, AuthResponse
+from app.services.invites import consume_invite, lock_active_invite
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -106,24 +105,13 @@ async def join_by_invite(
     body: JoinByInviteRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    invite = await db.scalar(select(Invite).where(Invite.token == body.token))
-    if not invite:
-        raise HTTPException(status_code=404, detail="Инвайт не найден")
-
-    now = datetime.now(timezone.utc)
-    expires = invite.expires_at
-    if expires.tzinfo is None:
-        expires = expires.replace(tzinfo=timezone.utc)
-    if now > expires:
-        raise HTTPException(status_code=400, detail="Инвайт истёк")
+    invite = await lock_active_invite(db, body.token)
 
     base = body.display_name.strip().lower().replace(" ", "_")
     username = base
-    i = 1
     while await db.scalar(select(User.id).where(User.username == username)):
         suffix = "".join(random.choices(string.digits + string.ascii_lowercase, k=3))
         username = f"{base}_{suffix}"
-        i += 1
 
     user = User(
         username=username,
@@ -134,6 +122,7 @@ async def join_by_invite(
     await db.flush()
 
     db.add(Membership(user_id=user.id, family_id=invite.family_id, role=Role.MEMBER))
+    consume_invite(invite)
     await db.commit()
 
     from app.ws.manager import ws_manager

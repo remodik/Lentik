@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { wsUrl } from "@/lib/api-base";
+import { getAuthToken, wsUrl } from "@/lib/api-base";
 
 export type NotificationType =
   | "mention"
@@ -272,7 +272,9 @@ export function useNotifications(
     function connect() {
       if (!alive) return;
 
-      const ws = new WebSocket(wsUrl(`/families/${familyId}/ws`));
+      const token = getAuthToken();
+      const query = token ? `?token=${encodeURIComponent(token)}` : "";
+      const ws = new WebSocket(wsUrl(`/families/${familyId}/ws${query}`));
       wsRef.current = ws;
 
       ws.onopen = () => {

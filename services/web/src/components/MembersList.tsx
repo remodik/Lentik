@@ -46,6 +46,10 @@ function formatInviteExpiry(iso: string) {
   });
 }
 
+function buildInviteQrUrl(link: string) {
+  return `https://api.qrserver.com/v1/create-qr-code/?size=480x480&data=${encodeURIComponent(link)}&bgcolor=ffffff&color=1c1714`;
+}
+
 function formatBirthday(iso: string | null | undefined) {
   if (!iso) return null;
   return new Date(iso).toLocaleDateString("ru", {
@@ -243,7 +247,9 @@ export default function MembersList({
   const [inviteLoading, setInviteLoading] = useState(false);
   const [inviteError, setInviteError] = useState("");
   const [inviteCopied, setInviteCopied] = useState(false);
-  const [showQr, setShowQr] = useState(false);
+  const [inviteHours, setInviteHours] = useState(72);
+  const [inviteMaxUses, setInviteMaxUses] = useState(1);
+  const [lastInviteMaxUses, setLastInviteMaxUses] = useState<number | null>(null);
   const [transferTarget, setTransferTarget] = useState<Member | null>(null);
   const [transferringOwnership, setTransferringOwnership] = useState(false);
   const {
@@ -281,10 +287,6 @@ export default function MembersList({
   }, [members, query]);
 
   useEffect(() => {
-    setShowQr(false);
-  }, [inviteLink]);
-
-  useEffect(() => {
     closePopover();
   }, [closePopover, family.id]);
 
@@ -320,9 +322,10 @@ export default function MembersList({
     setInviteError("");
     setInviteCopied(false);
     try {
-      const invite = await createInvite(family.id, 72, true);
+      const invite = await createInvite(family.id, inviteHours, true, inviteMaxUses);
       setInviteLink(buildFamilyInviteLink(invite.token));
       setInviteExpiresAt(invite.expires_at);
+      setLastInviteMaxUses(invite.max_uses);
     } catch (e) {
       setInviteError(
         e instanceof Error ? e.message : "Не удалось создать ссылку",
@@ -341,6 +344,12 @@ export default function MembersList({
     } catch {
       setInviteError("Не удалось скопировать ссылку");
     }
+  }
+
+  function handleOpenInviteQr() {
+    if (!inviteLink) return;
+    const qrUrl = buildInviteQrUrl(inviteLink);
+    window.open(qrUrl, "_blank", "noopener,noreferrer");
   }
 
   function openMemberPopover(member: Member, anchor: HTMLElement) {
@@ -426,6 +435,41 @@ export default function MembersList({
                 </button>
               </div>
 
+              <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <label className="text-xs text-ink-500 font-body">
+                  <span className="block mb-1">Срок действия (часы)</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={720}
+                    step={1}
+                    value={inviteHours}
+                    onChange={(event) => {
+                      const next = Number.parseInt(event.target.value, 10);
+                      if (Number.isNaN(next)) return;
+                      setInviteHours(Math.min(720, Math.max(1, next)));
+                    }}
+                    className="w-full rounded-xl border border-white/65 bg-white/70 px-2.5 py-1.5 text-sm text-ink-700 font-body focus:outline-none focus:ring-2 focus:ring-warm-200"
+                  />
+                </label>
+                <label className="text-xs text-ink-500 font-body">
+                  <span className="block mb-1">Лимит использований</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={1000}
+                    step={1}
+                    value={inviteMaxUses}
+                    onChange={(event) => {
+                      const next = Number.parseInt(event.target.value, 10);
+                      if (Number.isNaN(next)) return;
+                      setInviteMaxUses(Math.min(1000, Math.max(1, next)));
+                    }}
+                    className="w-full rounded-xl border border-white/65 bg-white/70 px-2.5 py-1.5 text-sm text-ink-700 font-body focus:outline-none focus:ring-2 focus:ring-warm-200"
+                  />
+                </label>
+              </div>
+
               {!inviteLink && !inviteError && (
                 <p className="mt-2 text-xs text-ink-400 font-body inline-flex items-center gap-1.5">
                   <Link2 className="w-3.5 h-3.5" strokeWidth={2.1} />
@@ -451,12 +495,13 @@ export default function MembersList({
                   <div className="mt-2 flex items-center justify-between gap-2">
                     <p className="text-[11px] text-ink-400 font-body">
                       Действует до {formatInviteExpiry(inviteExpiresAt)}
+                      {lastInviteMaxUses ? ` · до ${lastInviteMaxUses} использ.` : ""}
                     </p>
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
                         className="ui-btn ui-btn-subtle !px-2.5 !py-1.5 inline-flex items-center gap-1.5"
-                        onClick={() => setShowQr((value) => !value)}
+                        onClick={handleOpenInviteQr}
                       >
                         <QrCode className="w-3.5 h-3.5" strokeWidth={2.2} />
                         QR-код
@@ -481,14 +526,6 @@ export default function MembersList({
                       </button>
                     </div>
                   </div>
-
-                  {showQr && (
-                    <img
-                      src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(inviteLink)}&bgcolor=ffffff&color=1c1714`}
-                      alt="QR-код для приглашения"
-                      className="w-36 h-36 rounded-xl mt-2 border border-white/65"
-                    />
-                  )}
                 </>
               )}
             </div>

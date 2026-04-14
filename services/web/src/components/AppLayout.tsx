@@ -102,7 +102,7 @@ const SIDEBAR_CATEGORIES: SidebarCategory[] = [
       {
         id: "chat-conversations",
         label: "Беседы",
-        items: [{ id: "chat", label: "Семейный чат", section: "chat" }],
+        items: [{ id: "chat", label: "Чаты", section: "chat" }],
       },
       {
         id: "chat-channels",
@@ -266,7 +266,7 @@ export default function AppLayout({
     if (targetSection && targetSection !== section) onSection(targetSection);
   }, [section, onSection]);
 
-  const activeCategory = useMemo(() => SECTION_TO_CATEGORY[section], [section]);
+  useMemo(() => SECTION_TO_CATEGORY[section], [section]);
 
   useEffect(() => {
     if (!isFamilyMenuOpen) return;

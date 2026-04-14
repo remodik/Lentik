@@ -165,21 +165,6 @@ function renderText(text: string, meUsername: string) {
   });
 }
 
-function WsIndicator({ status }: { status: WsStatus }) {
-  const labels: Record<WsStatus, string> = {
-    connected: "Подключено",
-    connecting: "Подключение…",
-    disconnected: "Нет связи",
-  };
-
-  return (
-    <div className="flex items-center gap-1.5">
-      <span className={`ws-dot ${status}`} />
-      <span className="hidden sm:inline text-[11px] text-ink-400 font-body">{labels[status]}</span>
-    </div>
-  );
-}
-
 function MessageAvatar({
   avatarUrl,
   fallback,
@@ -368,7 +353,6 @@ export default function ChatView({
   const [emojiPickerForId, setEmojiPickerForId] = useState<string | null>(null);
   const [emojiPickerAnchorRect, setEmojiPickerAnchorRect] = useState<DOMRect | null>(null);
   const [toolbarPlacement, setToolbarPlacement] = useState<Record<string, ToolbarPlacement>>({});
-  const [wsStatus, setWsStatus] = useState<WsStatus>("connecting");
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [pinnedMessageId, setPinnedMessageId] = useState<string | null>(
     chat.pinned_message_id ?? null,
@@ -1475,7 +1459,6 @@ export default function ChatView({
             )}
             <span className="hidden sm:inline">Экспорт</span>
           </button>
-          <WsIndicator status={wsStatus} />
         </div>
       </div>
 

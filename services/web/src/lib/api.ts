@@ -153,12 +153,20 @@ export function createInvite(
   familyId: string,
   expiresInHours = 72,
   revokePrevious = false,
+  maxUses = 1,
 ) {
-  return request<{ token: string; expires_at: string; join_url: string }>("/invites", {
+  return request<{
+    token: string;
+    expires_at: string;
+    max_uses: number;
+    uses_count: number;
+    join_url: string;
+  }>("/invites", {
     method: "POST",
     body: JSON.stringify({
       family_id: familyId,
       expires_in_hours: expiresInHours,
+      max_uses: maxUses,
       revoke_previous: revokePrevious,
     }),
   });

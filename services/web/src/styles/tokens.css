@@ -295,18 +295,52 @@
   --blur-extra-020: blur(24px) saturate(180%);
   --blur-extra-021: blur(12px) saturate(150%);
   --blur-extra-022: blur(20px) saturate(160%);
-  /* ─── Legacy RGB Palette Tokens ─── */
-  --cream-50: 255 251 235;
-  --ink-300: 209 213 219;
-  --ink-900: 17 24 39;
-  --warm-400: 245 158 11;
-  --ink-600: 75 85 99;
-  --ink-200: 229 231 235;
-  --warm-500: 234 88 12;
-  --ink-700: 55 65 81;
-  --ink-800: 31 41 55;
-  --warm-700: 154 52 18;
-  --ink-400: 156 163 175;
-  --warm-50: 255 247 237;
-  --ink-500: 107 114 128;
+  /* ─── Legacy RGB Palette Tokens (consumed by component CSS) ─── */
+  --cream-50: 253 250 245;
+  --cream-100: 249 242 231;
+  --cream-200: 240 228 204;
+  --cream-300: 232 213 184;
+  --cream-400: 223 196 160;
+
+  --warm-50: 253 247 240;
+  --warm-100: 250 235 215;
+  --warm-200: 245 213 176;
+  --warm-300: 229 184 133;
+  --warm-400: 196 149 106;
+  --warm-500: 176 125 82;
+  --warm-600: 143 96 64;
+  --warm-700: 122 77 47;
+
+  --ink-100: 232 221 216;
+  --ink-200: 200 180 168;
+  --ink-300: 168 144 128;
+  --ink-400: 138 112 104;
+  --ink-500: 107 90 78;
+  --ink-600: 74 59 48;
+  --ink-700: 61 52 44;
+  --ink-800: 37 29 24;
+  --ink-900: 28 23 20;
+
+  /* ─── Semantic Bridges For Generated Tokens ─── */
+  --color-extra-013: var(--border-glass);
+  --color-extra-015: var(--bg-surface-strong);
+  --color-extra-024: var(--bg-surface-strong);
+  --color-extra-025: var(--bg-surface);
+  --color-extra-034: var(--bg-surface-subtle);
+  --color-extra-040: var(--border-glass);
+  --color-extra-041: var(--border-glass-strong);
+  --color-extra-042: var(--bg-surface-subtle);
+  --color-extra-046: var(--bg-surface-strong);
+  --color-extra-049: var(--bg-elevated);
+  --color-extra-050: var(--border-glass);
+  --color-extra-054: var(--bg-elevated);
+  --color-extra-057: var(--border-glass);
+  --color-extra-060: var(--bg-elevated);
+  --color-extra-061: var(--bg-surface-strong);
+  --color-extra-062: var(--bg-surface-strong);
+  --color-extra-070: var(--bg-elevated);
+  --color-extra-071: var(--bg-surface-strong);
+  --color-extra-095: var(--bg-elevated);
+  --color-extra-102: var(--bg-surface-subtle);
+  --color-extra-122: var(--border-glass-strong);
 }

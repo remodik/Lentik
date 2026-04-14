@@ -32,12 +32,34 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
     return (
-        <html lang="ru">
+        <html lang="ru" suppressHydrationWarning>
         <head>
             <meta name="mobile-web-app-capable" content="yes" />
             <meta name="apple-mobile-web-app-capable" content="yes" />
             <meta name="apple-mobile-web-app-status-bar-style" content="default" />
             <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+            <script
+                dangerouslySetInnerHTML={{
+                    __html: `
+                        (function () {
+                            try {
+                                var key = "lentik-theme";
+                                var stored = localStorage.getItem(key);
+                                var allowed = { warm: 1, dark: 1, cyberpunk: 1, retro: 1, sakura: 1 };
+                                var theme = allowed[stored] ? stored : "warm";
+                                var root = document.documentElement;
+                                if (theme === "warm") {
+                                    root.removeAttribute("data-theme");
+                                    root.style.colorScheme = "light";
+                                    return;
+                                }
+                                root.setAttribute("data-theme", theme);
+                                root.style.colorScheme = theme === "dark" ? "dark" : "light";
+                            } catch (_) {}
+                        })();
+                    `,
+                }}
+            />
         </head>
         <body>
         <ThemeProvider>{children}</ThemeProvider>

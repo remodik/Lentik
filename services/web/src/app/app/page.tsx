@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, MessageCircle, RefreshCw } from "lucide-react";
+import { AlertTriangle, MessageCircle, Plus, RefreshCw } from "lucide-react";
 import {
   createFamily,
   getMe,
@@ -343,31 +343,100 @@ export default function AppPage() {
       onCreateChat={isOwner ? () => setShowNewChat(true) : undefined}
     >
       {section === "chat" && (
-        <div className="h-full min-w-0">
-          {activeChat ? (
-            <ChatView
-              familyId={familyId}
-              chat={activeChat}
-              me={me}
-              family={family}
-            />
-          ) : (
-            <div className="h-full flex flex-col items-center justify-center text-center p-8 gap-4">
-              <div className="chat-empty-badge">
-                <MessageCircle className="w-6 h-6 text-ink-500" strokeWidth={2.1} />
-              </div>
+        <div className="h-full min-h-0 flex flex-col md:flex-row">
+          <aside
+            className="w-full md:w-72 md:min-w-72 border-b md:border-b-0 md:border-r p-3 md:p-4"
+            style={{ borderColor: "var(--border-warm-dim)", background: "var(--bg-surface-subtle)" }}
+          >
+            <div className="flex items-center justify-between gap-2">
               <div>
-                <p className="text-ink-900 font-semibold font-display text-lg">
-                  Выберите чат
-                </p>
-                <p className="text-ink-400 text-sm font-body mt-1">
-                  {isOwner
-                    ? "Или создайте новый чат через кнопку «+» в боковой панели"
-                    : "Чаты появятся здесь"}
-                </p>
+                <p className="text-[11px] uppercase tracking-[0.14em] text-ink-400 font-body">Чаты</p>
+                <p className="text-sm text-ink-600 font-body mt-0.5">Беседы семьи</p>
               </div>
+
+              {isOwner && (
+                <button
+                  type="button"
+                  className="ui-btn ui-btn-subtle !px-2.5 !py-1.5 inline-flex items-center gap-1.5"
+                  onClick={() => setShowNewChat(true)}
+                >
+                  <Plus className="w-3.5 h-3.5" strokeWidth={2.2} />
+                  Создать чат
+                </button>
+              )}
             </div>
-          )}
+
+            <div className="mt-3 md:mt-4 space-y-1.5 max-h-[220px] md:max-h-none md:h-[calc(100%-88px)] overflow-y-auto sidebar-scroll pr-1">
+              {chats.length === 0 ? (
+                <div
+                  className="rounded-2xl border p-4 text-sm text-ink-400 font-body"
+                  style={{ borderColor: "var(--border-glass)", background: "var(--bg-surface)" }}
+                >
+                  <p>Чатов пока нет</p>
+                  {isOwner && (
+                    <button
+                      type="button"
+                      className="ui-btn ui-btn-subtle mt-3"
+                      onClick={() => setShowNewChat(true)}
+                    >
+                      Создать чат
+                    </button>
+                  )}
+                </div>
+              ) : (
+                chats.map((chat) => {
+                  const active = chat.id === activeChatId;
+                  return (
+                    <button
+                      key={chat.id}
+                      type="button"
+                      className={`w-full text-left rounded-xl border px-3 py-2.5 transition ${
+                        active ? "shadow-sm" : "hover:translate-y-[-1px]"
+                      }`}
+                      style={{
+                        borderColor: active ? "var(--accent-border)" : "var(--border-glass)",
+                        background: active ? "var(--accent-soft)" : "var(--bg-surface)",
+                      }}
+                      onClick={() => setActiveChatId(chat.id)}
+                      aria-current={active ? "page" : undefined}
+                    >
+                      <p className="text-sm font-semibold text-ink-800 truncate"># {chat.name}</p>
+                      <p className="text-xs text-ink-400 font-body mt-1 line-clamp-2">
+                        Семейная беседа
+                      </p>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </aside>
+
+          <section className="flex-1 min-h-0">
+            {activeChat ? (
+              <ChatView
+                familyId={familyId}
+                chat={activeChat}
+                me={me}
+                family={family}
+              />
+            ) : (
+              <div className="h-full flex flex-col items-center justify-center text-center p-8 gap-4">
+                <div className="chat-empty-badge">
+                  <MessageCircle className="w-6 h-6 text-ink-500" strokeWidth={2.1} />
+                </div>
+                <div>
+                  <p className="text-ink-900 font-semibold font-display text-lg">
+                    Выберите чат
+                  </p>
+                  <p className="text-ink-400 text-sm font-body mt-1">
+                    {isOwner
+                      ? "Или создайте новый чат кнопкой «Создать чат»"
+                      : "Чаты появятся здесь"}
+                  </p>
+                </div>
+              </div>
+            )}
+          </section>
         </div>
       )}
 

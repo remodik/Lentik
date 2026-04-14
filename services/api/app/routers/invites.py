@@ -44,7 +44,12 @@ async def create_invite(
     token = secrets.token_urlsafe(32)
     expires_at = datetime.now(timezone.utc) + timedelta(hours=body.expires_in_hours)
 
-    invite = Invite(family_id=body.family_id, token=token, expires_at=expires_at)
+    invite = Invite(
+        family_id=body.family_id,
+        token=token,
+        max_uses=body.max_uses,
+        expires_at=expires_at,
+    )
     db.add(invite)
     await db.commit()
     await db.refresh(invite)
@@ -52,4 +57,10 @@ async def create_invite(
     base_url = str(request.base_url).rstrip("/")
     join_url = f"{base_url}/join?token={token}"
 
-    return CreateInviteResponse(token=token, expires_at=expires_at, join_url=join_url)
+    return CreateInviteResponse(
+        token=token,
+        expires_at=invite.expires_at,
+        max_uses=invite.max_uses,
+        uses_count=invite.uses_count,
+        join_url=join_url,
+    )

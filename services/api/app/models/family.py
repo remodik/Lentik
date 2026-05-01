@@ -1,3 +1,5 @@
+from typing import TYPE_CHECKING
+
 import uuid
 from datetime import datetime
 
@@ -6,6 +8,13 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+if TYPE_CHECKING:
+    from app.models.invite import Invite
+    from app.models.chat import Chat
+    from app.models.membership import Membership
+    from app.models.channel import Channel
+    from app.models.expense import Expense
+    from app.models.gallery_item import GalleryItem
 
 
 class Family(Base):
@@ -32,6 +41,9 @@ class Family(Base):
         back_populates="family", cascade="all, delete-orphan"
     )
     gallery_items: Mapped[list["GalleryItem"]] = relationship(
+        back_populates="family", cascade="all, delete-orphan"
+    )
+    expenses: Mapped[list["Expense"]] = relationship(
         back_populates="family", cascade="all, delete-orphan"
     )
 

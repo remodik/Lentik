@@ -15,5 +15,6 @@ dependencies = [
     "python-jose[cryptography]>=3.5.0",
     "python-multipart>=0.0.22",
     "sqlalchemy>=2.0.46",
+    "uliweb-alembic>=0.6.9",
     "uvicorn[standard]>=0.41.0",
 ]

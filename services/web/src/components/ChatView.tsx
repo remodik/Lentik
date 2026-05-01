@@ -45,7 +45,6 @@ import UserMiniProfilePopover, {
 } from "@/components/UserMiniProfilePopover";
 import { useUserPopover } from "@/lib/useUserPopover";
 
-type WsStatus = "connecting" | "connected" | "disconnected";
 type ToolbarPlacement = "above" | "below";
 
 const MAX_ATTACHMENTS_PER_MESSAGE = 8;
@@ -848,15 +847,12 @@ export default function ChatView({
     function connect() {
       if (!isMounted) return;
 
-      setWsStatus("connecting");
-
       const token = getAuthToken();
       const query = token ? `?token=${encodeURIComponent(token)}` : "";
       ws = new WebSocket(wsUrl(`/families/${familyId}/chats/${chat.id}/ws${query}`));
 
       ws.onopen = () => {
         if (!isMounted) return;
-        setWsStatus("connected");
 
         pingInterval = setInterval(() => {
           if (ws?.readyState === WebSocket.OPEN) {
@@ -941,7 +937,6 @@ export default function ChatView({
       ws.onclose = () => {
         if (!isMounted) return;
 
-        setWsStatus("disconnected");
         clearTimers();
 
         reconnectTimeout = setTimeout(() => {

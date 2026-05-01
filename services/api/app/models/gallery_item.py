@@ -1,12 +1,17 @@
 import enum
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import BigInteger, DateTime, Enum, ForeignKey, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+
+if TYPE_CHECKING:
+    from app.models.family import Family
+    from app.models.user import User
 
 
 class MediaType(str, enum.Enum):

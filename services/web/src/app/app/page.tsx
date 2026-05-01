@@ -26,6 +26,7 @@ import MembersList from "@/components/MembersList";
 import CalendarView from "@/components/CalendarView";
 import ChannelsView from "@/components/ChannelsView";
 import NotesView from "@/components/NotesView";
+import BudgetView from "@/components/BudgetView";
 import SubscriptionModal from "@/components/SubscriptionModal";
 import { FREE_FAMILY_LIMIT, isFamilyLimitError } from "@/lib/families";
 import { apiFetch, clearAuthToken } from "@/lib/api-base";
@@ -459,6 +460,13 @@ export default function AppPage() {
       )}
       {section === "notes" && (
         <NotesView familyId={familyId} meId={me.id} />
+      )}
+      {section === "budget" && (
+        <BudgetView
+          familyId={familyId}
+          meId={me.id}
+          members={family.members ?? []}
+        />
       )}
       {section === "members" && (
         <MembersList family={family} me={me} onKick={handleKick} onRefresh={refreshFamily} />

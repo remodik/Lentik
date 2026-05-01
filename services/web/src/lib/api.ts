@@ -483,6 +483,59 @@ export function deleteCalendarEvent(familyId: string, eventId: string) {
   return request<void>(`/families/${familyId}/calendar/${eventId}`, { method: "DELETE" });
 }
 
+export type ExpenseSplit = {
+  user_id: string;
+  share: number | string;
+  user_display_name: string | null;
+};
+
+export type Expense = {
+  id: string;
+  family_id: string;
+  created_by: string;
+  created_by_name: string | null;
+  title: string;
+  amount: number | string;
+  currency: string;
+  paid_by: string;
+  paid_by_name: string | null;
+  splits: ExpenseSplit[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type Balance = {
+  user_id: string;
+  display_name: string;
+  balance: number | string;
+};
+
+export type ExpenseCreateRequest = {
+  title: string;
+  amount: number;
+  currency?: string;
+  paid_by: string;
+  splits: Array<{
+    user_id: string;
+    share: number;
+  }>;
+};
+
+export function getExpenses(familyId: string) {
+  return request<Expense[]>(`/families/${familyId}/expenses`);
+}
+
+export function createExpense(familyId: string, data: ExpenseCreateRequest) {
+  return request<Expense>(`/families/${familyId}/expenses`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function getBalances(familyId: string) {
+  return request<Balance[]>(`/families/${familyId}/expenses/balance`);
+}
+
 export type Note = {
   id: string;
   family_id: string | null;

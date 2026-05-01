@@ -17,6 +17,7 @@ import {
   UserMinus,
   UserPlus,
   Users,
+  Wallet,
   X,
 } from "lucide-react";
 import { type Chat, type Channel, type Family, type Me, type MyFamily } from "@/lib/api";
@@ -30,7 +31,7 @@ import {
   type PresenceUpdateEvent,
 } from "@/components/NotificationSystem";
 
-export type AppSection = "chat" | "gallery" | "calendar" | "members" | "channels" | "notes";
+export type AppSection = "chat" | "gallery" | "calendar" | "members" | "channels" | "notes" | "budget";
 
 type NavCategory = "chat" | "plans" | "media" | "family";
 
@@ -72,6 +73,7 @@ const NAV_ITEMS: NavItem[] = [
     label: "Календарь",
     desc: "События и дни рождения",
   },
+  { id: "budget", icon: Wallet, label: "Бюджет", desc: "Семейные расходы" },
   { id: "notes", icon: StickyNote, label: "Заметки", desc: "Личные и семейные заметки" },
   { id: "channels", icon: Rss, label: "Каналы", desc: "Объявления семьи" },
   { id: "members", icon: Users, label: "Участники", desc: "Члены семьи" },
@@ -81,6 +83,7 @@ const SECTION_TO_CATEGORY: Record<AppSection, NavCategory> = {
   chat: "chat",
   channels: "chat",
   calendar: "plans",
+  budget: "plans",
   notes: "plans",
   gallery: "media",
   members: "family",
@@ -122,9 +125,9 @@ const SIDEBAR_CATEGORIES: SidebarCategory[] = [
         items: [
           { id: "calendar", label: "Календарь", section: "calendar" },
           { id: "notes", label: "Заметки", section: "notes" },
+          { id: "budget", label: "Бюджет", section: "budget" },
           { id: "reminders", label: "Напоминания", disabled: true, soon: true },
           { id: "time-capsules", label: "Капсулы времени", disabled: true, soon: true },
-          { id: "budget", label: "Бюджет", disabled: true, soon: true },
         ],
       },
     ],

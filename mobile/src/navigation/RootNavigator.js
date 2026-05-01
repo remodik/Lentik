@@ -14,6 +14,8 @@ import FamilySelectScreen from '../screens/FamilySelectScreen';
 import ChatsListScreen from '../screens/ChatsListScreen';
 import ChatScreen from '../screens/ChatScreen';
 import GalleryScreen from '../screens/GalleryScreen';
+import BudgetScreen from '../screens/BudgetScreen';
+import RemindersScreen from '../screens/RemindersScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 
 const RootStack = createNativeStackNavigator();
@@ -51,6 +53,8 @@ function MainTabs() {
           const icons = {
             Chats: focused ? 'chatbubbles' : 'chatbubbles-outline',
             Gallery: focused ? 'images' : 'images-outline',
+            Reminders: focused ? 'alarm' : 'alarm-outline',
+            Budget: focused ? 'wallet' : 'wallet-outline',
             Profile: focused ? 'person' : 'person-outline',
           };
           return <Ionicons name={icons[route.name]} size={28} color={color} />;
@@ -59,6 +63,8 @@ function MainTabs() {
     >
       <Tab.Screen name="Chats" component={ChatsStack} options={{ title: 'Чаты' }} />
       <Tab.Screen name="Gallery" component={GalleryScreen} options={{ title: 'Галерея' }} />
+      <Tab.Screen name="Reminders" component={RemindersScreen} options={{ title: 'Напоминания' }} />
+      <Tab.Screen name="Budget" component={BudgetScreen} options={{ title: 'Бюджет' }} />
       <Tab.Screen name="Profile" component={ProfileScreen} options={{ title: 'Профиль' }} />
     </Tab.Navigator>
   );

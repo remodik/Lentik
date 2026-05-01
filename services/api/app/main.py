@@ -10,6 +10,7 @@ from app.core.uploads import get_upload_root
 from app.db.session import AsyncSessionLocal
 from app.models.user import User
 from app.routers.auth import router as auth_router
+from app.routers.budget import family_router as budget_family_router, tx_router as budget_tx_router
 from app.routers.calendar import router as calendar_router
 from app.routers.channels import router as channels_router
 from app.routers.chats import router as chats_router
@@ -20,8 +21,16 @@ from app.routers.gallery import router as gallery_router
 from app.routers.invites import router as invites_router
 from app.routers.me import router as me_router
 from app.routers.notes import family_router as notes_family_router, note_router as notes_note_router
+from app.routers.reminders import (
+    family_router as reminders_family_router,
+    reminder_router as reminders_reminder_router,
+)
 from app.services.calendar_reminders import (
     stop_calendar_reminder_scheduler,
+)
+from app.services.reminder_dispatcher import (
+    start_reminder_scheduler,
+    stop_reminder_scheduler,
 )
 
 logger = logging.getLogger(__name__)
@@ -107,6 +116,10 @@ def create_app() -> FastAPI:
     app_.include_router(notes_family_router)
     app_.include_router(notes_note_router)
     app_.include_router(expenses_router)
+    app_.include_router(budget_family_router)
+    app_.include_router(budget_tx_router)
+    app_.include_router(reminders_family_router)
+    app_.include_router(reminders_reminder_router)
 
     @app_.on_event("startup")
     async def on_startup() -> None:
@@ -120,10 +133,12 @@ def create_app() -> FastAPI:
                 .values(is_online=False, last_seen_at=func.now())
             )
             await db.commit()
+        await start_reminder_scheduler()
 
     @app_.on_event("shutdown")
     async def on_shutdown() -> None:
         await stop_calendar_reminder_scheduler()
+        await stop_reminder_scheduler()
 
     return app_
 

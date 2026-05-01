@@ -1,3 +1,4 @@
+from .budget_transaction import BudgetTransaction, BudgetTransactionSplit, BudgetTxType
 from .calendar_event import CalendarEvent
 from .channel import Channel
 from .chat import Chat
@@ -11,10 +12,14 @@ from .message_read import MessageRead
 from .note import Note
 from .post import Post
 from .reaction import MessageReaction
+from .reminder import Reminder, RepeatRule
 from .session import Session
 from .user import User
 
 __all__ = [
+    "BudgetTransaction",
+    "BudgetTransactionSplit",
+    "BudgetTxType",
     "CalendarEvent",
     "Family",
     "User",
@@ -33,4 +38,6 @@ __all__ = [
     "GalleryItem",
     "MediaType",
     "Note",
+    "Reminder",
+    "RepeatRule",
 ]

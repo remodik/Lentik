@@ -27,12 +27,13 @@ services:
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       IS_PRODUCTION: ${IS_PRODUCTION:-false}
       STRICT_MIGRATIONS: ${STRICT_MIGRATIONS:-false}
+      WATCHFILES_FORCE_POLLING: "true"
     ports:
       - "8000:8000"
     volumes:
       - ../services/api:/app
       - ../services/cloud/uploads:/uploads
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir app
     depends_on:
       db:
         condition: service_healthy

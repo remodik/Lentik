@@ -13,6 +13,7 @@ import {
   type Post,
 } from "@/lib/api";
 import ChatSettingsModal from "@/components/ChatSettingsModal";
+import Age18Gate, { useAge18Gate } from "@/components/Age18Gate";
 
 const POSTS_PAGE_SIZE = 20;
 
@@ -73,10 +74,12 @@ export default function ChannelsView({
   familyId,
   isOwner,
   externalChannelId,
+  meBirthday,
 }: {
   familyId: string;
   isOwner: boolean;
   externalChannelId?: string | null;
+  meBirthday?: string | null;
 }) {
   const [members, setMembers] = useState<FamilyMember[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
@@ -112,6 +115,12 @@ export default function ChannelsView({
   const selectedChannel = useMemo(
     () => channels.find((channel) => channel.id === selectedChannelId) ?? null,
     [channels, selectedChannelId],
+  );
+
+  const ageGate = useAge18Gate(
+    selectedChannelId ?? "",
+    !!selectedChannel?.is_18plus,
+    meBirthday ?? null,
   );
 
   const memberById = useMemo(
@@ -424,8 +433,8 @@ export default function ChannelsView({
                     }
                   }}
                   className={`group relative w-full text-left rounded-xl border px-3 py-2.5 transition cursor-pointer ${
-                    active ? "shadow-sm" : "hover:translate-y-[-1px]"
-                  }`}
+                    isOwner ? "pr-9" : ""
+                  } ${active ? "shadow-sm" : "hover:translate-y-[-1px]"}`}
                   style={{
                     borderColor: active ? "var(--accent-border)" : "var(--border-glass)",
                     background: active ? "var(--accent-soft)" : "var(--bg-surface)",
@@ -443,7 +452,7 @@ export default function ChannelsView({
                     )}
                     {!!channel.slow_mode_seconds && channel.slow_mode_seconds > 0 && (
                       <Timer
-                        className="w-3 h-3 text-ink-400 shrink-0"
+                        className="w-3.5 h-3.5 text-amber-600 shrink-0"
                         strokeWidth={2.4}
                         aria-label="Включён медленный режим"
                       />
@@ -495,6 +504,35 @@ export default function ChannelsView({
               )}
             </div>
           </div>
+        ) : ageGate.status !== "ok" ? (
+          <>
+            <div className="px-4 py-3 border-b" style={{ borderColor: "var(--border-warm-dim)" }}>
+              <h2 className="text-[1rem] font-semibold text-ink-900 inline-flex items-center gap-2">
+                <span className="truncate"># {selectedChannel.name}</span>
+                {selectedChannel.is_18plus && (
+                  <span
+                    className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-bold border border-red-300 bg-red-50 text-red-600"
+                    title="Только для 18+"
+                  >
+                    18+
+                  </span>
+                )}
+              </h2>
+              {selectedChannel.description && (
+                <p className="text-[11px] text-ink-400 font-body mt-0.5 line-clamp-1">
+                  {selectedChannel.description}
+                </p>
+              )}
+            </div>
+            <Age18Gate
+              status={ageGate.status}
+              reason={ageGate.reason}
+              targetId={selectedChannel.id}
+              targetName={selectedChannel.name}
+              onAccept={ageGate.accept}
+              onCancel={() => setSelectedChannelId(null)}
+            />
+          </>
         ) : (
           <>
             <div className="px-4 py-3 border-b" style={{ borderColor: "var(--border-warm-dim)" }}>

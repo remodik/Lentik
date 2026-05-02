@@ -405,8 +405,8 @@ export default function AppPage() {
                         }
                       }}
                       className={`group relative w-full text-left rounded-xl border px-3 py-2.5 transition cursor-pointer ${
-                        active ? "shadow-sm" : "hover:translate-y-[-1px]"
-                      }`}
+                        isOwner ? "pr-9" : ""
+                      } ${active ? "shadow-sm" : "hover:translate-y-[-1px]"}`}
                       style={{
                         borderColor: active ? "var(--accent-border)" : "var(--border-glass)",
                         background: active ? "var(--accent-soft)" : "var(--bg-surface)",
@@ -424,7 +424,7 @@ export default function AppPage() {
                         )}
                         {!!chat.slow_mode_seconds && chat.slow_mode_seconds > 0 && (
                           <Timer
-                            className="w-3 h-3 text-ink-400 shrink-0"
+                            className="w-3.5 h-3.5 text-amber-600 shrink-0"
                             strokeWidth={2.4}
                             aria-label="Включён медленный режим"
                           />
@@ -463,6 +463,7 @@ export default function AppPage() {
                 chat={activeChat}
                 me={me}
                 family={family}
+                onLeave={() => setActiveChatId(null)}
               />
             ) : (
               <div className="h-full flex flex-col items-center justify-center text-center p-8 gap-4">
@@ -500,6 +501,7 @@ export default function AppPage() {
           familyId={familyId}
           isOwner={isOwner}
           externalChannelId={selectedChannelId}
+          meBirthday={me.birthday}
         />
       )}
       {section === "notes" && (

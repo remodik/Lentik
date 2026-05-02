@@ -51,6 +51,7 @@ import UserMiniProfilePopover, {
   type UserMiniProfile,
 } from "@/components/UserMiniProfilePopover";
 import { useUserPopover } from "@/lib/useUserPopover";
+import Age18Gate, { useAge18Gate } from "@/components/Age18Gate";
 
 type ToolbarPlacement = "above" | "below";
 
@@ -338,12 +339,15 @@ export default function ChatView({
   chat,
   me,
   family,
+  onLeave,
 }: {
   familyId: string;
   chat: Chat;
   me: Me;
   family?: Family;
+  onLeave?: () => void;
 }) {
+  const ageGate = useAge18Gate(chat.id, !!chat.is_18plus, me.birthday);
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -1406,6 +1410,41 @@ export default function ChatView({
   const canJumpToPinned = Boolean(pinnedMessageId && pinnedMessageFromList);
   const normalizedSearchQuery = searchQuery.trim();
   const canSearchInChat = normalizedSearchQuery.length >= MIN_SEARCH_QUERY_LENGTH;
+
+  if (ageGate.status !== "ok") {
+    return (
+      <div className="h-full flex flex-col min-w-0 overflow-x-hidden">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-white/40 gap-3">
+          <div className="min-w-0">
+            <h2 className="font-body text-[1.02rem] font-semibold text-ink-900 truncate inline-flex items-center gap-2">
+              <span className="truncate"># {chat.name}</span>
+              {chat.is_18plus && (
+                <span
+                  className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-bold border border-red-300 bg-red-50 text-red-600"
+                  title="Только для 18+"
+                >
+                  18+
+                </span>
+              )}
+            </h2>
+            {chat.description?.trim() ? (
+              <p className="text-[12px] text-ink-500 font-body mt-0.5 line-clamp-1">
+                {chat.description}
+              </p>
+            ) : null}
+          </div>
+        </div>
+        <Age18Gate
+          status={ageGate.status}
+          reason={ageGate.reason}
+          targetId={chat.id}
+          targetName={chat.name}
+          onAccept={ageGate.accept}
+          onCancel={() => onLeave?.()}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="h-full flex flex-col min-w-0 overflow-x-hidden">

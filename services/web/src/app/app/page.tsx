@@ -27,6 +27,7 @@ import CalendarView from "@/components/CalendarView";
 import ChannelsView from "@/components/ChannelsView";
 import NotesView from "@/components/NotesView";
 import BudgetView from "@/components/BudgetView";
+import RemindersView from "@/components/RemindersView";
 import SubscriptionModal from "@/components/SubscriptionModal";
 import { FREE_FAMILY_LIMIT, isFamilyLimitError } from "@/lib/families";
 import { apiFetch, clearAuthToken } from "@/lib/api-base";
@@ -467,6 +468,9 @@ export default function AppPage() {
           meId={me.id}
           members={family.members ?? []}
         />
+      )}
+      {section === "reminders" && (
+        <RemindersView familyId={familyId} meId={me.id} />
       )}
       {section === "members" && (
         <MembersList family={family} me={me} onKick={handleKick} onRefresh={refreshFamily} />

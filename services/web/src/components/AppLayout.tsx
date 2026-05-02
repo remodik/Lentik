@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
+  AlarmClock,
   CalendarDays,
   ChevronDown,
   House,
@@ -31,7 +32,7 @@ import {
   type PresenceUpdateEvent,
 } from "@/components/NotificationSystem";
 
-export type AppSection = "chat" | "gallery" | "calendar" | "members" | "channels" | "notes" | "budget";
+export type AppSection = "chat" | "gallery" | "calendar" | "members" | "channels" | "notes" | "budget" | "reminders";
 
 type NavCategory = "chat" | "plans" | "media" | "family";
 
@@ -74,6 +75,7 @@ const NAV_ITEMS: NavItem[] = [
     desc: "События и дни рождения",
   },
   { id: "budget", icon: Wallet, label: "Бюджет", desc: "Семейные расходы" },
+  { id: "reminders", icon: AlarmClock, label: "Напоминания", desc: "Дела и события семьи" },
   { id: "notes", icon: StickyNote, label: "Заметки", desc: "Личные и семейные заметки" },
   { id: "channels", icon: Rss, label: "Каналы", desc: "Объявления семьи" },
   { id: "members", icon: Users, label: "Участники", desc: "Члены семьи" },
@@ -85,6 +87,7 @@ const SECTION_TO_CATEGORY: Record<AppSection, NavCategory> = {
   calendar: "plans",
   budget: "plans",
   notes: "plans",
+  reminders: "plans",
   gallery: "media",
   members: "family",
 };
@@ -126,7 +129,7 @@ const SIDEBAR_CATEGORIES: SidebarCategory[] = [
           { id: "calendar", label: "Календарь", section: "calendar" },
           { id: "notes", label: "Заметки", section: "notes" },
           { id: "budget", label: "Бюджет", section: "budget" },
-          { id: "reminders", label: "Напоминания", disabled: true, soon: true },
+          { id: "reminders", label: "Напоминания", section: "reminders" },
           { id: "time-capsules", label: "Капсулы времени", disabled: true, soon: true },
         ],
       },

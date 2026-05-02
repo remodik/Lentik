@@ -575,6 +575,73 @@ export function deleteNote(noteId: string) {
   return request<void>(`/notes/${noteId}`, { method: "DELETE" });
 }
 
+export type ReminderRepeatRule = "none" | "daily" | "weekly" | "monthly";
+
+export type Reminder = {
+  id: string;
+  family_id: string | null;
+  author_id: string | null;
+  author_name: string | null;
+  title: string;
+  notes: string | null;
+  remind_at: string;
+  is_personal: boolean;
+  repeat_rule: ReminderRepeatRule;
+  is_done: boolean;
+  reminder_sent_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export function getReminders(familyId: string, opts?: { upcoming?: boolean }) {
+  const qs = opts?.upcoming ? "?upcoming=true" : "";
+  return request<Reminder[]>(`/families/${familyId}/reminders${qs}`);
+}
+
+export function createReminder(
+  familyId: string,
+  data: {
+    title: string;
+    notes?: string | null;
+    remind_at: string;
+    is_personal?: boolean;
+    repeat_rule?: ReminderRepeatRule;
+  },
+) {
+  return request<Reminder>(`/families/${familyId}/reminders`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateReminder(
+  reminderId: string,
+  data: {
+    title?: string;
+    notes?: string | null;
+    remind_at?: string;
+    is_personal?: boolean;
+    repeat_rule?: ReminderRepeatRule;
+    is_done?: boolean;
+  },
+) {
+  return request<Reminder>(`/reminders/${reminderId}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export function toggleReminderDone(reminderId: string) {
+  return request<{ id: string; is_done: boolean; next_remind_at: string | null }>(
+    `/reminders/${reminderId}/toggle-done`,
+    { method: "POST" },
+  );
+}
+
+export function deleteReminder(reminderId: string) {
+  return request<void>(`/reminders/${reminderId}`, { method: "DELETE" });
+}
+
 export function sendVoiceMessage(familyId: string, chatId: string, blob: Blob) {
   const form = new FormData();
   form.append("file", blob, "voice.webm");

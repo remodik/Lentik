@@ -44,7 +44,31 @@ export default function AppPage() {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null);
-  const [section, setSection] = useState<AppSection>("chat");
+  const [section, setSection] = useState<AppSection>(() => {
+    if (typeof window === "undefined") return "chat";
+    const allowed: AppSection[] = [
+      "chat",
+      "gallery",
+      "calendar",
+      "members",
+      "channels",
+      "notes",
+      "budget",
+      "reminders",
+    ];
+    try {
+      const saved = localStorage.getItem("lentik_section") as AppSection | null;
+      return saved && allowed.includes(saved) ? saved : "chat";
+    } catch {
+      return "chat";
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("lentik_section", section);
+    } catch {}
+  }, [section]);
   const [loading, setLoading] = useState(true);
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
   const [showCreateFamily, setShowCreateFamily] = useState(false);
@@ -117,7 +141,6 @@ export default function AppPage() {
         chatsData[0]?.id ??
         null;
       setActiveChatId(nextChatId);
-      setSection("chat");
     } catch (err: unknown) {
       const status = (err as { status?: number })?.status;
       if (status === 401) {

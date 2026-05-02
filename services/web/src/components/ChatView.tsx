@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
+  Clock as ClockIcon,
   Download,
   SmilePlus,
   CornerUpLeft,
@@ -19,6 +20,12 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+
+function formatChatSlowMode(sec: number): string {
+  if (sec < 60) return `${sec} с`;
+  if (sec < 3600) return `${Math.round(sec / 60)} мин`;
+  return `${Math.round(sec / 3600)} ч`;
+}
 import {
   addReaction,
   deleteMessage,
@@ -1402,11 +1409,33 @@ export default function ChatView({
 
   return (
     <div className="h-full flex flex-col min-w-0 overflow-x-hidden">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-white/40">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-white/40 gap-3">
         <div className="min-w-0">
-          <h2 className="font-body text-[1.02rem] font-semibold text-ink-900 truncate">
-            # {chat.name}
+          <h2 className="font-body text-[1.02rem] font-semibold text-ink-900 truncate inline-flex items-center gap-2">
+            <span className="truncate"># {chat.name}</span>
+            {chat.is_18plus && (
+              <span
+                className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-bold border border-red-300 bg-red-50 text-red-600"
+                title="Только для 18+"
+              >
+                18+
+              </span>
+            )}
+            {!!chat.slow_mode_seconds && chat.slow_mode_seconds > 0 && (
+              <span
+                className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold border border-amber-300 bg-amber-50 text-amber-700"
+                title={`Медленный режим: ${formatChatSlowMode(chat.slow_mode_seconds)}`}
+              >
+                <ClockIcon className="w-3 h-3" strokeWidth={2.4} />
+                {formatChatSlowMode(chat.slow_mode_seconds)}
+              </span>
+            )}
           </h2>
+          {chat.description?.trim() ? (
+            <p className="text-[12px] text-ink-500 font-body mt-0.5 line-clamp-1" title={chat.description}>
+              {chat.description}
+            </p>
+          ) : null}
           <p className="text-[11px] text-ink-400 font-body mt-0.5 inline-flex items-center gap-1.5">
             <span
               className={`w-1.5 h-1.5 rounded-full ${

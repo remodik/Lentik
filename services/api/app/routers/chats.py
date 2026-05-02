@@ -26,6 +26,7 @@ from app.schemas.chats import (
     ChatCreate,
     ChatPinRequest,
     ChatResponse,
+    ChatUpdate,
     MessageCreate,
     MessageSearchResult,
     MessageReadRequest,
@@ -127,6 +128,9 @@ def _chat_to_response(chat: Chat) -> ChatResponse:
         id=chat.id,
         family_id=chat.family_id,
         name=chat.name,
+        description=chat.description,
+        slow_mode_seconds=chat.slow_mode_seconds,
+        is_18plus=chat.is_18plus,
         created_by=chat.created_by,
         pinned_message_id=chat.pinned_message_id,
         pinned_message=pinned_preview,
@@ -172,6 +176,72 @@ async def _require_member(family_id: UUID, user: User, db: AsyncSession) -> Memb
     if not m:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not a family member")
     return m
+
+
+def _user_age_years(user: User) -> int | None:
+    """Возраст пользователя в полных годах. Возвращает None, если birthday не задан."""
+    if not user.birthday:
+        return None
+    today = datetime.now(timezone.utc).date()
+    bd = user.birthday
+    age = today.year - bd.year - (
+        (today.month, today.day) < (bd.month, bd.day)
+    )
+    return max(0, age)
+
+
+def _ensure_age_gate(chat: Chat, user: User) -> None:
+    """Проверка возрастного ограничения 18+. Бросает 403 если не подходит."""
+    if not chat.is_18plus:
+        return
+    age = _user_age_years(user)
+    if age is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Этот чат — 18+. Заполните дату рождения в профиле.",
+        )
+    if age < 18:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Этот чат — 18+. Доступ запрещён.",
+        )
+
+
+async def _enforce_slow_mode(
+    chat: Chat,
+    user: User,
+    membership: Membership,
+    db: AsyncSession,
+) -> None:
+    """Возвращает 429 если slow-mode активен и от пользователя недавно было сообщение.
+
+    Владелец семьи slow-mode игнорирует.
+    """
+    if not chat.slow_mode_seconds or chat.slow_mode_seconds <= 0:
+        return
+    if membership.role == "owner":
+        return
+
+    last = await db.scalar(
+        select(Message)
+        .where(Message.chat_id == chat.id, Message.author_id == user.id)
+        .order_by(Message.created_at.desc())
+        .limit(1)
+    )
+    if not last:
+        return
+
+    now = datetime.now(timezone.utc)
+    elapsed = (now - last.created_at).total_seconds()
+    remaining = int(chat.slow_mode_seconds - elapsed)
+    if remaining > 0:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=(
+                f"Медленный режим: подождите ещё {remaining} с перед следующим сообщением."
+            ),
+            headers={"Retry-After": str(remaining)},
+        )
 
 
 def _parse_mentions(text: str) -> list[str]:
@@ -287,13 +357,70 @@ async def create_chat(
     if m.role != "owner":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only owner can create chats")
 
-    chat = Chat(family_id=family_id, name=body.name, created_by=user.id)
+    chat = Chat(
+        family_id=family_id,
+        name=body.name,
+        description=body.description,
+        slow_mode_seconds=body.slow_mode_seconds,
+        is_18plus=body.is_18plus,
+        created_by=user.id,
+    )
     db.add(chat)
     await db.commit()
     loaded_chat = await _load_chat_with_pin(db, family_id, chat.id)
     if not loaded_chat:
         raise HTTPException(status_code=404, detail="Chat not found")
     return _chat_to_response(loaded_chat)
+
+
+@router.patch("/{chat_id}", response_model=ChatResponse)
+async def update_chat(
+    family_id: UUID,
+    chat_id: UUID,
+    body: ChatUpdate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    m = await _require_member(family_id, user, db)
+    if m.role != "owner":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only owner can edit chat settings",
+        )
+
+    chat = await db.get(Chat, chat_id)
+    if not chat or chat.family_id != family_id:
+        raise HTTPException(status_code=404, detail="Chat not found")
+
+    updated = body.model_fields_set
+    if "name" in updated and body.name is not None:
+        chat.name = body.name
+    if "description" in updated:
+        chat.description = body.description
+    if "slow_mode_seconds" in updated and body.slow_mode_seconds is not None:
+        chat.slow_mode_seconds = body.slow_mode_seconds
+    if "is_18plus" in updated and body.is_18plus is not None:
+        chat.is_18plus = body.is_18plus
+
+    await db.commit()
+
+    loaded = await _load_chat_with_pin(db, family_id, chat_id)
+    if not loaded:
+        raise HTTPException(status_code=404, detail="Chat not found")
+
+    response = _chat_to_response(loaded)
+    await ws_manager.broadcast_to_family(
+        family_id,
+        {
+            "type": "chat_settings_updated",
+            "chat_id": str(chat_id),
+            "name": response.name,
+            "description": response.description,
+            "slow_mode_seconds": response.slow_mode_seconds,
+            "is_18plus": response.is_18plus,
+        },
+    )
+    return response
 
 
 @router.post("/{chat_id}/pin", response_model=ChatResponse)
@@ -391,6 +518,11 @@ async def get_messages(
     user: User = Depends(get_current_user),
 ):
     await _require_member(family_id, user, db)
+
+    chat = await db.get(Chat, chat_id)
+    if not chat or chat.family_id != family_id:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    _ensure_age_gate(chat, user)
 
     query = (
         select(Message)
@@ -548,11 +680,14 @@ async def send_message(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    await _require_member(family_id, user, db)
+    membership = await _require_member(family_id, user, db)
 
     chat = await db.get(Chat, chat_id)
     if not chat or chat.family_id != family_id:
         raise HTTPException(status_code=404, detail="Chat not found")
+
+    _ensure_age_gate(chat, user)
+    await _enforce_slow_mode(chat, user, membership, db)
 
     mentions = _parse_mentions(body.text)
 
@@ -596,11 +731,14 @@ async def send_message_with_attachments(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    await _require_member(family_id, user, db)
+    membership = await _require_member(family_id, user, db)
 
     chat = await db.get(Chat, chat_id)
     if not chat or chat.family_id != family_id:
         raise HTTPException(status_code=404, detail="Chat not found")
+
+    _ensure_age_gate(chat, user)
+    await _enforce_slow_mode(chat, user, membership, db)
 
     clean_files = [f for f in files if f.filename]
     if not clean_files:
@@ -695,11 +833,14 @@ async def send_voice_message(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    await _require_member(family_id, user, db)
+    membership = await _require_member(family_id, user, db)
 
     chat = await db.get(Chat, chat_id)
     if not chat or chat.family_id != family_id:
         raise HTTPException(status_code=404, detail="Chat not found")
+
+    _ensure_age_gate(chat, user)
+    await _enforce_slow_mode(chat, user, membership, db)
 
     payload = await file.read()
     if len(payload) > MAX_VOICE_SIZE:

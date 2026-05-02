@@ -189,10 +189,31 @@ export type Chat = {
   id: string;
   name: string;
   family_id: string;
+  description?: string | null;
+  slow_mode_seconds?: number;
+  is_18plus?: boolean;
   pinned_message_id?: string | null;
   pinned_message?: ChatPinnedMessagePreview | null;
   created_at: string;
 };
+
+export type ChatSettingsUpdate = {
+  name?: string;
+  description?: string | null;
+  slow_mode_seconds?: number;
+  is_18plus?: boolean;
+};
+
+export function updateChat(
+  familyId: string,
+  chatId: string,
+  data: ChatSettingsUpdate,
+) {
+  return request<Chat>(`/families/${familyId}/chats/${chatId}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
 
 export type ReactionSummary = {
   emoji: string;
@@ -370,9 +391,29 @@ export type Channel = {
   family_id: string;
   name: string;
   description: string | null;
+  slow_mode_seconds?: number;
+  is_18plus?: boolean;
   created_by: string | null;
   created_at: string;
 };
+
+export type ChannelSettingsUpdate = {
+  name?: string;
+  description?: string | null;
+  slow_mode_seconds?: number;
+  is_18plus?: boolean;
+};
+
+export function updateChannel(
+  familyId: string,
+  channelId: string,
+  data: ChannelSettingsUpdate,
+) {
+  return request<Channel>(`/families/${familyId}/channels/${channelId}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
 
 export type Post = {
   id: string;

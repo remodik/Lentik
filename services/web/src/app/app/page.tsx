@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, MessageCircle, Plus, RefreshCw } from "lucide-react";
+import { AlertTriangle, Lock, MessageCircle, Pencil, Plus, RefreshCw, Timer } from "lucide-react";
 import {
   createFamily,
   getMe,
@@ -21,6 +21,7 @@ import {
 
 import AppLayout, { type AppSection } from "@/components/AppLayout";
 import ChatView from "@/components/ChatView";
+import ChatSettingsModal from "@/components/ChatSettingsModal";
 import GalleryView from "@/components/GalleryView";
 import MembersList from "@/components/MembersList";
 import CalendarView from "@/components/CalendarView";
@@ -51,6 +52,7 @@ export default function AppPage() {
   const [creatingFamily, setCreatingFamily] = useState(false);
   const [createFamilyError, setCreateFamilyError] = useState("");
   const [loadError, setLoadError] = useState("");
+  const [chatSettingsTarget, setChatSettingsTarget] = useState<Chat | null>(null);
 
   const activeChat = useMemo(
     () => chats.find((c) => c.id === activeChatId) ?? null,
@@ -388,25 +390,66 @@ export default function AppPage() {
               ) : (
                 chats.map((chat) => {
                   const active = chat.id === activeChatId;
+                  const subtitle = chat.description?.trim() || "Семейная беседа";
                   return (
-                    <button
+                    <div
                       key={chat.id}
-                      type="button"
-                      className={`w-full text-left rounded-xl border px-3 py-2.5 transition ${
+                      role="button"
+                      tabIndex={0}
+                      aria-current={active ? "page" : undefined}
+                      onClick={() => setActiveChatId(chat.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setActiveChatId(chat.id);
+                        }
+                      }}
+                      className={`group relative w-full text-left rounded-xl border px-3 py-2.5 transition cursor-pointer ${
                         active ? "shadow-sm" : "hover:translate-y-[-1px]"
                       }`}
                       style={{
                         borderColor: active ? "var(--accent-border)" : "var(--border-glass)",
                         background: active ? "var(--accent-soft)" : "var(--bg-surface)",
                       }}
-                      onClick={() => setActiveChatId(chat.id)}
-                      aria-current={active ? "page" : undefined}
                     >
-                      <p className="text-sm font-semibold text-ink-800 truncate"># {chat.name}</p>
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <p className="text-sm font-semibold text-ink-800 truncate flex-1"># {chat.name}</p>
+                        {chat.is_18plus && (
+                          <span
+                            className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-bold border border-red-300 bg-red-50 text-red-600"
+                            title="Только для 18+"
+                          >
+                            18+
+                          </span>
+                        )}
+                        {!!chat.slow_mode_seconds && chat.slow_mode_seconds > 0 && (
+                          <Timer
+                            className="w-3 h-3 text-ink-400 shrink-0"
+                            strokeWidth={2.4}
+                            aria-label="Включён медленный режим"
+                          />
+                        )}
+                      </div>
                       <p className="text-xs text-ink-400 font-body mt-1 line-clamp-2">
-                        Семейная беседа
+                        {subtitle}
                       </p>
-                    </button>
+
+                      {isOwner && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setChatSettingsTarget(chat);
+                          }}
+                          className="absolute top-2 right-2 w-7 h-7 rounded-lg grid place-items-center text-ink-400 hover:text-ink-700 hover:bg-white/70 transition opacity-0 group-hover:opacity-100 focus:opacity-100"
+                          title="Настройки чата"
+                          aria-label="Настройки чата"
+                          data-testid={`chat-settings-${chat.id}`}
+                        >
+                          <Pencil className="w-3.5 h-3.5" strokeWidth={2.2} />
+                        </button>
+                      )}
+                    </div>
                   );
                 })
               )}
@@ -595,6 +638,20 @@ export default function AppPage() {
         open={showSubscriptionModal}
         onClose={() => setShowSubscriptionModal(false)}
       />
+
+      {chatSettingsTarget && (
+        <ChatSettingsModal
+          open={!!chatSettingsTarget}
+          kind="chat"
+          familyId={familyId}
+          target={chatSettingsTarget}
+          canEdit={isOwner}
+          onClose={() => setChatSettingsTarget(null)}
+          onUpdated={(updated) => {
+            setChats((prev) => prev.map((c) => (c.id === updated.id ? (updated as Chat) : c)));
+          }}
+        />
+      )}
     </AppLayout>
   );
 }

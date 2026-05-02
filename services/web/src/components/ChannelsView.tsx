@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Loader2, Plus, SendHorizontal } from "lucide-react";
+import { Loader2, Pencil, Plus, SendHorizontal, Timer } from "lucide-react";
 import {
   createChannel,
   createPost,
@@ -12,6 +12,7 @@ import {
   type FamilyMember,
   type Post,
 } from "@/lib/api";
+import ChatSettingsModal from "@/components/ChatSettingsModal";
 
 const POSTS_PAGE_SIZE = 20;
 
@@ -101,6 +102,8 @@ export default function ChannelsView({
 
   const [newPostText, setNewPostText] = useState("");
   const [creatingPost, setCreatingPost] = useState(false);
+
+  const [channelSettingsTarget, setChannelSettingsTarget] = useState<Channel | null>(null);
 
   const postsViewportRef = useRef<HTMLDivElement>(null);
   const suppressAutoScrollRef = useRef(false);
@@ -408,25 +411,66 @@ export default function ChannelsView({
             channels.map((channel) => {
               const active = channel.id === selectedChannelId;
               return (
-                <button
+                <div
                   key={channel.id}
-                  type="button"
-                  className={`w-full text-left rounded-xl border px-3 py-2.5 transition ${
+                  role="button"
+                  tabIndex={0}
+                  aria-current={active ? "page" : undefined}
+                  onClick={() => setSelectedChannelId(channel.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setSelectedChannelId(channel.id);
+                    }
+                  }}
+                  className={`group relative w-full text-left rounded-xl border px-3 py-2.5 transition cursor-pointer ${
                     active ? "shadow-sm" : "hover:translate-y-[-1px]"
                   }`}
                   style={{
                     borderColor: active ? "var(--accent-border)" : "var(--border-glass)",
                     background: active ? "var(--accent-soft)" : "var(--bg-surface)",
                   }}
-                  onClick={() => setSelectedChannelId(channel.id)}
                 >
-                  <p className="text-sm font-semibold text-ink-800 truncate"># {channel.name}</p>
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <p className="text-sm font-semibold text-ink-800 truncate flex-1"># {channel.name}</p>
+                    {channel.is_18plus && (
+                      <span
+                        className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-bold border border-red-300 bg-red-50 text-red-600"
+                        title="Только для 18+"
+                      >
+                        18+
+                      </span>
+                    )}
+                    {!!channel.slow_mode_seconds && channel.slow_mode_seconds > 0 && (
+                      <Timer
+                        className="w-3 h-3 text-ink-400 shrink-0"
+                        strokeWidth={2.4}
+                        aria-label="Включён медленный режим"
+                      />
+                    )}
+                  </div>
                   {channel.description && (
                     <p className="text-xs text-ink-400 font-body mt-1 line-clamp-2">
                       {channel.description}
                     </p>
                   )}
-                </button>
+
+                  {isOwner && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setChannelSettingsTarget(channel);
+                      }}
+                      className="absolute top-2 right-2 w-7 h-7 rounded-lg grid place-items-center text-ink-400 hover:text-ink-700 hover:bg-white/70 transition opacity-0 group-hover:opacity-100 focus:opacity-100"
+                      title="Настройки канала"
+                      aria-label="Настройки канала"
+                      data-testid={`channel-settings-${channel.id}`}
+                    >
+                      <Pencil className="w-3.5 h-3.5" strokeWidth={2.2} />
+                    </button>
+                  )}
+                </div>
               );
             })
           )}
@@ -544,6 +588,22 @@ export default function ChannelsView({
           </>
         )}
       </section>
+
+      {channelSettingsTarget && (
+        <ChatSettingsModal
+          open={!!channelSettingsTarget}
+          kind="channel"
+          familyId={familyId}
+          target={channelSettingsTarget}
+          canEdit={isOwner}
+          onClose={() => setChannelSettingsTarget(null)}
+          onUpdated={(updated) => {
+            setChannels((prev) =>
+              prev.map((c) => (c.id === updated.id ? (updated as Channel) : c)),
+            );
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -63,12 +63,18 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </head>
         <body>
         <ThemeProvider>{children}</ThemeProvider>
+        {/*
+            Не регистрируем service worker. У ранних посетителей мог
+            остаться зарегистрированный /sw.js — для них в /public/sw.js
+            лежит self-unregistering worker, который при активации чистит
+            кэши и снимает регистрацию.
+        */}
         <script dangerouslySetInnerHTML={{
             __html: `
                 if ('serviceWorker' in navigator) {
-                    window.addEventListener('load', function() {
-                        navigator.serviceWorker.register('/sw.js').catch(function(){});
-                    });
+                    navigator.serviceWorker.getRegistrations().then(function (regs) {
+                        regs.forEach(function (reg) { reg.unregister().catch(function(){}); });
+                    }).catch(function(){});
                 }
             `
         }} />

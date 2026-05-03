@@ -56,19 +56,14 @@
 }
 
 .tree-canvas-wrap {
-  max-width: 1100px;
+  max-width: 100%;
   margin: 0 auto;
-  overflow-x: auto;
+  overflow: auto;
 }
 
 .tree-canvas {
   position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 64px;
-  padding: 16px 8px 24px;
-  min-width: 100%;
-  width: max-content;
+  margin: 0 auto;
 }
 
 .tree-edges {
@@ -91,20 +86,7 @@
   opacity: 0.9;
 }
 
-.tree-row {
-  position: relative;
-  z-index: 1;
-}
-
-.tree-row__inner {
-  display: flex;
-  flex-wrap: nowrap;
-  gap: 28px;
-  justify-content: center;
-}
-
 .tree-node {
-  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 10px;
@@ -118,14 +100,22 @@
     0 18px 54px var(--color-extra-120),
     inset 0 1px 0 var(--bg-surface-strong);
   transition:
-    transform 160ms ease,
     box-shadow 160ms ease,
     border-color 160ms ease,
     background 160ms ease;
-  min-width: 180px;
-  max-width: 240px;
   text-align: left;
-  cursor: pointer;
+  cursor: grab;
+  user-select: none;
+  z-index: 1;
+}
+
+.tree-node.dragging {
+  cursor: grabbing;
+  transition: none;
+  z-index: 5;
+  box-shadow:
+    0 12px 40px var(--color-extra-097),
+    0 30px 80px var(--color-extra-014);
 }
 
 .tree-node:hover {
@@ -230,12 +220,3 @@
   white-space: pre-wrap;
 }
 
-@media (max-width: 640px) {
-  .tree-row__inner {
-    gap: 18px;
-  }
-  .tree-node {
-    min-width: 150px;
-    max-width: 200px;
-  }
-}

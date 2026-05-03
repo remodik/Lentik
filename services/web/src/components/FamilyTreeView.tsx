@@ -24,6 +24,7 @@ import {
   deleteTreePerson,
   deleteTreeRelation,
   getFamilyTree,
+  moveTreePerson,
   updateTreePerson,
   type Family,
   type TreeGender,
@@ -31,6 +32,13 @@ import {
   type TreeRelation,
   type TreeRelationType,
 } from "@/lib/api";
+
+const NODE_WIDTH = 220;
+const NODE_HEIGHT = 76;
+const HORIZONTAL_GAP = 36;
+const VERTICAL_GAP = 88;
+const CANVAS_PADDING = 32;
+const DRAG_THRESHOLD_PX = 4;
 
 type Props = {
   familyId: string;
@@ -195,24 +203,45 @@ function PersonNode({
   person,
   isMe,
   onClick,
+  onPointerDown,
   highlighted,
   selected,
+  dragging,
+  position,
 }: {
   person: TreePerson;
   isMe: boolean;
   onClick: () => void;
+  onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => void;
   highlighted: boolean;
   selected: boolean;
+  dragging: boolean;
+  position: { x: number; y: number };
 }) {
   const span = lifeSpan(person);
 
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
-      className={`tree-node ${selected ? "selected" : ""} ${highlighted ? "highlighted" : ""}`}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+      onPointerDown={onPointerDown}
+      className={`tree-node ${selected ? "selected" : ""} ${highlighted ? "highlighted" : ""} ${dragging ? "dragging" : ""}`}
       data-person-id={person.id}
       data-testid={`tree-person-${person.id}`}
+      style={{
+        position: "absolute",
+        left: position.x,
+        top: position.y,
+        width: NODE_WIDTH,
+        touchAction: "none",
+      }}
     >
       <PersonAvatar person={person} size={48} />
       <div className="min-w-0 text-left">
@@ -229,7 +258,7 @@ function PersonNode({
           <Link2 className="w-3 h-3" strokeWidth={2.4} />
         </span>
       )}
-    </button>
+    </div>
   );
 }
 
@@ -271,7 +300,7 @@ export default function FamilyTreeView({ familyId, family, meId }: Props) {
     [persons, relations],
   );
 
-  const grouped = useMemo(() => {
+  const defaultPositions = useMemo(() => {
     const byGen = new Map<number, TreePerson[]>();
     for (const p of persons) {
       const g = generations.get(p.id) ?? 0;
@@ -279,15 +308,168 @@ export default function FamilyTreeView({ familyId, family, meId }: Props) {
       list.push(p);
       byGen.set(g, list);
     }
-    return [...byGen.entries()]
-      .sort((a, b) => a[0] - b[0])
-      .map(([gen, list]) => ({
-        gen,
-        persons: list.sort((a, b) =>
-          a.display_name.localeCompare(b.display_name, "ru"),
-        ),
-      }));
+    let widestRow = 1;
+    for (const list of byGen.values()) {
+      list.sort((a, b) => a.created_at.localeCompare(b.created_at));
+      if (list.length > widestRow) widestRow = list.length;
+    }
+    const totalWidth =
+      widestRow * NODE_WIDTH + (widestRow - 1) * HORIZONTAL_GAP;
+
+    const result = new Map<string, { x: number; y: number }>();
+    for (const [gen, list] of byGen) {
+      const rowWidth =
+        list.length * NODE_WIDTH + (list.length - 1) * HORIZONTAL_GAP;
+      const offsetX = CANVAS_PADDING + (totalWidth - rowWidth) / 2;
+      const y = CANVAS_PADDING + gen * (NODE_HEIGHT + VERTICAL_GAP);
+      list.forEach((p, idx) => {
+        result.set(p.id, {
+          x: offsetX + idx * (NODE_WIDTH + HORIZONTAL_GAP),
+          y,
+        });
+      });
+    }
+    return result;
   }, [persons, generations]);
+
+  const [dragOverrides, setDragOverrides] = useState<
+    Map<string, { x: number; y: number }>
+  >(new Map());
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const dragStateRef = useRef<{
+    personId: string;
+    pointerId: number;
+    offsetX: number;
+    offsetY: number;
+    startX: number;
+    startY: number;
+    moved: boolean;
+  } | null>(null);
+
+  function getPosition(personId: string): { x: number; y: number } {
+    const override = dragOverrides.get(personId);
+    if (override) return override;
+    const person = personById.get(personId);
+    if (person && person.pos_x != null && person.pos_y != null) {
+      return { x: person.pos_x, y: person.pos_y };
+    }
+    return defaultPositions.get(personId) ?? { x: CANVAS_PADDING, y: CANVAS_PADDING };
+  }
+
+  const canvasSize = useMemo(() => {
+    let maxX = 0;
+    let maxY = 0;
+    for (const p of persons) {
+      const { x, y } = getPosition(p.id);
+      if (x > maxX) maxX = x;
+      if (y > maxY) maxY = y;
+    }
+    return {
+      width: Math.max(NODE_WIDTH + CANVAS_PADDING * 2, maxX + NODE_WIDTH + CANVAS_PADDING),
+      height: Math.max(NODE_HEIGHT + CANVAS_PADDING * 2, maxY + NODE_HEIGHT + CANVAS_PADDING),
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [persons, dragOverrides, defaultPositions]);
+
+  const handlePointerDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>, personId: string) => {
+      if (e.button !== 0) return;
+      const node = e.currentTarget;
+      const pos = getPosition(personId);
+      node.setPointerCapture(e.pointerId);
+      dragStateRef.current = {
+        personId,
+        pointerId: e.pointerId,
+        offsetX: e.clientX - (node.getBoundingClientRect().left),
+        offsetY: e.clientY - (node.getBoundingClientRect().top),
+        startX: e.clientX,
+        startY: e.clientY,
+        moved: false,
+      };
+      // start with the current visible position so movement is smooth
+      setDragOverrides((prev) => {
+        const next = new Map(prev);
+        next.set(personId, pos);
+        return next;
+      });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [persons, dragOverrides, defaultPositions],
+  );
+
+  const handlePointerMove = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      const state = dragStateRef.current;
+      if (!state || state.pointerId !== e.pointerId) return;
+      const dx = e.clientX - state.startX;
+      const dy = e.clientY - state.startY;
+      if (!state.moved && Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return;
+      state.moved = true;
+      if (draggingId !== state.personId) setDraggingId(state.personId);
+      const root = containerRef.current;
+      if (!root) return;
+      const rootRect = root.getBoundingClientRect();
+      const x = e.clientX - rootRect.left - state.offsetX + root.scrollLeft;
+      const y = e.clientY - rootRect.top - state.offsetY + root.scrollTop;
+      setDragOverrides((prev) => {
+        const next = new Map(prev);
+        next.set(state.personId, {
+          x: Math.max(0, x),
+          y: Math.max(0, y),
+        });
+        return next;
+      });
+    },
+    [draggingId],
+  );
+
+  const handlePointerUp = useCallback(
+    async (e: React.PointerEvent<HTMLDivElement>) => {
+      const state = dragStateRef.current;
+      if (!state || state.pointerId !== e.pointerId) return;
+      dragStateRef.current = null;
+      setDraggingId(null);
+      if (!state.moved) {
+        // not a drag — drop the override and let click fire
+        setDragOverrides((prev) => {
+          if (!prev.has(state.personId)) return prev;
+          const next = new Map(prev);
+          next.delete(state.personId);
+          return next;
+        });
+        return;
+      }
+      // commit move to backend
+      const finalPos = dragOverrides.get(state.personId);
+      if (!finalPos) return;
+      try {
+        const updated = await moveTreePerson(
+          state.personId,
+          finalPos.x,
+          finalPos.y,
+        );
+        setPersons((prev) =>
+          prev.map((p) => (p.id === updated.id ? updated : p)),
+        );
+        setDragOverrides((prev) => {
+          if (!prev.has(state.personId)) return prev;
+          const next = new Map(prev);
+          next.delete(state.personId);
+          return next;
+        });
+      } catch (err) {
+        console.error("moveTreePerson failed", err);
+        // revert override on failure
+        setDragOverrides((prev) => {
+          if (!prev.has(state.personId)) return prev;
+          const next = new Map(prev);
+          next.delete(state.personId);
+          return next;
+        });
+      }
+    },
+    [dragOverrides],
+  );
 
   const containerRef = useRef<HTMLDivElement>(null);
   const [edges, setEdges] = useState<
@@ -354,7 +536,7 @@ export default function FamilyTreeView({ familyId, family, meId }: Props) {
 
   useLayoutEffect(() => {
     recomputeEdges();
-  }, [recomputeEdges, persons, relations, grouped]);
+  }, [recomputeEdges, persons, relations, defaultPositions, dragOverrides, canvasSize]);
 
   useEffect(() => {
     const handleResize = () => recomputeEdges();
@@ -592,7 +774,17 @@ export default function FamilyTreeView({ familyId, family, meId }: Props) {
           </div>
         ) : (
           <div className="tree-canvas-wrap">
-            <div className="tree-canvas" ref={containerRef}>
+            <div
+              className="tree-canvas"
+              ref={containerRef}
+              style={{
+                width: canvasSize.width,
+                height: canvasSize.height,
+              }}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+              onPointerCancel={handlePointerUp}
+            >
               <svg
                 className="tree-edges"
                 width={svgSize.width || "100%"}
@@ -625,23 +817,21 @@ export default function FamilyTreeView({ familyId, family, meId }: Props) {
                 })}
               </svg>
 
-              {grouped.map(({ gen, persons: row }) => (
-                <div key={gen} className="tree-row">
-                  <div className="tree-row__inner">
-                    {row.map((p) => (
-                      <PersonNode
-                        key={p.id}
-                        person={p}
-                        isMe={p.user_id === meId}
-                        selected={selectedPersonId === p.id}
-                        highlighted={highlightedIds.has(p.id)}
-                        onClick={() =>
-                          setSelectedPersonId((prev) => (prev === p.id ? null : p.id))
-                        }
-                      />
-                    ))}
-                  </div>
-                </div>
+              {persons.map((p) => (
+                <PersonNode
+                  key={p.id}
+                  person={p}
+                  isMe={p.user_id === meId}
+                  selected={selectedPersonId === p.id}
+                  highlighted={highlightedIds.has(p.id)}
+                  dragging={draggingId === p.id}
+                  position={getPosition(p.id)}
+                  onPointerDown={(e) => handlePointerDown(e, p.id)}
+                  onClick={() => {
+                    if (dragStateRef.current?.moved) return;
+                    setSelectedPersonId((prev) => (prev === p.id ? null : p.id));
+                  }}
+                />
               ))}
             </div>
           </div>

@@ -3,7 +3,7 @@ import uuid
 from datetime import date, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Date, DateTime, Enum, ForeignKey, String, Text, UniqueConstraint, func, text
+from sqlalchemy import Date, DateTime, Enum, Float, ForeignKey, String, Text, UniqueConstraint, func, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -59,6 +59,8 @@ class FamilyTreePerson(Base):
     birth_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     death_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     bio: Mapped[str | None] = mapped_column(Text, nullable=True)
+    pos_x: Mapped[float | None] = mapped_column(Float, nullable=True)
+    pos_y: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

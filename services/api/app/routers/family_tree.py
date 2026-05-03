@@ -48,6 +48,8 @@ def _person_to_response(p: FamilyTreePerson) -> TreePersonResponse:
         birth_date=p.birth_date,
         death_date=p.death_date,
         bio=p.bio,
+        pos_x=p.pos_x,
+        pos_y=p.pos_y,
         created_at=p.created_at,
     )
 
@@ -130,6 +132,8 @@ async def create_person(
         birth_date=body.birth_date,
         death_date=body.death_date,
         bio=body.bio,
+        pos_x=body.pos_x,
+        pos_y=body.pos_y,
     )
     db.add(person)
     await db.commit()
@@ -147,6 +151,8 @@ async def update_person(
     person = await _load_person(person_id, db)
     await require_membership(person.family_id, user, db)
 
+    fields_set = body.model_fields_set
+
     if body.display_name is not None:
         person.display_name = body.display_name
     if body.avatar_url is not None:
@@ -155,6 +161,10 @@ async def update_person(
         person.gender = TreeGender(body.gender)
     if body.bio is not None:
         person.bio = body.bio
+    if "pos_x" in fields_set:
+        person.pos_x = body.pos_x
+    if "pos_y" in fields_set:
+        person.pos_y = body.pos_y
 
     if body.clear_birth_date:
         person.birth_date = None

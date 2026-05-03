@@ -97,7 +97,7 @@ const COLOR_LABELS: { value: CalendarEvent["color"]; label: string }[] = [
   { value: "orange", label: "Оранжевый" },
 ];
 
-const REMINDER_OPTIONS: { value: number | null; label: string }[] = [
+const REMINDER_PRESETS: { value: number | null; label: string }[] = [
   { value: null, label: "Нет" },
   { value: 10, label: "За 10 минут" },
   { value: 30, label: "За 30 минут" },
@@ -105,10 +105,40 @@ const REMINDER_OPTIONS: { value: number | null; label: string }[] = [
   { value: 1440, label: "За 1 день" },
 ];
 
+const REMINDER_UNITS: { value: "minutes" | "hours" | "days"; label: string; multiplier: number; max: number }[] = [
+  { value: "minutes", label: "мин", multiplier: 1, max: 60 * 24 * 30 },
+  { value: "hours", label: "ч", multiplier: 60, max: 24 * 30 },
+  { value: "days", label: "дн", multiplier: 1440, max: 30 },
+];
+
+const MAX_REMINDER_MINUTES = 60 * 24 * 30;
+
+function splitReminderToUnits(minutes: number): {
+  amount: number;
+  unit: "minutes" | "hours" | "days";
+} {
+  if (minutes > 0 && minutes % 1440 === 0) {
+    return { amount: minutes / 1440, unit: "days" };
+  }
+  if (minutes > 0 && minutes % 60 === 0) {
+    return { amount: minutes / 60, unit: "hours" };
+  }
+  return { amount: Math.max(1, minutes), unit: "minutes" };
+}
+
 function formatReminderLabel(minutes: number | null | undefined): string {
   if (!minutes) return "Нет";
-  const option = REMINDER_OPTIONS.find((item) => item.value === minutes);
-  return option?.label ?? `За ${minutes} мин`;
+  const preset = REMINDER_PRESETS.find((item) => item.value === minutes);
+  if (preset) return preset.label;
+  if (minutes % 1440 === 0) {
+    const days = minutes / 1440;
+    return `За ${days} дн.`;
+  }
+  if (minutes % 60 === 0) {
+    const hours = minutes / 60;
+    return `За ${hours} ч`;
+  }
+  return `За ${minutes} мин`;
 }
 
 function getDaysInMonth(y: number, m: number) {
@@ -198,6 +228,23 @@ function EventModal({
   const [reminderMinutes, setReminderMinutes] = useState<number | null>(
     editing?.reminder_minutes ?? null,
   );
+  const isPresetReminder =
+    reminderMinutes === null ||
+    REMINDER_PRESETS.some((option) => option.value === reminderMinutes);
+  const initialCustomSplit = splitReminderToUnits(reminderMinutes ?? 15);
+  const [customMode, setCustomMode] = useState(!isPresetReminder);
+  const [customAmount, setCustomAmount] = useState<number>(initialCustomSplit.amount);
+  const [customUnit, setCustomUnit] = useState<"minutes" | "hours" | "days">(
+    initialCustomSplit.unit,
+  );
+
+  function recomputeCustomMinutes(amount: number, unit: "minutes" | "hours" | "days") {
+    const def = REMINDER_UNITS.find((u) => u.value === unit);
+    if (!def) return;
+    const safeAmount = Math.min(def.max, Math.max(1, Math.round(amount || 0)));
+    setCustomAmount(safeAmount);
+    setReminderMinutes(safeAmount * def.multiplier);
+  }
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -348,14 +395,29 @@ function EventModal({
             </label>
             <div className="rounded-xl border border-white/70 bg-white/62 px-3 py-2.5">
               <select
-                value={reminderMinutes === null ? "" : String(reminderMinutes)}
+                value={
+                  customMode
+                    ? "custom"
+                    : reminderMinutes === null
+                      ? ""
+                      : String(reminderMinutes)
+                }
                 onChange={(event) => {
                   const raw = event.target.value;
-                  setReminderMinutes(raw ? Number(raw) : null);
+                  if (raw === "custom") {
+                    setCustomMode(true);
+                    const split = splitReminderToUnits(reminderMinutes ?? 15);
+                    setCustomAmount(split.amount);
+                    setCustomUnit(split.unit);
+                    recomputeCustomMinutes(split.amount, split.unit);
+                  } else {
+                    setCustomMode(false);
+                    setReminderMinutes(raw ? Number(raw) : null);
+                  }
                 }}
                 className="w-full bg-transparent text-[13px] text-ink-900 outline-none font-body"
               >
-                {REMINDER_OPTIONS.map((option) => (
+                {REMINDER_PRESETS.map((option) => (
                   <option
                     key={option.value === null ? "none" : String(option.value)}
                     value={option.value === null ? "" : String(option.value)}
@@ -363,8 +425,52 @@ function EventModal({
                     {option.label}
                   </option>
                 ))}
+                <option value="custom">Своё значение…</option>
               </select>
             </div>
+            {customMode && (
+              <div className="mt-2 flex items-center gap-2">
+                <input
+                  type="number"
+                  min={1}
+                  max={
+                    REMINDER_UNITS.find((u) => u.value === customUnit)?.max ?? 60
+                  }
+                  step={1}
+                  value={customAmount}
+                  onChange={(event) => {
+                    const next = Number.parseInt(event.target.value, 10);
+                    if (Number.isNaN(next)) return;
+                    recomputeCustomMinutes(next, customUnit);
+                  }}
+                  className="w-24 rounded-xl border border-white/70 bg-white/62 px-3 py-2 text-[13px] text-ink-900 outline-none font-body focus:ring-2 focus:ring-warm-200"
+                  aria-label="Количество"
+                />
+                <select
+                  value={customUnit}
+                  onChange={(event) => {
+                    const nextUnit = event.target.value as "minutes" | "hours" | "days";
+                    setCustomUnit(nextUnit);
+                    recomputeCustomMinutes(customAmount, nextUnit);
+                  }}
+                  className="flex-1 rounded-xl border border-white/70 bg-white/62 px-3 py-2 text-[13px] text-ink-900 outline-none font-body"
+                  aria-label="Единица"
+                >
+                  {REMINDER_UNITS.map((unit) => (
+                    <option key={unit.value} value={unit.value}>
+                      {unit.value === "minutes"
+                        ? "минут"
+                        : unit.value === "hours"
+                          ? "часов"
+                          : "дней"}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-ink-400 font-body">
+                  до начала
+                </p>
+              </div>
+            )}
           </div>
 
           {error && <p className="text-red-500 text-sm font-body">{error}</p>}

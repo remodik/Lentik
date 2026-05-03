@@ -31,6 +31,7 @@ from app.routers.reminders import (
     reminder_router as reminders_reminder_router,
 )
 from app.services.calendar_reminders import (
+    start_calendar_reminder_scheduler,
     stop_calendar_reminder_scheduler,
 )
 from app.services.reminder_dispatcher import (
@@ -133,7 +134,6 @@ def create_app() -> FastAPI:
     async def on_startup() -> None:
         await _auto_migrate()
         await _check_migrations()
-        await stop_calendar_reminder_scheduler()
         async with AsyncSessionLocal() as db:
             await db.execute(
                 update(User)
@@ -142,6 +142,7 @@ def create_app() -> FastAPI:
             )
             await db.commit()
         await start_reminder_scheduler()
+        await start_calendar_reminder_scheduler()
 
     @app_.on_event("shutdown")
     async def on_shutdown() -> None:

@@ -12,7 +12,7 @@ from app.ws.manager import ws_manager
 logger = logging.getLogger(__name__)
 
 _POLL_INTERVAL_SECONDS = 15
-_MAX_REMINDER_MINUTES = 1440
+_MAX_REMINDER_MINUTES = 60 * 24 * 30  # 30 days
 _scheduler_task: asyncio.Task[None] | None = None
 _scheduler_stop: asyncio.Event | None = None
 _dispatch_lock = asyncio.Lock()

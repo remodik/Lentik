@@ -616,6 +616,10 @@ export default function ChatView({
       const msgs = await getMessages(familyId, chat.id, { limit: 50 });
       setMessages(msgs.map(normalizeMessage));
       setHasMore(msgs.length === 50);
+    } catch (e) {
+      console.error("loadMessages failed", e);
+      setMessages([]);
+      setHasMore(false);
     } finally {
       setLoading(false);
     }
@@ -663,8 +667,9 @@ export default function ChatView({
   }, [chat.id, familyId, hasMore, loading, loadingMore, oldestMessageId]);
 
   useEffect(() => {
+    if (ageGate.status !== "ok") return;
     void loadMessages();
-  }, [loadMessages]);
+  }, [ageGate.status, loadMessages]);
 
   useEffect(() => {
     const isNewMessage = messages.length > lastMessageCountRef.current;

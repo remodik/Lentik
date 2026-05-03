@@ -17,6 +17,11 @@ from app.routers.chats import router as chats_router
 from app.routers.expenses import router as expenses_router
 from app.routers.families import router as families_router
 from app.routers.families_join import router as families_join_router
+from app.routers.family_tree import (
+    family_router as family_tree_family_router,
+    person_router as family_tree_person_router,
+    relation_router as family_tree_relation_router,
+)
 from app.routers.gallery import router as gallery_router
 from app.routers.invites import router as invites_router
 from app.routers.me import router as me_router
@@ -120,6 +125,9 @@ def create_app() -> FastAPI:
     app_.include_router(budget_tx_router)
     app_.include_router(reminders_family_router)
     app_.include_router(reminders_reminder_router)
+    app_.include_router(family_tree_family_router)
+    app_.include_router(family_tree_person_router)
+    app_.include_router(family_tree_relation_router)
 
     @app_.on_event("startup")
     async def on_startup() -> None:

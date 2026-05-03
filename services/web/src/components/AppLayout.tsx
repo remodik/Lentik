@@ -12,6 +12,7 @@ import {
   Info,
   LayoutGrid,
   MessageCircle,
+  Network,
   Plus,
   Rss,
   StickyNote,
@@ -32,7 +33,7 @@ import {
   type PresenceUpdateEvent,
 } from "@/components/NotificationSystem";
 
-export type AppSection = "chat" | "gallery" | "calendar" | "members" | "channels" | "notes" | "budget" | "reminders";
+export type AppSection = "chat" | "gallery" | "calendar" | "members" | "channels" | "notes" | "budget" | "reminders" | "tree";
 
 type NavCategory = "chat" | "plans" | "media" | "family";
 
@@ -79,6 +80,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: "notes", icon: StickyNote, label: "Заметки", desc: "Личные и семейные заметки" },
   { id: "channels", icon: Rss, label: "Каналы", desc: "Объявления семьи" },
   { id: "members", icon: Users, label: "Участники", desc: "Члены семьи" },
+  { id: "tree", icon: Network, label: "Древо", desc: "Семейное древо" },
 ];
 
 const SECTION_TO_CATEGORY: Record<AppSection, NavCategory> = {
@@ -90,6 +92,7 @@ const SECTION_TO_CATEGORY: Record<AppSection, NavCategory> = {
   reminders: "plans",
   gallery: "media",
   members: "family",
+  tree: "family",
 };
 
 const CATEGORY_DEFAULT_SECTION: Record<NavCategory, AppSection> = {
@@ -161,7 +164,7 @@ const SIDEBAR_CATEGORIES: SidebarCategory[] = [
         label: "Семья",
         items: [
           { id: "members", label: "Участники", section: "members" },
-          { id: "tree", label: "Древо", disabled: true, soon: true },
+          { id: "tree", label: "Древо", section: "tree" },
           { id: "achievements", label: "Достижения", disabled: true, soon: true },
         ],
       },

@@ -29,6 +29,7 @@ import ChannelsView from "@/components/ChannelsView";
 import NotesView from "@/components/NotesView";
 import BudgetView from "@/components/BudgetView";
 import RemindersView from "@/components/RemindersView";
+import FamilyTreeView from "@/components/FamilyTreeView";
 import SubscriptionModal from "@/components/SubscriptionModal";
 import { FREE_FAMILY_LIMIT, isFamilyLimitError } from "@/lib/families";
 import { apiFetch, clearAuthToken } from "@/lib/api-base";
@@ -55,6 +56,7 @@ export default function AppPage() {
       "notes",
       "budget",
       "reminders",
+      "tree",
     ];
     try {
       const saved = localStorage.getItem("lentik_section") as AppSection | null;
@@ -542,6 +544,9 @@ export default function AppPage() {
       )}
       {section === "members" && (
         <MembersList family={family} me={me} onKick={handleKick} onRefresh={refreshFamily} />
+      )}
+      {section === "tree" && (
+        <FamilyTreeView familyId={familyId} family={family} meId={me.id} />
       )}
 
       {/* Create chat modal */}

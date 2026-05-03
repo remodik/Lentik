@@ -683,6 +683,92 @@ export function deleteReminder(reminderId: string) {
   return request<void>(`/reminders/${reminderId}`, { method: "DELETE" });
 }
 
+export type TreeGender = "male" | "female" | "other" | "unknown";
+export type TreeRelationType = "parent" | "spouse";
+
+export type TreePerson = {
+  id: string;
+  family_id: string;
+  user_id: string | null;
+  display_name: string;
+  avatar_url: string | null;
+  gender: TreeGender;
+  birth_date: string | null;
+  death_date: string | null;
+  bio: string | null;
+  created_at: string;
+};
+
+export type TreeRelation = {
+  id: string;
+  family_id: string;
+  person_a_id: string;
+  person_b_id: string;
+  relation_type: TreeRelationType;
+  created_at: string;
+};
+
+export type FamilyTree = {
+  persons: TreePerson[];
+  relations: TreeRelation[];
+};
+
+export type TreePersonInput = {
+  display_name: string;
+  user_id?: string | null;
+  avatar_url?: string | null;
+  gender?: TreeGender;
+  birth_date?: string | null;
+  death_date?: string | null;
+  bio?: string | null;
+};
+
+export type TreePersonUpdateInput = Partial<TreePersonInput> & {
+  clear_user_link?: boolean;
+  clear_birth_date?: boolean;
+  clear_death_date?: boolean;
+};
+
+export function getFamilyTree(familyId: string) {
+  return request<FamilyTree>(`/families/${familyId}/tree`);
+}
+
+export function createTreePerson(familyId: string, data: TreePersonInput) {
+  return request<TreePerson>(`/families/${familyId}/tree/persons`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateTreePerson(personId: string, data: TreePersonUpdateInput) {
+  return request<TreePerson>(`/tree/persons/${personId}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteTreePerson(personId: string) {
+  return request<void>(`/tree/persons/${personId}`, { method: "DELETE" });
+}
+
+export function createTreeRelation(
+  familyId: string,
+  data: {
+    person_a_id: string;
+    person_b_id: string;
+    relation_type: TreeRelationType;
+  },
+) {
+  return request<TreeRelation>(`/families/${familyId}/tree/relations`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteTreeRelation(relationId: string) {
+  return request<void>(`/tree/relations/${relationId}`, { method: "DELETE" });
+}
+
 export function sendVoiceMessage(familyId: string, chatId: string, blob: Blob) {
   const form = new FormData();
   form.append("file", blob, "voice.webm");

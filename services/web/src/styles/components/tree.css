@@ -1,0 +1,241 @@
+/* Family tree view */
+
+.tree-shell {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: rgb(var(--cream-50));
+}
+
+.tree-head {
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--color-extra-041);
+  flex-shrink: 0;
+}
+
+.tree-head__inner {
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+.tree-head__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tree-title {
+  margin: 0;
+  font-family: var(--font-display, inherit);
+  color: rgb(var(--ink-900));
+  font-size: 1.05rem;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  font-weight: 650;
+}
+
+.tree-sub {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: rgb(var(--ink-400));
+  font-family: var(--font-body, inherit);
+}
+
+.tree-body {
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 18px 16px 24px;
+}
+
+.tree-empty {
+  text-align: center;
+  padding: 64px 16px;
+  max-width: 380px;
+  margin: 0 auto;
+}
+
+.tree-canvas-wrap {
+  max-width: 1100px;
+  margin: 0 auto;
+  overflow-x: auto;
+}
+
+.tree-canvas {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 64px;
+  padding: 16px 8px 24px;
+  min-width: 100%;
+  width: max-content;
+}
+
+.tree-edges {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.tree-edge-parent {
+  stroke: rgb(var(--ink-300));
+  stroke-width: 1.5;
+  opacity: 0.55;
+}
+
+.tree-edge-spouse {
+  stroke: #e08bb0;
+  stroke-width: 2;
+  stroke-dasharray: 4 3;
+  opacity: 0.9;
+}
+
+.tree-row {
+  position: relative;
+  z-index: 1;
+}
+
+.tree-row__inner {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 28px;
+  justify-content: center;
+}
+
+.tree-node {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px 10px 10px;
+  border-radius: 18px;
+  background: var(--color-extra-050);
+  border: 1px solid var(--color-extra-041);
+  backdrop-filter: var(--blur-extra-005);
+  box-shadow:
+    0 2px 14px var(--color-extra-014),
+    0 18px 54px var(--color-extra-120),
+    inset 0 1px 0 var(--bg-surface-strong);
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease,
+    border-color 160ms ease,
+    background 160ms ease;
+  min-width: 180px;
+  max-width: 240px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tree-node:hover {
+  transform: translateY(-1px);
+  background: var(--color-extra-061);
+  border-color: var(--color-extra-050);
+}
+
+.tree-node.selected {
+  border-color: rgb(var(--warm-400));
+  background: var(--color-extra-052);
+  box-shadow:
+    0 0 0 3px var(--color-extra-128),
+    0 18px 60px var(--color-extra-097);
+}
+
+.tree-node.highlighted {
+  border-color: rgb(var(--warm-300));
+}
+
+.tree-pill-me {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  background: rgb(var(--warm-500));
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-family: var(--font-body, inherit);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border: 2px solid white;
+}
+
+.tree-pill-linked {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: white;
+  color: rgb(var(--ink-500));
+  border: 1px solid var(--color-extra-050);
+}
+
+.tree-details {
+  position: sticky;
+  bottom: 12px;
+  margin: 16px auto 0;
+  max-width: 560px;
+  padding: 16px;
+  border-radius: 22px;
+  background: var(--bg-surface-strong);
+  border: 1px solid var(--color-extra-041);
+  box-shadow:
+    0 22px 60px var(--color-extra-120),
+    inset 0 1px 0 var(--bg-surface-strong);
+}
+
+.tree-info-cell {
+  border-radius: 14px;
+  padding: 10px 12px;
+  background: var(--color-extra-042);
+  border: 1px solid var(--color-extra-041);
+}
+
+.tree-info-k {
+  margin: 0 0 4px;
+  font-size: 11px;
+  color: rgb(var(--ink-400));
+  font-family: var(--font-body, inherit);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.tree-info-v {
+  margin: 0;
+  font-size: 0.92rem;
+  color: rgb(var(--ink-800));
+  font-weight: 600;
+  font-family: var(--font-body, inherit);
+}
+
+.tree-bio {
+  border-radius: 16px;
+  padding: 12px;
+  background: var(--color-extra-042);
+  border: 1px solid var(--color-extra-041);
+}
+
+.tree-bio-v {
+  margin: 4px 0 0;
+  font-size: 0.92rem;
+  color: rgb(var(--ink-700));
+  font-family: var(--font-body, inherit);
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 640px) {
+  .tree-row__inner {
+    gap: 18px;
+  }
+  .tree-node {
+    min-width: 150px;
+    max-width: 200px;
+  }
+}

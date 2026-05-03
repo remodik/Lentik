@@ -4,6 +4,12 @@ from .channel import Channel
 from .chat import Chat
 from .expense import Expense, ExpenseSplit
 from .family import Family
+from .family_tree import (
+    FamilyTreePerson,
+    FamilyTreeRelation,
+    TreeGender,
+    TreeRelationType,
+)
 from .gallery_item import GalleryItem, MediaType
 from .invite import Invite
 from .membership import Membership, Role
@@ -33,6 +39,10 @@ __all__ = [
     "MessageReaction",
     "Expense",
     "ExpenseSplit",
+    "FamilyTreePerson",
+    "FamilyTreeRelation",
+    "TreeGender",
+    "TreeRelationType",
     "Channel",
     "Post",
     "GalleryItem",

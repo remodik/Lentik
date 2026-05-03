@@ -696,6 +696,8 @@ export type TreePerson = {
   birth_date: string | null;
   death_date: string | null;
   bio: string | null;
+  pos_x: number | null;
+  pos_y: number | null;
   created_at: string;
 };
 
@@ -721,6 +723,8 @@ export type TreePersonInput = {
   birth_date?: string | null;
   death_date?: string | null;
   bio?: string | null;
+  pos_x?: number | null;
+  pos_y?: number | null;
 };
 
 export type TreePersonUpdateInput = Partial<TreePersonInput> & {
@@ -728,6 +732,13 @@ export type TreePersonUpdateInput = Partial<TreePersonInput> & {
   clear_birth_date?: boolean;
   clear_death_date?: boolean;
 };
+
+export function moveTreePerson(personId: string, pos_x: number, pos_y: number) {
+  return request<TreePerson>(`/tree/persons/${personId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ pos_x, pos_y }),
+  });
+}
 
 export function getFamilyTree(familyId: string) {
   return request<FamilyTree>(`/families/${familyId}/tree`);

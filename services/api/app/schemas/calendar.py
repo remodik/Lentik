@@ -3,7 +3,18 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
 
-ALLOWED_REMINDER_MINUTES = {10, 30, 60, 1440}
+MIN_REMINDER_MINUTES = 1
+MAX_REMINDER_MINUTES = 60 * 24 * 30  # 30 days
+
+
+def _validate_reminder_minutes(value: int | None) -> int | None:
+    if value is None:
+        return None
+    if value < MIN_REMINDER_MINUTES or value > MAX_REMINDER_MINUTES:
+        raise ValueError(
+            f"reminder_minutes must be between {MIN_REMINDER_MINUTES} and {MAX_REMINDER_MINUTES}"
+        )
+    return value
 
 
 class CalendarEventCreate(BaseModel):
@@ -17,12 +28,7 @@ class CalendarEventCreate(BaseModel):
     @field_validator("reminder_minutes")
     @classmethod
     def validate_reminder_minutes(cls, value: int | None) -> int | None:
-        if value is None:
-            return None
-        if value not in ALLOWED_REMINDER_MINUTES:
-            allowed = ", ".join(str(v) for v in sorted(ALLOWED_REMINDER_MINUTES))
-            raise ValueError(f"Reminder must be one of: {allowed}")
-        return value
+        return _validate_reminder_minutes(value)
 
 
 class CalendarEventUpdate(BaseModel):
@@ -36,12 +42,7 @@ class CalendarEventUpdate(BaseModel):
     @field_validator("reminder_minutes")
     @classmethod
     def validate_reminder_minutes(cls, value: int | None) -> int | None:
-        if value is None:
-            return None
-        if value not in ALLOWED_REMINDER_MINUTES:
-            allowed = ", ".join(str(v) for v in sorted(ALLOWED_REMINDER_MINUTES))
-            raise ValueError(f"Reminder must be one of: {allowed}")
-        return value
+        return _validate_reminder_minutes(value)
 
 
 class CalendarEventResponse(BaseModel):

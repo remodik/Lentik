@@ -16,6 +16,8 @@ class TreePersonCreate(BaseModel):
     birth_date: date | None = None
     death_date: date | None = None
     bio: str | None = Field(default=None, max_length=4000)
+    pos_x: float | None = None
+    pos_y: float | None = None
 
 
 class TreePersonUpdate(BaseModel):
@@ -26,6 +28,8 @@ class TreePersonUpdate(BaseModel):
     birth_date: date | None = None
     death_date: date | None = None
     bio: str | None = Field(default=None, max_length=4000)
+    pos_x: float | None = None
+    pos_y: float | None = None
     clear_user_link: bool = False
     clear_birth_date: bool = False
     clear_death_date: bool = False
@@ -43,6 +47,8 @@ class TreePersonResponse(BaseModel):
     birth_date: date | None
     death_date: date | None
     bio: str | None
+    pos_x: float | None
+    pos_y: float | None
     created_at: datetime
 
 

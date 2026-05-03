@@ -103,6 +103,7 @@ async def logout(
 @router.post("/invite", response_model=JoinByInviteResponse, status_code=status.HTTP_201_CREATED)
 async def join_by_invite(
     body: JoinByInviteRequest,
+    response: Response,
     db: AsyncSession = Depends(get_db),
 ):
     invite = await lock_active_invite(db, body.token)
@@ -135,4 +136,9 @@ async def join_by_invite(
         },
     )
 
-    return JoinByInviteResponse(user_id=user.id, family_id=invite.family_id)
+    token = _set_jwt_cookie(response, user.id)
+    return JoinByInviteResponse(
+        user_id=user.id,
+        family_id=invite.family_id,
+        access_token=token,
+    )

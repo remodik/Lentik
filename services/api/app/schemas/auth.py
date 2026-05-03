@@ -33,3 +33,4 @@ class JoinByInviteRequest(BaseModel):
 class JoinByInviteResponse(BaseModel):
     user_id: UUID
     family_id: UUID
+    access_token: str

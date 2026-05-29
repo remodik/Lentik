@@ -17,8 +17,11 @@ import {
 import {
   buildFamilyInviteLink,
   createInvite,
+  getAllMemberRoles,
+  getRoles,
   transferOwnership,
   type Family,
+  type FamilyRole,
   type Me,
 } from "@/lib/api";
 import { getPresenceLabel } from "@/lib/presence";
@@ -26,6 +29,10 @@ import UserMiniProfilePopover, {
   type UserMiniProfile,
 } from "@/components/UserMiniProfilePopover";
 import { useUserPopover } from "@/lib/useUserPopover";
+import { useConfirm } from "@/components/ConfirmDialog";
+import { useUserMode } from "@/lib/useUserMode";
+import MemberRolesModal from "@/components/MemberRolesModal";
+import { hasBit, PERM, usePermissions } from "@/lib/usePermissions";
 
 type Member = Family["members"][0];
 
@@ -77,6 +84,12 @@ function MemberCard({
   transferringOwnership,
   onAvatarClick,
   isAvatarPopoverOpen,
+  roleChips,
+  onManageRoles,
+  showRolesUi,
+  canKick: canKickProp,
+  canManageRolesPerm,
+  canTransferOwnership,
 }: {
   member: Member & { bio?: string; birthday?: string };
   isMe: boolean;
@@ -87,6 +100,18 @@ function MemberCard({
   transferringOwnership: boolean;
   onAvatarClick?: (member: Member, anchor: HTMLElement) => void;
   isAvatarPopoverOpen?: boolean;
+  /** Роли, которые видимо отображаются чипами (без @everyone). */
+  roleChips?: { id: string; name: string; color: string }[];
+  /** Открыть модалку управления ролями (если разрешено). */
+  onManageRoles?: (m: Member) => void;
+  /** Показывать UI ролей (включено в advanced-режиме). */
+  showRolesUi?: boolean;
+  /** Право на исключение из семьи. */
+  canKick?: boolean;
+  /** Право на управление ролями. */
+  canManageRolesPerm?: boolean;
+  /** Право на передачу владения (всегда только текущий владелец). */
+  canTransferOwnership?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const isOwner = member.role === "owner";
@@ -199,9 +224,41 @@ function MemberCard({
           </div>
         )}
 
-        {isOwnerViewing && !isMe && (
+        {showRolesUi && roleChips && roleChips.length > 0 && (
+          <div className="mt-3">
+            <p className="member-info__k mb-1.5">Роли</p>
+            <div className="flex flex-wrap gap-1.5">
+              {roleChips.map((r) => (
+                <span
+                  key={r.id}
+                  className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-body bg-white/55"
+                  style={{ borderColor: `${r.color}55`, color: r.color }}
+                >
+                  <span
+                    className="w-1.5 h-1.5 rounded-full"
+                    style={{ background: r.color }}
+                    aria-hidden
+                  />
+                  <span className="text-ink-700">{r.name}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {(canManageRolesPerm || canTransferOwnership || canKickProp) && !isMe && (
           <div className="mt-3 space-y-2">
-            {member.role !== "owner" && onTransferOwnership && (
+            {showRolesUi && canManageRolesPerm && onManageRoles && (
+              <button
+                onClick={() => onManageRoles(member)}
+                className="ui-btn ui-btn-subtle w-full"
+                type="button"
+              >
+                Управлять ролями
+              </button>
+            )}
+
+            {member.role !== "owner" && canTransferOwnership && onTransferOwnership && (
               <button
                 onClick={() => onTransferOwnership(member)}
                 disabled={transferringOwnership}
@@ -212,7 +269,7 @@ function MemberCard({
               </button>
             )}
 
-            {onKick && (
+            {canKickProp && onKick && (
               <button
                 onClick={() => onKick(member.user_id, member.display_name)}
                 disabled={kicking || transferringOwnership}
@@ -240,7 +297,19 @@ export default function MembersList({
   onKick?: (userId: string) => Promise<void>;
   onRefresh?: () => Promise<void>;
 }) {
+  const { confirm, notify } = useConfirm();
+  const { isAdvanced } = useUserMode();
+  const { perms: familyPerms } = usePermissions();
+  const baseBits = familyPerms?.base ?? 0;
+  const isOwnerOrAdmin =
+    !!familyPerms && (familyPerms.is_owner || familyPerms.is_administrator);
+  const canKick = isOwnerOrAdmin || hasBit(baseBits, PERM.KICK_MEMBERS);
+  const canCreateInvites = isOwnerOrAdmin || hasBit(baseBits, PERM.CREATE_INVITES);
+  const canManageRoles = isOwnerOrAdmin || hasBit(baseBits, PERM.MANAGE_ROLES);
   const [kicking, setKicking] = useState<string | null>(null);
+  const [rolesByMember, setRolesByMember] = useState<Record<string, string[]>>({});
+  const [allRoles, setAllRoles] = useState<FamilyRole[]>([]);
+  const [rolesTarget, setRolesTarget] = useState<Member | null>(null);
   const [search, setSearch] = useState("");
   const [inviteLink, setInviteLink] = useState("");
   const [inviteExpiresAt, setInviteExpiresAt] = useState("");
@@ -252,6 +321,7 @@ export default function MembersList({
   const [lastInviteMaxUses, setLastInviteMaxUses] = useState<number | null>(null);
   const [transferTarget, setTransferTarget] = useState<Member | null>(null);
   const [transferringOwnership, setTransferringOwnership] = useState(false);
+  const [qrOpen, setQrOpen] = useState(false);
   const {
     popoverUser,
     popoverAnchorRect,
@@ -290,13 +360,68 @@ export default function MembersList({
     closePopover();
   }, [closePopover, family.id]);
 
+  // Подгружаем роли всех участников одним запросом + список ролей семьи.
+  useEffect(() => {
+    if (!isAdvanced) {
+      setRolesByMember({});
+      setAllRoles([]);
+      return;
+    }
+    let alive = true;
+    Promise.all([getAllMemberRoles(family.id), getRoles(family.id)])
+      .then(([map, all]) => {
+        if (!alive) return;
+        setRolesByMember(map);
+        setAllRoles(all);
+      })
+      .catch(() => {
+        if (!alive) return;
+        setRolesByMember({});
+        setAllRoles([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [family.id, isAdvanced]);
+
+  const rolesById = useMemo(() => {
+    const map = new Map<string, FamilyRole>();
+    for (const r of allRoles) map.set(r.id, r);
+    return map;
+  }, [allRoles]);
+
+  function chipsFor(userId: string): { id: string; name: string; color: string }[] {
+    const ids = rolesByMember[userId] ?? [];
+    const chips: { id: string; name: string; color: string }[] = [];
+    for (const id of ids) {
+      const r = rolesById.get(id);
+      if (!r) continue;
+      if (r.is_everyone) continue; // не показываем @everyone — он у всех
+      chips.push({ id: r.id, name: r.name, color: r.color });
+    }
+    // Сортируем по приоритету
+    chips.sort((a, b) => {
+      const ra = rolesById.get(a.id)?.priority ?? 999;
+      const rb = rolesById.get(b.id)?.priority ?? 999;
+      return ra - rb;
+    });
+    return chips;
+  }
+
+  const canAssignOwnerRole = isOwnerViewing;
+
   async function handleKick(userId: string, name: string) {
-    if (!confirm(`Исключить ${name} из семьи?`)) return;
+    const ok = await confirm({
+      title: `Исключить ${name} из семьи?`,
+      confirmLabel: "Исключить",
+      tone: "danger",
+    });
+    if (!ok) return;
     setKicking(userId);
     try {
       await onKick?.(userId);
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Ошибка");
+      void notify({ title: e instanceof Error ? e.message : "Ошибка", tone: "danger" });
     } finally {
       setKicking(null);
     }
@@ -311,7 +436,10 @@ export default function MembersList({
       await onRefresh?.();
       setTransferTarget(null);
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Не удалось передать права");
+      void notify({
+        title: e instanceof Error ? e.message : "Не удалось передать права",
+        tone: "danger",
+      });
     } finally {
       setTransferringOwnership(false);
     }
@@ -348,8 +476,7 @@ export default function MembersList({
 
   function handleOpenInviteQr() {
     if (!inviteLink) return;
-    const qrUrl = buildInviteQrUrl(inviteLink);
-    window.open(qrUrl, "_blank", "noopener,noreferrer");
+    setQrOpen(true);
   }
 
   function openMemberPopover(member: Member, anchor: HTMLElement) {
@@ -410,8 +537,8 @@ export default function MembersList({
             )}
           </div>
 
-          {isOwnerViewing && (
-            <div className="mt-3 rounded-2xl border border-white/70 bg-white/58 p-3 backdrop-blur">
+          {canCreateInvites && (
+            <div className="mt-3 rounded-2xl border border-[color:var(--border-glass-strong)] bg-[color:var(--bg-surface)] p-3 backdrop-blur">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-xs uppercase tracking-[0.12em] text-ink-400 font-body">
@@ -551,6 +678,12 @@ export default function MembersList({
                     transferringOwnership={transferringOwnership}
                     onAvatarClick={openMemberPopover}
                     isAvatarPopoverOpen={popoverOpenKey === m.user_id}
+                    roleChips={chipsFor(m.user_id)}
+                    onManageRoles={(target) => setRolesTarget(target)}
+                    showRolesUi={isAdvanced}
+                    canKick={canKick}
+                    canManageRolesPerm={canManageRoles}
+                    canTransferOwnership={isOwnerViewing}
                   />
                 ))}
               </div>
@@ -575,6 +708,12 @@ export default function MembersList({
                     transferringOwnership={transferringOwnership}
                     onAvatarClick={openMemberPopover}
                     isAvatarPopoverOpen={popoverOpenKey === m.user_id}
+                    roleChips={chipsFor(m.user_id)}
+                    onManageRoles={(target) => setRolesTarget(target)}
+                    showRolesUi={isAdvanced}
+                    canKick={canKick}
+                    canManageRolesPerm={canManageRoles}
+                    canTransferOwnership={isOwnerViewing}
                   />
                 ))}
               </div>
@@ -598,6 +737,112 @@ export default function MembersList({
         popoverRef={popoverRef}
       />
 
+      {rolesTarget && (
+        <MemberRolesModal
+          open={!!rolesTarget}
+          familyId={family.id}
+          member={{
+            user_id: rolesTarget.user_id,
+            display_name: rolesTarget.display_name,
+            username: rolesTarget.username,
+          }}
+          canAssignOwner={canAssignOwnerRole}
+          onClose={() => setRolesTarget(null)}
+          onChanged={(userId, roleIds) => {
+            // Включаем @everyone в локальный кэш (бэк автоматически держит).
+            const everyoneId = allRoles.find((r) => r.is_everyone)?.id;
+            const finalIds = everyoneId && !roleIds.includes(everyoneId)
+              ? [...roleIds, everyoneId]
+              : roleIds;
+            setRolesByMember((prev) => ({ ...prev, [userId]: finalIds }));
+            // Локально пересчитываем member_count в списке ролей.
+            setAllRoles((prev) =>
+              prev.map((r) => {
+                const wasAssigned = (rolesByMember[userId] ?? []).includes(r.id);
+                const nowAssigned = finalIds.includes(r.id);
+                if (wasAssigned === nowAssigned) return r;
+                return {
+                  ...r,
+                  member_count: r.member_count + (nowAssigned ? 1 : -1),
+                };
+              }),
+            );
+          }}
+        />
+      )}
+
+      {qrOpen && inviteLink && (
+        <div
+          className="fixed inset-0 z-[80] bg-black/45 backdrop-blur-sm p-4 flex items-center justify-center"
+          onClick={() => setQrOpen(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="QR-код приглашения"
+        >
+          <div
+            className="w-full max-w-sm rounded-3xl border border-[color:var(--border-glass-strong)] bg-[color:var(--bg-elevated)] backdrop-blur-2xl p-6 shadow-[0_30px_90px_var(--scrim-4)]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3 mb-4">
+              <div>
+                <p className="text-xs uppercase tracking-[0.14em] text-ink-400 font-body">
+                  Приглашение
+                </p>
+                <h3 className="font-display text-xl text-ink-900 mt-0.5">QR-код</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setQrOpen(false)}
+                className="w-8 h-8 rounded-lg grid place-items-center text-ink-400 hover:text-ink-700 hover:bg-white/60 transition shrink-0"
+                aria-label="Закрыть"
+              >
+                <X className="w-4 h-4" strokeWidth={2.3} />
+              </button>
+            </div>
+
+            <div className="rounded-2xl bg-white p-4 grid place-items-center">
+              <img
+                src={buildInviteQrUrl(inviteLink)}
+                alt="QR-код приглашения"
+                className="w-full max-w-[320px] aspect-square object-contain"
+                loading="lazy"
+              />
+            </div>
+
+            <p className="text-[11px] text-ink-400 font-body mt-3 break-all">
+              {inviteLink}
+            </p>
+
+            <div className="flex gap-2 justify-end mt-4">
+              <button
+                type="button"
+                className="ui-btn ui-btn-subtle inline-flex items-center gap-1.5"
+                onClick={() => void handleCopyInvite()}
+              >
+                {inviteCopied ? (
+                  <>
+                    <Check className="w-3.5 h-3.5" strokeWidth={2.4} />
+                    Скопировано
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5" strokeWidth={2.2} />
+                    Копировать ссылку
+                  </>
+                )}
+              </button>
+              <button
+                type="button"
+                className="ui-btn ui-btn-primary"
+                onClick={() => setQrOpen(false)}
+              >
+                Готово
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {transferTarget && (
         <div
           className="fixed inset-0 z-[80] bg-black/35 backdrop-blur-sm p-4 flex items-center justify-center"
@@ -607,7 +852,7 @@ export default function MembersList({
           aria-label="Передача прав владельца"
         >
           <div
-            className="w-full max-w-md rounded-3xl border border-white/70 bg-white/88 backdrop-blur-2xl p-6 shadow-[0_30px_90px_rgba(28,23,20,0.25)]"
+            className="w-full max-w-md rounded-3xl border border-[color:var(--border-glass-strong)] bg-[color:var(--bg-elevated)] backdrop-blur-2xl p-6 shadow-[0_30px_90px_var(--scrim-4)]"
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="font-display text-xl text-ink-900">

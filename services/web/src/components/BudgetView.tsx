@@ -10,7 +10,9 @@ import {
   type Expense,
   type FamilyMember,
 } from "@/lib/api";
-import { getAuthToken, wsUrl } from "@/lib/api-base";
+import { fetchWsTicket, wsUrl } from "@/lib/api-base";
+import Select from "@/components/Select";
+import { useCtrlResize } from "@/lib/useCtrlResize";
 
 function parseNumber(value: number | string): number {
   if (typeof value === "number") return Number.isFinite(value) ? value : 0;
@@ -60,6 +62,13 @@ type Props = {
 };
 
 export default function BudgetView({ familyId, meId, members }: Props) {
+  const balanceResize = useCtrlResize({
+    storageKey: "lentik:budget-balance-w",
+    initial: 360,
+    min: 240,
+    max: 720,
+    side: "left",
+  });
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [balances, setBalances] = useState<Balance[]>([]);
   const [loading, setLoading] = useState(true);
@@ -101,27 +110,30 @@ export default function BudgetView({ familyId, meId, members }: Props) {
     let alive = true;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let pingTimer: ReturnType<typeof setInterval> | null = null;
+    let ws: WebSocket | undefined;
 
     const stopPing = () => {
       if (pingTimer) clearInterval(pingTimer);
       pingTimer = null;
     };
 
-    const connect = () => {
+    const connect = async () => {
       if (!alive) return;
 
-      const token = getAuthToken();
-      const query = token ? `?token=${encodeURIComponent(token)}` : "";
-      const ws = new WebSocket(wsUrl(`/families/${familyId}/ws${query}`));
+      const ticket = await fetchWsTicket();
+      if (!alive) return;
+      const query = ticket ? `?ticket=${encodeURIComponent(ticket)}` : "";
+      ws = new WebSocket(wsUrl(`/families/${familyId}/ws${query}`));
+      const current = ws;
 
-      ws.onopen = () => {
+      current.onopen = () => {
         stopPing();
         pingTimer = setInterval(() => {
-          if (ws.readyState === WebSocket.OPEN) ws.send("ping");
+          if (current.readyState === WebSocket.OPEN) current.send("ping");
         }, 30000);
       };
 
-      ws.onmessage = (event) => {
+      current.onmessage = (event) => {
         if (!alive || typeof event.data !== "string") return;
 
         try {
@@ -139,20 +151,18 @@ export default function BudgetView({ familyId, meId, members }: Props) {
         } catch {}
       };
 
-      ws.onclose = () => {
+      current.onclose = () => {
         stopPing();
         if (!alive) return;
-        reconnectTimer = setTimeout(connect, 3000);
+        reconnectTimer = setTimeout(() => { void connect(); }, 3000);
       };
 
-      ws.onerror = () => {
-        try { ws.close(); } catch {}
+      current.onerror = () => {
+        try { current.close(); } catch {}
       };
-
-      return ws;
     };
 
-    let ws = connect();
+    void connect();
 
     return () => {
       alive = false;
@@ -284,7 +294,10 @@ export default function BudgetView({ familyId, meId, members }: Props) {
   }
 
   return (
-    <div className="h-full min-h-0 grid grid-cols-1 xl:grid-cols-[1.65fr_1fr] gap-4 p-5 overflow-hidden">
+    <div
+      className="h-full min-h-0 grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_var(--lentik-balance-w)] gap-4 p-5 overflow-hidden"
+      style={{ ["--lentik-balance-w" as never]: `${balanceResize.width}px` }}
+    >
       <section
         className="rounded-3xl border h-full min-h-0 flex flex-col"
         style={{ borderColor: "var(--border-glass)", background: "var(--bg-surface)" }}
@@ -360,9 +373,18 @@ export default function BudgetView({ familyId, meId, members }: Props) {
       </section>
 
       <section
-        className="rounded-3xl border h-full min-h-0 flex flex-col"
+        className="relative rounded-3xl border h-full min-h-0 flex flex-col"
         style={{ borderColor: "var(--border-glass)", background: "var(--bg-surface)" }}
       >
+        <div
+          {...balanceResize.handleProps}
+          className={`hidden xl:block absolute top-0 left-0 h-full w-2 -ml-3 z-10 transition rounded-l-3xl ${
+            balanceResize.ctrlReady || balanceResize.dragging
+              ? "cursor-col-resize bg-warm-400/55"
+              : "cursor-default"
+          }`}
+          aria-label="Изменить ширину панели баланса (Ctrl + перетащить)"
+        />
         <header
           className="shrink-0 px-5 py-4 border-b flex items-center gap-2"
           style={{ borderColor: "var(--border-warm-dim)" }}
@@ -416,7 +438,7 @@ export default function BudgetView({ familyId, meId, members }: Props) {
           aria-label="Добавить расход"
         >
           <div
-            className="w-full max-w-2xl rounded-3xl border border-white/70 bg-white/88 backdrop-blur-2xl p-6 shadow-[0_30px_90px_rgba(28,23,20,0.22)]"
+            className="w-full max-w-2xl rounded-3xl border border-[color:var(--border-glass-strong)] bg-[color:var(--bg-elevated)] backdrop-blur-2xl p-6 shadow-[0_30px_90px_var(--scrim-4)]"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-center justify-between gap-3 mb-5">
@@ -469,18 +491,15 @@ export default function BudgetView({ familyId, meId, members }: Props) {
                 <label className="text-[11px] font-semibold text-ink-400 uppercase tracking-widest font-body mb-1.5 block">
                   Кто оплатил
                 </label>
-                <select
-                  className="input-field"
+                <Select<string>
                   value={paidBy}
-                  onChange={(event) => setPaidBy(event.target.value)}
-                  data-testid="budget-paid-by-select"
-                >
-                  {members.map((member) => (
-                    <option key={member.user_id} value={member.user_id}>
-                      {member.display_name}
-                    </option>
-                  ))}
-                </select>
+                  onChange={setPaidBy}
+                  options={members.map((member) => ({
+                    value: member.user_id,
+                    label: member.display_name,
+                  }))}
+                  buttonClassName="input-field w-full inline-flex items-center justify-between gap-2 text-left cursor-pointer"
+                />
               </div>
 
               <div

@@ -1,0 +1,13 @@
+/.idea/
+.env
+.env.*
+!.env.example
+/.venv/
+/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.db
+/.next/
+/node_modules/
+/src-tauri/

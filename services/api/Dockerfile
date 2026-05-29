@@ -1,5 +1,5 @@
 # Stage 1: Build dependencies
-FROM python:3.12-slim as builder
+FROM python:3.13-slim as builder
 
 WORKDIR /app
 
@@ -16,7 +16,7 @@ COPY requirements.txt ./
 RUN pip install --no-cache-dir --default-timeout=120 -r requirements.txt
 
 # Stage 2: Runtime
-FROM python:3.12-slim
+FROM python:3.13-slim
 
 WORKDIR /app
 

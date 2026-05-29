@@ -59,4 +59,31 @@
   --ink-700: 255 170 84;
   --ink-800: 255 199 120;
   --ink-900: 255 226 178;
+
+  /* Status colors — amber CRT terminal palette */
+  --danger-bg-soft:       rgba(180, 30, 0, 0.20);
+  --danger-bg-medium:     rgba(200, 40, 0, 0.32);
+  --danger-border-faint:  rgba(255, 60, 0, 0.20);
+  --danger-border:        rgba(255, 60, 0, 0.50);
+  --danger-fg:            #ff6b3a;
+  --danger-fg-strong:     #ff4500;
+  --danger-fg-bold:       #cc3300;
+  --danger-solid:         rgba(255, 60, 0, 0.85);
+
+  --warning-bg-soft:      rgba(255, 200, 0, 0.10);
+  --warning-bg:           rgba(255, 200, 0, 0.14);
+  --warning-bg-strong:    rgba(255, 200, 0, 0.22);
+  --warning-fg:           #ffcc00;
+
+  --success-bg:           rgba(0, 200, 80, 0.22);
+  --success-fg:           #66ff66;
+
+  --info-bg-soft:         rgba(255, 180, 100, 0.12);
+  --info-border:          rgba(255, 200, 130, 0.40);
+  --info-fg:              #ffaa66;
+  --info-fg-light:        #ffcc99;
+
+  --special-bg:           rgba(255, 100, 200, 0.14);
+  --special-border:       rgba(255, 100, 200, 0.45);
+  --special-fg:           #ff66cc;
 }

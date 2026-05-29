@@ -8,18 +8,34 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.auth.deps import get_current_user
-from app.core.uploads import get_upload_root
+from app.core.permissions import Perm, has_perm
+from app.core.uploads import get_upload_root, resolve_upload_path
 from app.db.deps import get_db
 from app.models.gallery_item import GalleryItem, MediaType
 from app.models.membership import Membership
 from app.models.user import User
 from app.schemas.gallery import BulkDeleteRequest, GalleryItemResponse
+from app.services.roles import effective_permissions
 
 router = APIRouter(prefix="/families/{family_id}/gallery", tags=["gallery"])
 
 UPLOAD_DIR = get_upload_root()
-ALLOWED_IMAGES = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
-ALLOWED_VIDEOS = {".mp4", ".mov", ".avi", ".webm"}
+ALLOWED_IMAGES = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic", ".heif", ".bmp"}
+ALLOWED_VIDEOS = {".mp4", ".mov", ".avi", ".webm", ".mkv", ".m4v", ".3gp"}
+ALLOWED_FILES = {
+    # Documents
+    ".pdf", ".doc", ".docx", ".odt", ".rtf", ".txt", ".md",
+    # Spreadsheets
+    ".xls", ".xlsx", ".ods", ".csv",
+    # Presentations
+    ".ppt", ".pptx", ".odp",
+    # Archives
+    ".zip", ".rar", ".7z", ".tar", ".gz",
+    # Audio
+    ".mp3", ".wav", ".ogg", ".m4a", ".flac", ".aac",
+    # E-books
+    ".epub", ".fb2", ".mobi",
+}
 MAX_FILE_SIZE = 50 * 1024 * 1024
 
 
@@ -87,6 +103,8 @@ async def upload_to_gallery(
         media_type = MediaType.IMAGE
     elif ext in ALLOWED_VIDEOS:
         media_type = MediaType.VIDEO
+    elif ext in ALLOWED_FILES:
+        media_type = MediaType.FILE
     else:
         raise HTTPException(status_code=415, detail="Неподдерживаемый формат файла")
 
@@ -138,11 +156,15 @@ async def delete_gallery_item(
     item = await db.get(GalleryItem, item_id)
     if not item or item.family_id != family_id:
         raise HTTPException(status_code=404, detail="Item not found")
-    if item.uploaded_by != user.id and m.role != "owner":
-        raise HTTPException(status_code=403, detail="Not allowed")
 
-    file_path = UPLOAD_DIR / item.url.removeprefix("/static/uploads/")
-    if file_path.exists():
+    is_own = item.uploaded_by == user.id
+    if not is_own and m.role.value != "owner":
+        bits = await effective_permissions(db, m.id)
+        if not has_perm(bits, Perm.MANAGE_GALLERY):
+            raise HTTPException(status_code=403, detail="Недостаточно прав для удаления чужих файлов")
+
+    file_path = resolve_upload_path(item.url)
+    if file_path and file_path.exists():
         file_path.unlink()
 
     await db.delete(item)
@@ -157,6 +179,9 @@ async def bulk_delete_gallery(
     user: User = Depends(get_current_user),
 ):
     m = await _require_member(family_id, user, db)
+    can_manage_others = m.role.value == "owner" or has_perm(
+        await effective_permissions(db, m.id), Perm.MANAGE_GALLERY
+    )
     items = await db.scalars(
         select(GalleryItem).where(
             GalleryItem.family_id == family_id,
@@ -164,10 +189,10 @@ async def bulk_delete_gallery(
         )
     )
     for item in items.all():
-        if item.uploaded_by != user.id and m.role != "owner":
+        if item.uploaded_by != user.id and not can_manage_others:
             continue
-        file_path = UPLOAD_DIR / item.url.removeprefix("/static/uploads/")
-        if file_path.exists():
+        file_path = resolve_upload_path(item.url)
+        if file_path and file_path.exists():
             file_path.unlink()
         await db.delete(item)
     await db.commit()

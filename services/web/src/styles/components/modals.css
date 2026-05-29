@@ -7,7 +7,7 @@
 }
 
 .glass-modal-overlay {
-    background: var(--color-extra-129);
+    background: var(--scrim-4);
     backdrop-filter: var(--blur-extra-012);
     -webkit-backdrop-filter: var(--blur-extra-012);
 }
@@ -16,10 +16,10 @@
     background: var(--bg-surface-strong);
     backdrop-filter: var(--blur-xl);
     -webkit-backdrop-filter: var(--blur-xl);
-    border: 1px solid var(--color-extra-050);
+    border: 1px solid var(--border-glass);
     border-radius: 1.75rem;
     box-shadow:
-        0 32px 80px var(--color-extra-130),
-        0 8px 20px var(--color-extra-064),
-        inset 0 1px 0 var(--color-extra-095);
+        0 32px 80px var(--scrim-3),
+        0 8px 20px var(--scrim-1),
+        inset 0 1px 0 var(--bg-elevated);
 }

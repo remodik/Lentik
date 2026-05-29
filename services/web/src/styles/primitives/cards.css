@@ -1,7 +1,7 @@
 /* Shared card primitives and elevated surfaces. */
 
 .glass-card {
-    background: var(--color-extra-061);
+    background: var(--bg-surface-strong);
     backdrop-filter: var(--blur-sm);
     -webkit-backdrop-filter: var(--blur-sm);
     border: 1px solid var(--bg-surface);
@@ -15,26 +15,26 @@
 }
 .glass-card:hover {
     background: var(--bg-surface-strong);
-    border-color: var(--color-extra-071);
+    border-color: var(--bg-surface-strong);
     box-shadow:
-        0 4px 20px var(--color-extra-123),
-        0 16px 48px var(--color-extra-014),
-        inset 0 1px 0 var(--color-extra-049);
+        0 4px 20px var(--scrim-2),
+        0 16px 48px var(--scrim-1),
+        inset 0 1px 0 var(--bg-elevated);
     transform: translateY(-1px);
 }
 .glass-elevated {
     background: var(--bg-elevated);
     backdrop-filter: var(--blur-lg);
     -webkit-backdrop-filter: var(--blur-lg);
-    border: 1px solid var(--color-extra-013);
+    border: 1px solid var(--border-glass);
     box-shadow: var(--shadow-glass-float);
 }
 .card {
-    background: var(--color-extra-024);
+    background: var(--bg-surface-strong);
     backdrop-filter: var(--blur-extra-004);
     -webkit-backdrop-filter: var(--blur-extra-004);
     border-radius: 1.25rem;
-    border: 1px solid var(--color-extra-041);
+    border: 1px solid var(--border-glass-strong);
     box-shadow: var(--shadow-glass);
     transition:
         box-shadow var(--dur-normal) var(--ease-smooth),
@@ -43,23 +43,23 @@
 }
 .card:hover {
     box-shadow:
-        0 4px 20px var(--color-extra-123),
-        0 16px 48px var(--color-extra-014),
-        inset 0 1px 0 var(--color-extra-015);
-    border-color: var(--color-extra-061);
+        0 4px 20px var(--scrim-2),
+        0 16px 48px var(--scrim-1),
+        inset 0 1px 0 var(--bg-surface-strong);
+    border-color: var(--bg-surface-strong);
     transform: translateY(-1px);
 }
 .glass-page-card {
-    background: var(--color-extra-013);
+    background: var(--border-glass);
     backdrop-filter: var(--blur-lg);
     -webkit-backdrop-filter: var(--blur-lg);
-    border: 1px solid var(--color-extra-041);
+    border: 1px solid var(--border-glass-strong);
     border-radius: 1.75rem;
     box-shadow:
-        0 8px 40px var(--color-extra-123),
-        0 2px 10px var(--color-extra-120),
+        0 8px 40px var(--scrim-2),
+        0 2px 10px var(--scrim-faint),
         inset 0 1px 0 var(--bg-elevated),
-        inset 0 0 0 1px var(--color-extra-032);
+        inset 0 0 0 1px var(--highlight-3);
     position: relative;
     overflow: hidden;
 }
@@ -74,8 +74,8 @@
     border-radius: inherit;
     background: linear-gradient(
         180deg,
-        var(--color-extra-164) 0%,
-        var(--color-extra-165) 50%,
-        var(--color-extra-084) 100%
+        var(--highlight-3) 0%,
+        var(--highlight-faint) 50%,
+        transparent 100%
     );
 }

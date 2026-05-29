@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from fastapi import Cookie, Depends, Header, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -5,6 +7,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.jwt import COOKIE_NAME, decode_access_token
 from app.db.deps import get_db
 from app.models.user import User
+
+
+# Допуск в 1 секунду на расхождение часов клиента/БД и округление iat до секунды.
+_REVOCATION_SKEW = timedelta(seconds=1)
 
 
 async def get_current_user(
@@ -24,18 +30,27 @@ async def get_current_user(
             detail="Not authenticated",
         )
 
-    user_id = decode_access_token(token)
-    if user_id is None:
+    decoded = decode_access_token(token)
+    if decoded is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",
         )
+    user_id, token_iat = decoded
 
     user = await db.scalar(select(User).where(User.id == user_id))
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found",
+        )
+
+    # Стэйтлесс-revocation: токен, выпущенный до последней смены PIN /
+    # logout-everywhere, недействителен.
+    if token_iat + _REVOCATION_SKEW < user.password_changed_at:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token revoked",
         )
 
     return user

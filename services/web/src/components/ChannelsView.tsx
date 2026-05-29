@@ -14,6 +14,13 @@ import {
 } from "@/lib/api";
 import ChatSettingsModal from "@/components/ChatSettingsModal";
 import Age18Gate, { useAge18Gate } from "@/components/Age18Gate";
+import { useCtrlResize } from "@/lib/useCtrlResize";
+import {
+  hasBit,
+  PERM,
+  useChannelPermissions,
+  usePermissions,
+} from "@/lib/usePermissions";
 
 const POSTS_PAGE_SIZE = 20;
 
@@ -62,10 +69,10 @@ function PostSkeleton() {
         borderColor: "var(--border-glass)",
       }}
     >
-      <div className="h-3 w-32 rounded" style={{ background: "var(--color-extra-041)" }} />
-      <div className="mt-3 h-3 w-full rounded" style={{ background: "var(--color-extra-041)" }} />
-      <div className="mt-2 h-3 w-4/5 rounded" style={{ background: "var(--color-extra-041)" }} />
-      <div className="mt-2 h-3 w-2/3 rounded" style={{ background: "var(--color-extra-041)" }} />
+      <div className="h-3 w-32 rounded" style={{ background: "var(--border-glass-strong)" }} />
+      <div className="mt-3 h-3 w-full rounded" style={{ background: "var(--border-glass-strong)" }} />
+      <div className="mt-2 h-3 w-4/5 rounded" style={{ background: "var(--border-glass-strong)" }} />
+      <div className="mt-2 h-3 w-2/3 rounded" style={{ background: "var(--border-glass-strong)" }} />
     </div>
   );
 }
@@ -81,6 +88,13 @@ export default function ChannelsView({
   externalChannelId?: string | null;
   meBirthday?: string | null;
 }) {
+  const channelsSidebarResize = useCtrlResize({
+    storageKey: "lentik:channels-sidebar-w",
+    initial: 288,
+    min: 220,
+    max: 520,
+    side: "right",
+  });
   const [members, setMembers] = useState<FamilyMember[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [channelsLoading, setChannelsLoading] = useState(true);
@@ -116,6 +130,15 @@ export default function ChannelsView({
     () => channels.find((channel) => channel.id === selectedChannelId) ?? null,
     [channels, selectedChannelId],
   );
+
+  const channelPerms = useChannelPermissions(selectedChannelId ?? null);
+  const canPostToChannel = hasBit(channelPerms, PERM.SEND_MESSAGES);
+  const { perms: familyPerms } = usePermissions();
+  const canManageChannels =
+    !!familyPerms &&
+    (familyPerms.is_owner ||
+      familyPerms.is_administrator ||
+      (familyPerms.base & PERM.MANAGE_CHANNELS) !== 0);
 
   const ageGate = useAge18Gate(
     selectedChannelId ?? "",
@@ -330,8 +353,12 @@ export default function ChannelsView({
   return (
     <div className="h-full min-h-0 flex flex-col md:flex-row">
       <aside
-        className="w-full md:w-72 md:min-w-72 border-b md:border-b-0 md:border-r p-3 md:p-4"
-        style={{ borderColor: "var(--border-warm-dim)", background: "var(--bg-surface-subtle)" }}
+        className="relative w-full md:shrink-0 md:w-[var(--lentik-channels-w)] md:min-w-[var(--lentik-channels-w)] border-b md:border-b-0 md:border-r p-3 md:p-4"
+        style={{
+          borderColor: "var(--border-warm-dim)",
+          background: "var(--bg-surface-subtle)",
+          ["--lentik-channels-w" as never]: `${channelsSidebarResize.width}px`,
+        }}
       >
         <div className="flex items-center justify-between gap-2">
           <div>
@@ -339,7 +366,7 @@ export default function ChannelsView({
             <p className="text-sm text-ink-600 font-body mt-0.5">Объявления семьи</p>
           </div>
 
-          {isOwner && (
+          {canManageChannels && (
             <button
               type="button"
               className="ui-btn ui-btn-subtle !px-2.5 !py-1.5 inline-flex items-center gap-1.5"
@@ -484,9 +511,19 @@ export default function ChannelsView({
             })
           )}
         </div>
+
+        <div
+          {...channelsSidebarResize.handleProps}
+          className={`hidden md:block absolute top-0 right-0 h-full w-1.5 -mr-[3px] z-10 transition ${
+            channelsSidebarResize.ctrlReady || channelsSidebarResize.dragging
+              ? "cursor-col-resize bg-warm-400/55"
+              : "cursor-default"
+          }`}
+          aria-label="Изменить ширину сайдбара каналов (Ctrl + перетащить)"
+        />
       </aside>
 
-      <section className="flex-1 min-h-0 flex flex-col">
+      <section className="flex-1 min-h-0 min-w-0 flex flex-col">
         {!selectedChannel ? (
           <div className="h-full grid place-items-center px-6 text-center">
             <div>
@@ -587,7 +624,7 @@ export default function ChannelsView({
               )}
             </div>
 
-            {isOwner && (
+            {canPostToChannel && (
               <div className="border-t px-4 py-3" style={{ borderColor: "var(--border-warm-dim)" }}>
                 <div
                   className="flex items-end gap-2 rounded-xl border px-2.5 py-2"
@@ -602,14 +639,14 @@ export default function ChannelsView({
                         void handleCreatePost();
                       }
                     }}
-                    className="flex-1 min-h-[40px] max-h-[150px] resize-none bg-transparent outline-none text-sm text-ink-900 placeholder:text-ink-300"
+                    className="flex-1 min-h-[40px] max-h-[150px] resize-none bg-transparent outline-none focus:outline-none focus-visible:outline-none text-sm text-ink-900 placeholder:text-ink-300"
                     placeholder={`Написать пост в #${selectedChannel.name}`}
                     rows={1}
                   />
 
                   <button
                     type="button"
-                    className="w-10 h-10 rounded-md grid place-items-center text-white bg-ink-900 hover:bg-ink-700 transition disabled:opacity-45"
+                    className="w-10 h-10 rounded-md grid place-items-center text-ink-900 hover:bg-white/55 transition disabled:opacity-45"
                     onClick={() => void handleCreatePost()}
                     disabled={creatingPost || !newPostText.trim()}
                     aria-label="Опубликовать пост"

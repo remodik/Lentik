@@ -14,6 +14,10 @@ class Settings(BaseSettings):
     upload_dir: str = "uploads"
     is_production: bool = False
     strict_migrations: bool = False
+    cors_origins: list[str] = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ]
 
     @field_validator("jwt_secret")
     @classmethod

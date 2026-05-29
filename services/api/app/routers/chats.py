@@ -1,7 +1,7 @@
 import mimetypes
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import UUID
 
@@ -12,9 +12,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.auth.deps import get_current_user
-from app.core.uploads import get_upload_root
+from app.core.permissions import Perm
+from app.core.uploads import get_upload_root, resolve_upload_path
 from app.core.jwt import COOKIE_NAME, decode_access_token
+from app.core.ws_tickets import ws_ticket_store
 from app.db.deps import get_db
+from app.services.audit import log_action
+from app.services.roles import require_chat_perm, require_family_perm
 from app.models.chat import Chat
 from app.models.membership import Membership
 from app.models.message import Message
@@ -207,6 +211,25 @@ def _ensure_age_gate(chat: Chat, user: User) -> None:
         )
 
 
+async def _ensure_18plus_perm(
+    chat: Chat,
+    membership: Membership,
+    db: AsyncSession,
+) -> None:
+    """Проверка права ACCESS_18PLUS для 18+ чатов. Owner шунтирует."""
+    if not chat.is_18plus or membership.role.value == "owner":
+        return
+    from app.core.permissions import Perm, has_perm
+    from app.services.roles import effective_permissions
+
+    bits = await effective_permissions(db, membership.id)
+    if not has_perm(bits, Perm.ACCESS_18PLUS):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="У вашей роли нет права доступа к контенту 18+.",
+        )
+
+
 async def _enforce_slow_mode(
     chat: Chat,
     user: User,
@@ -354,8 +377,7 @@ async def create_chat(
     user: User = Depends(get_current_user),
 ):
     m = await _require_member(family_id, user, db)
-    if m.role != "owner":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only owner can create chats")
+    await require_family_perm(db, m, Perm.MANAGE_CHANNELS)
 
     chat = Chat(
         family_id=family_id,
@@ -366,6 +388,16 @@ async def create_chat(
         created_by=user.id,
     )
     db.add(chat)
+    await db.flush()
+    await log_action(
+        db,
+        family_id=family_id,
+        actor_id=user.id,
+        action="chat.created",
+        target_type="chat",
+        target_id=chat.id,
+        metadata={"name": chat.name, "is_18plus": chat.is_18plus},
+    )
     await db.commit()
     loaded_chat = await _load_chat_with_pin(db, family_id, chat.id)
     if not loaded_chat:
@@ -382,26 +414,48 @@ async def update_chat(
     user: User = Depends(get_current_user),
 ):
     m = await _require_member(family_id, user, db)
-    if m.role != "owner":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only owner can edit chat settings",
-        )
+    await require_chat_perm(db, m, chat_id, Perm.MANAGE_CHANNELS)
 
     chat = await db.get(Chat, chat_id)
     if not chat or chat.family_id != family_id:
         raise HTTPException(status_code=404, detail="Chat not found")
 
     updated = body.model_fields_set
-    if "name" in updated and body.name is not None:
+    changes: dict[str, dict] = {}
+    if "name" in updated and body.name is not None and body.name != chat.name:
+        changes["name"] = {"from": chat.name, "to": body.name}
         chat.name = body.name
-    if "description" in updated:
+    if "description" in updated and body.description != chat.description:
+        changes["description"] = {"from": chat.description, "to": body.description}
         chat.description = body.description
-    if "slow_mode_seconds" in updated and body.slow_mode_seconds is not None:
+    if (
+        "slow_mode_seconds" in updated
+        and body.slow_mode_seconds is not None
+        and body.slow_mode_seconds != chat.slow_mode_seconds
+    ):
+        changes["slow_mode_seconds"] = {
+            "from": chat.slow_mode_seconds,
+            "to": body.slow_mode_seconds,
+        }
         chat.slow_mode_seconds = body.slow_mode_seconds
-    if "is_18plus" in updated and body.is_18plus is not None:
+    if (
+        "is_18plus" in updated
+        and body.is_18plus is not None
+        and body.is_18plus != chat.is_18plus
+    ):
+        changes["is_18plus"] = {"from": chat.is_18plus, "to": body.is_18plus}
         chat.is_18plus = body.is_18plus
 
+    if changes:
+        await log_action(
+            db,
+            family_id=family_id,
+            actor_id=user.id,
+            action="chat.updated",
+            target_type="chat",
+            target_id=chat_id,
+            metadata={"name": chat.name, "changes": changes},
+        )
     await db.commit()
 
     loaded = await _load_chat_with_pin(db, family_id, chat_id)
@@ -432,11 +486,7 @@ async def pin_message(
     user: User = Depends(get_current_user),
 ):
     m = await _require_member(family_id, user, db)
-    if m.role != "owner":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only owner can pin messages",
-        )
+    await require_chat_perm(db, m, chat_id, Perm.MANAGE_MESSAGES)
 
     chat = await _load_chat_with_pin(db, family_id, chat_id)
     if not chat:
@@ -447,6 +497,15 @@ async def pin_message(
         raise HTTPException(status_code=404, detail="Message not found")
 
     chat.pinned_message_id = message.id
+    await log_action(
+        db,
+        family_id=family_id,
+        actor_id=user.id,
+        action="chat.pinned",
+        target_type="message",
+        target_id=message.id,
+        metadata={"chat_id": str(chat_id)},
+    )
     await db.commit()
 
     updated_chat = await _load_chat_with_pin(db, family_id, chat_id)
@@ -465,11 +524,7 @@ async def unpin_message(
     user: User = Depends(get_current_user),
 ):
     m = await _require_member(family_id, user, db)
-    if m.role != "owner":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only owner can unpin messages",
-        )
+    await require_chat_perm(db, m, chat_id, Perm.MANAGE_MESSAGES)
 
     chat = await _load_chat_with_pin(db, family_id, chat_id)
     if not chat:
@@ -478,7 +533,17 @@ async def unpin_message(
     if chat.pinned_message_id is None:
         return _chat_to_response(chat)
 
+    prev_pinned = chat.pinned_message_id
     chat.pinned_message_id = None
+    await log_action(
+        db,
+        family_id=family_id,
+        actor_id=user.id,
+        action="chat.unpinned",
+        target_type="message",
+        target_id=prev_pinned,
+        metadata={"chat_id": str(chat_id)},
+    )
     await db.commit()
 
     updated_chat = await _load_chat_with_pin(db, family_id, chat_id)
@@ -497,13 +562,21 @@ async def delete_chat(
     user: User = Depends(get_current_user),
 ):
     m = await _require_member(family_id, user, db)
-    if m.role != "owner":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only owner can delete chats")
+    await require_chat_perm(db, m, chat_id, Perm.MANAGE_CHANNELS)
 
     chat = await db.get(Chat, chat_id)
     if not chat or chat.family_id != family_id:
         raise HTTPException(status_code=404, detail="Chat not found")
 
+    await log_action(
+        db,
+        family_id=family_id,
+        actor_id=user.id,
+        action="chat.deleted",
+        target_type="chat",
+        target_id=chat.id,
+        metadata={"name": chat.name},
+    )
     await db.delete(chat)
     await db.commit()
 
@@ -517,12 +590,13 @@ async def get_messages(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    await _require_member(family_id, user, db)
+    m = await _require_member(family_id, user, db)
 
     chat = await db.get(Chat, chat_id)
     if not chat or chat.family_id != family_id:
         raise HTTPException(status_code=404, detail="Chat not found")
     _ensure_age_gate(chat, user)
+    await _ensure_18plus_perm(chat, m, db)
 
     query = (
         select(Message)
@@ -687,6 +761,8 @@ async def send_message(
         raise HTTPException(status_code=404, detail="Chat not found")
 
     _ensure_age_gate(chat, user)
+    await _ensure_18plus_perm(chat, membership, db)
+    await require_chat_perm(db, membership, chat_id, Perm.SEND_MESSAGES)
     await _enforce_slow_mode(chat, user, membership, db)
 
     mentions = _parse_mentions(body.text)
@@ -738,6 +814,8 @@ async def send_message_with_attachments(
         raise HTTPException(status_code=404, detail="Chat not found")
 
     _ensure_age_gate(chat, user)
+    await require_chat_perm(db, membership, chat_id, Perm.SEND_MESSAGES)
+    await require_chat_perm(db, membership, chat_id, Perm.ATTACH_FILES)
     await _enforce_slow_mode(chat, user, membership, db)
 
     clean_files = [f for f in files if f.filename]
@@ -840,6 +918,8 @@ async def send_voice_message(
         raise HTTPException(status_code=404, detail="Chat not found")
 
     _ensure_age_gate(chat, user)
+    await _ensure_18plus_perm(chat, membership, db)
+    await require_chat_perm(db, membership, chat_id, Perm.SEND_VOICE)
     await _enforce_slow_mode(chat, user, membership, db)
 
     payload = await file.read()
@@ -889,7 +969,7 @@ async def edit_message(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    await _require_member(family_id, user, db)
+    m = await _require_member(family_id, user, db)
 
     msg = await db.scalar(
         select(Message).where(Message.id == message_id).options(
@@ -900,8 +980,29 @@ async def edit_message(
     )
     if not msg or msg.chat_id != chat_id:
         raise HTTPException(status_code=404, detail="Message not found")
-    if msg.author_id != user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Can only edit your own messages")
+
+    is_own = msg.author_id == user.id
+    # Свои: MANAGE_OWN_MESSAGES; чужие: MANAGE_MESSAGES.
+    await require_chat_perm(
+        db, m, chat_id,
+        Perm.MANAGE_OWN_MESSAGES if is_own else Perm.MANAGE_MESSAGES,
+    )
+
+    if not is_own:
+        await log_action(
+            db,
+            family_id=family_id,
+            actor_id=user.id,
+            action="message.edited_by_moderator",
+            target_type="message",
+            target_id=message_id,
+            metadata={
+                "chat_id": str(chat_id),
+                "author_name": msg.author.display_name if msg.author else None,
+                "old_text": (msg.text or "")[:120],
+                "new_text": (body.text or "")[:120],
+            },
+        )
 
     msg.text = body.text
     msg.edited = True
@@ -932,21 +1033,41 @@ async def delete_message(
     msg = await db.get(Message, message_id)
     if not msg or msg.chat_id != chat_id:
         raise HTTPException(status_code=404, detail="Message not found")
-    if msg.author_id != user.id and m.role != "owner":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not allowed")
+
+    is_own = msg.author_id == user.id
+    await require_chat_perm(
+        db, m, chat_id,
+        Perm.MANAGE_OWN_MESSAGES if is_own else Perm.MANAGE_MESSAGES,
+    )
+
+    if not is_own:
+        author = await db.get(User, msg.author_id) if msg.author_id else None
+        await log_action(
+            db,
+            family_id=family_id,
+            actor_id=user.id,
+            action="message.deleted_by_moderator",
+            target_type="message",
+            target_id=message_id,
+            metadata={
+                "chat_id": str(chat_id),
+                "chat_name": chat.name,
+                "author_name": author.display_name if author else None,
+                "text": (msg.text or "")[:120],
+                "had_attachments": bool(msg.attachments),
+            },
+        )
 
     was_pinned = chat.pinned_message_id == message_id
     if was_pinned:
         chat.pinned_message_id = None
 
-    upload_root = get_upload_root()
     for item in msg.attachments or []:
         if not isinstance(item, dict):
             continue
-        url = item.get("url")
-        if not isinstance(url, str) or not url.startswith("/static/uploads/"):
+        path = resolve_upload_path(item.get("url"))
+        if not path:
             continue
-        path = upload_root / url.removeprefix("/static/uploads/")
         try:
             path.unlink(missing_ok=True)
         except OSError:
@@ -975,7 +1096,8 @@ async def add_reaction(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    await _require_member(family_id, user, db)
+    m = await _require_member(family_id, user, db)
+    await require_chat_perm(db, m, chat_id, Perm.ADD_REACTIONS)
 
     emoji = body.emoji.strip()
     if not EMOJI_RE.fullmatch(emoji):
@@ -1063,15 +1185,23 @@ async def chat_ws(
     db: AsyncSession = Depends(get_db),
 ):
     token = websocket.cookies.get(COOKIE_NAME)
-    if not token:
-        token = websocket.query_params.get("token")
-    user_id = decode_access_token(token) if token else None
+    decoded = decode_access_token(token) if token else None
+    user_id = decoded[0] if decoded else None
+    token_iat = decoded[1] if decoded else None
+    if not user_id:
+        ticket = websocket.query_params.get("ticket")
+        if ticket:
+            user_id = await ws_ticket_store.consume(ticket)
     if not user_id:
         await websocket.close(code=4001)
         return
 
     user = await db.scalar(select(User).where(User.id == user_id))
     if not user:
+        await websocket.close(code=4001)
+        return
+
+    if token_iat is not None and token_iat + timedelta(seconds=1) < user.password_changed_at:
         await websocket.close(code=4001)
         return
 
@@ -1085,8 +1215,15 @@ async def chat_ws(
         await websocket.close(code=4003)
         return
 
+    chat_belongs = await db.scalar(
+        select(Chat.id).where(Chat.id == chat_id, Chat.family_id == family_id)
+    )
+    if not chat_belongs:
+        await websocket.close(code=4003)
+        return
+
     await websocket.accept()
-    await ws_manager.connect(chat_id, websocket)
+    await ws_manager.connect(chat_id, websocket, family_id=family_id, user_id=user.id)
     became_online = ws_manager.register_presence_connection(family_id, user.id, websocket)
     if became_online:
         user.is_online = True

@@ -13,23 +13,23 @@ body {
     background-image:
         radial-gradient(
             ellipse at 12% 55%,
-            var(--color-extra-002) 0%,
-            var(--color-extra-001) 58%
+            var(--surface-warm-strong) 0%,
+            transparent 58%
         ),
         radial-gradient(
             ellipse at 88% 12%,
-            var(--color-extra-003) 0%,
-            var(--color-extra-001) 52%
+            var(--surface-tan-soft) 0%,
+            transparent 52%
         ),
         radial-gradient(
             ellipse at 62% 88%,
-            var(--color-extra-004) 0%,
-            var(--color-extra-001) 50%
+            rgb(var(--warm-100) / 0.45) 0%,
+            transparent 50%
         ),
         radial-gradient(
             ellipse at 42% 28%,
-            var(--color-extra-005) 0%,
-            var(--color-extra-001) 38%
+            var(--accent-soft-light) 0%,
+            transparent 38%
         );
     background-attachment: fixed;
     color: var(--text-primary);
@@ -38,15 +38,36 @@ body {
     -moz-osx-font-smoothing: grayscale;
     margin: 0;
 }
+/* Полностью гасим стандартный браузерный outline на ВСЕХ элементах.
+   Для клавиатурной навигации показываем плавный фокус-ring через box-shadow,
+   который повторяет border-radius элемента. */
+*:focus,
 *:focus-visible {
-    outline: none;
+    outline: none !important;
+    outline-offset: 0 !important;
+}
+input:focus,
+textarea:focus,
+select:focus,
+button:focus,
+[contenteditable]:focus {
+    outline: none !important;
+}
+*:focus-visible {
     box-shadow: var(--focus-ring);
+}
+/* Поля и кнопки внутри сообщения / чата — без фокус-кольца совсем. */
+.msg-row :focus-visible,
+.msg-row :focus,
+.glass-compose :focus-visible,
+.glass-compose :focus {
+    box-shadow: none !important;
 }
 .chat-scroll,
 .sidebar-scroll,
 nav {
     scrollbar-width: thin;
-    scrollbar-color: var(--color-extra-006) var(--color-extra-001);
+    scrollbar-color: var(--surface-tan-medium) transparent;
     scroll-behavior: smooth;
 }
 .chat-scroll::-webkit-scrollbar,
@@ -57,40 +78,94 @@ nav::-webkit-scrollbar {
 .chat-scroll::-webkit-scrollbar-track,
 .sidebar-scroll::-webkit-scrollbar-track,
 nav::-webkit-scrollbar-track {
-    background: var(--color-extra-001);
+    background: transparent;
 }
 .chat-scroll::-webkit-scrollbar-thumb,
 .sidebar-scroll::-webkit-scrollbar-thumb,
 nav::-webkit-scrollbar-thumb {
-    background: var(--color-extra-007);
+    background: var(--surface-tan-medium);
     border-radius: 99px;
 }
 .chat-scroll::-webkit-scrollbar-thumb:hover,
 .sidebar-scroll::-webkit-scrollbar-thumb:hover,
 nav::-webkit-scrollbar-thumb:hover {
-    background: var(--color-extra-008);
+    background: var(--accent-bold);
 }
+/* Кастомные tooltips: bubble с тонким хвостом снизу,
+   плавное появление через transform+opacity, без задержки на hover. */
 [data-tooltip] {
     position: relative;
 }
-[data-tooltip]:hover::after {
+[data-tooltip]::before,
+[data-tooltip]::after {
+    pointer-events: none;
+    opacity: 0;
+    transform: translateX(-50%) translateY(4px) scale(0.96);
+    transform-origin: 50% 100%;
+    transition:
+        opacity 140ms cubic-bezier(0.2, 0.7, 0.2, 1),
+        transform 160ms cubic-bezier(0.2, 0.7, 0.2, 1);
+    will-change: transform, opacity;
+}
+[data-tooltip]::after {
     content: attr(data-tooltip);
     position: absolute;
-    bottom: calc(100% + 7px);
+    bottom: calc(100% + 8px);
     left: 50%;
-    transform: translateX(-50%);
-    background: var(--color-extra-009);
-    backdrop-filter: var(--blur-extra-003);
-    -webkit-backdrop-filter: var(--blur-extra-003);
-    color: var(--text-on-dark);
-    font-size: 0.7rem;
+    background: #1a1a1a;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 500;
     font-family: var(--font-body);
     white-space: nowrap;
-    padding: 0.3rem 0.65rem;
-    border-radius: 0.5rem;
-    border: 1px solid var(--color-extra-010);
-    pointer-events: none;
-    z-index: 100;
-    animation: fadeIn 0.15s ease;
-    box-shadow: 0 4px 12px var(--color-extra-011);
+    padding: 6px 10px;
+    border-radius: 6px;
+    z-index: 1000;
+    box-shadow:
+        0 8px 24px rgba(0, 0, 0, 0.32),
+        0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+[data-tooltip]::before {
+    content: "";
+    position: absolute;
+    bottom: calc(100% + 2px);
+    left: 50%;
+    width: 0;
+    height: 0;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 6px solid #1a1a1a;
+    z-index: 1001;
+}
+[data-tooltip]:hover::before,
+[data-tooltip]:hover::after,
+[data-tooltip]:focus-visible::before,
+[data-tooltip]:focus-visible::after {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+    transition-delay: 80ms;
+}
+
+/* Вариант «вниз»: для кнопок у верхнего края контейнера, где
+   подсказка над элементом обрезалась бы overflow-родителем. */
+[data-tooltip].tooltip-down::before,
+[data-tooltip].tooltip-down::after {
+    transform: translateX(-50%) translateY(-4px) scale(0.96);
+    transform-origin: 50% 0%;
+}
+[data-tooltip].tooltip-down::after {
+    bottom: auto;
+    top: calc(100% + 8px);
+}
+[data-tooltip].tooltip-down::before {
+    bottom: auto;
+    top: calc(100% + 2px);
+    border-top: none;
+    border-bottom: 6px solid #1a1a1a;
+}
+[data-tooltip].tooltip-down:hover::before,
+[data-tooltip].tooltip-down:hover::after,
+[data-tooltip].tooltip-down:focus-visible::before,
+[data-tooltip].tooltip-down:focus-visible::after {
+    transform: translateX(-50%) translateY(0) scale(1);
 }

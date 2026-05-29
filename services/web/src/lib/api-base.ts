@@ -133,6 +133,17 @@ export function normalizeApiPayload<T>(payload: T): T {
   return payload;
 }
 
+export async function fetchWsTicket(): Promise<string | null> {
+  try {
+    const res = await apiFetch("/auth/ws-ticket", { method: "POST" });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { ticket?: unknown };
+    return typeof data.ticket === "string" ? data.ticket : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const headers = new Headers(init.headers);
   const hasBody = init.body !== undefined && init.body !== null;

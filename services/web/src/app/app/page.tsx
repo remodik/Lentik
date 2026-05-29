@@ -2,16 +2,19 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Lock, MessageCircle, Pencil, Plus, RefreshCw, Timer } from "lucide-react";
+import { AlertTriangle, Lock, MessageCircle, Pencil, Plus, RefreshCw, Timer, Trash2 } from "lucide-react";
 import {
   createFamily,
+  deleteChat,
   getMe,
   getFamily,
   getChats,
   getChannels,
   getMyFamilies,
+  joinFamilyByToken,
   kickMember,
   logout,
+  renameFamily,
   type Chat,
   type Channel,
   type Family,
@@ -20,9 +23,15 @@ import {
 } from "@/lib/api";
 
 import AppLayout, { type AppSection } from "@/components/AppLayout";
+import { useConfirm } from "@/components/ConfirmDialog";
+import FamilySettingsModal from "@/components/FamilySettingsModal";
+import { UserModeProvider } from "@/lib/useUserMode";
+import { PermissionsProvider } from "@/lib/usePermissions";
+import { useCtrlResize } from "@/lib/useCtrlResize";
 import ChatView from "@/components/ChatView";
 import ChatSettingsModal from "@/components/ChatSettingsModal";
 import GalleryView from "@/components/GalleryView";
+import FilesView from "@/components/FilesView";
 import MembersList from "@/components/MembersList";
 import CalendarView from "@/components/CalendarView";
 import ChannelsView from "@/components/ChannelsView";
@@ -37,6 +46,14 @@ import type { PresenceUpdateEvent } from "@/components/NotificationSystem";
 
 export default function AppPage() {
   const router = useRouter();
+  const { confirm, notify } = useConfirm();
+  const chatSidebarResize = useCtrlResize({
+    storageKey: "lentik:chat-sidebar-w",
+    initial: 288,
+    min: 220,
+    max: 520,
+    side: "right",
+  });
 
   const [me, setMe] = useState<Me | null>(null);
   const [myFamilies, setMyFamilies] = useState<MyFamily[]>([]);
@@ -50,6 +67,7 @@ export default function AppPage() {
     const allowed: AppSection[] = [
       "chat",
       "gallery",
+      "files",
       "calendar",
       "members",
       "channels",
@@ -79,6 +97,15 @@ export default function AppPage() {
   const [createFamilyError, setCreateFamilyError] = useState("");
   const [loadError, setLoadError] = useState("");
   const [chatSettingsTarget, setChatSettingsTarget] = useState<Chat | null>(null);
+  const [renameTarget, setRenameTarget] = useState<{ id: string; name: string } | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [renaming, setRenaming] = useState(false);
+  const [renameError, setRenameError] = useState("");
+  const [joinOpen, setJoinOpen] = useState(false);
+  const [joinValue, setJoinValue] = useState("");
+  const [joining, setJoining] = useState(false);
+  const [joinError, setJoinError] = useState("");
+  const [familySettingsOpen, setFamilySettingsOpen] = useState(false);
 
   const activeChat = useMemo(
     () => chats.find((c) => c.id === activeChatId) ?? null,
@@ -255,9 +282,30 @@ export default function AppPage() {
       setNewChatName("");
       setShowNewChat(false);
     } catch {
-      alert("Ошибка при создании чата");
+      void notify({ title: "Ошибка при создании чата", tone: "danger" });
     } finally {
       setCreatingChat(false);
+    }
+  }
+
+  async function handleDeleteChat(chat: Chat, skipConfirm: boolean) {
+    if (!familyId) return;
+    if (!skipConfirm) {
+      const ok = await confirm({
+        title: "Удалить чат",
+        description: `Вы уверены, что хотите удалить #${chat.name}?`,
+        confirmLabel: "Удалить",
+        tone: "danger",
+      });
+      if (!ok) return;
+    }
+    try {
+      await deleteChat(familyId, chat.id);
+      setChats((prev) => prev.filter((c) => c.id !== chat.id));
+      setActiveChatId((current) => (current === chat.id ? null : current));
+    } catch (e) {
+      console.error("deleteChat failed", e);
+      void notify({ title: "Не удалось удалить чат", tone: "danger" });
     }
   }
 
@@ -275,6 +323,77 @@ export default function AppPage() {
     setCreateFamilyError("");
     setNewFamilyName("");
     setShowCreateFamily(true);
+  }
+
+  function openRenameFamily(id: string, name: string) {
+    setRenameTarget({ id, name });
+    setRenameValue(name);
+    setRenameError("");
+  }
+
+  async function submitRenameFamily(e: React.FormEvent) {
+    e.preventDefault();
+    if (!renameTarget) return;
+    const next = renameValue.trim();
+    if (!next || next === renameTarget.name) {
+      setRenameTarget(null);
+      return;
+    }
+    setRenaming(true);
+    setRenameError("");
+    try {
+      const updated = await renameFamily(renameTarget.id, next);
+      setMyFamilies((prev) =>
+        prev.map((f) =>
+          f.family_id === renameTarget.id ? { ...f, family_name: updated.name } : f,
+        ),
+      );
+      setFamily((prev) =>
+        prev && prev.id === renameTarget.id ? { ...prev, name: updated.name } : prev,
+      );
+      setRenameTarget(null);
+    } catch (err) {
+      setRenameError(err instanceof Error ? err.message : "Не удалось переименовать");
+    } finally {
+      setRenaming(false);
+    }
+  }
+
+  function openJoinFamily() {
+    setJoinValue("");
+    setJoinError("");
+    setJoinOpen(true);
+  }
+
+  function extractInviteToken(input: string): string {
+    const trimmed = input.trim();
+    if (!trimmed) return "";
+    try {
+      const url = new URL(trimmed);
+      const fromQuery = url.searchParams.get("token");
+      if (fromQuery) return fromQuery;
+    } catch {}
+    return trimmed;
+  }
+
+  async function submitJoinFamily(e: React.FormEvent) {
+    e.preventDefault();
+    const token = extractInviteToken(joinValue);
+    if (!token) {
+      setJoinError("Вставьте ссылку или токен приглашения");
+      return;
+    }
+    setJoining(true);
+    setJoinError("");
+    try {
+      const { family_id } = await joinFamilyByToken(token);
+      setJoinOpen(false);
+      await switchFamily(family_id);
+    } catch (err) {
+      setJoinError(err instanceof Error ? err.message : "Не удалось вступить");
+    } finally {
+      setJoining(false);
+    }
   }
 
   async function handleCreateFamily(e: React.FormEvent) {
@@ -338,7 +457,11 @@ export default function AppPage() {
     );
   }
 
+  const initialMode = me.ui_mode === "advanced" ? "advanced" : "simple";
+
   return (
+    <UserModeProvider initialMode={initialMode}>
+    <PermissionsProvider familyId={family?.id ?? null}>
     <AppLayout
       me={me}
       family={family}
@@ -350,6 +473,9 @@ export default function AppPage() {
         void switchFamily(nextFamilyId);
       }}
       onCreateFamily={openCreateFamily}
+      onJoinFamily={openJoinFamily}
+      onRenameFamily={openRenameFamily}
+      onOpenFamilySettings={() => setFamilySettingsOpen(true)}
       onLogout={handleLogout}
       onMeUpdate={(m) => setMe(m)}
       onPresenceUpdate={handlePresenceUpdate}
@@ -374,8 +500,12 @@ export default function AppPage() {
       {section === "chat" && (
         <div className="h-full min-h-0 flex flex-col md:flex-row">
           <aside
-            className="w-full md:w-72 md:min-w-72 border-b md:border-b-0 md:border-r p-3 md:p-4"
-            style={{ borderColor: "var(--border-warm-dim)", background: "var(--bg-surface-subtle)" }}
+            className="relative w-full md:shrink-0 md:w-[var(--lentik-sidebar-w)] md:min-w-[var(--lentik-sidebar-w)] border-b md:border-b-0 md:border-r p-3 md:p-4"
+            style={{
+              borderColor: "var(--border-warm-dim)",
+              background: "var(--bg-surface-subtle)",
+              ["--lentik-sidebar-w" as never]: `${chatSidebarResize.width}px`,
+            }}
           >
             <div className="flex items-center justify-between gap-2">
               <div>
@@ -430,7 +560,7 @@ export default function AppPage() {
                         }
                       }}
                       className={`group relative w-full text-left rounded-xl border px-3 py-2.5 transition cursor-pointer ${
-                        isOwner ? "pr-9" : ""
+                        isOwner ? "pr-16" : ""
                       } ${active ? "shadow-sm" : "hover:translate-y-[-1px]"}`}
                       style={{
                         borderColor: active ? "var(--accent-border)" : "var(--border-glass)",
@@ -460,28 +590,53 @@ export default function AppPage() {
                       </p>
 
                       {isOwner && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setChatSettingsTarget(chat);
-                          }}
-                          className="absolute top-2 right-2 w-7 h-7 rounded-lg grid place-items-center text-ink-400 hover:text-ink-700 hover:bg-white/70 transition opacity-0 group-hover:opacity-100 focus:opacity-100"
-                          title="Настройки чата"
-                          aria-label="Настройки чата"
-                          data-testid={`chat-settings-${chat.id}`}
-                        >
-                          <Pencil className="w-3.5 h-3.5" strokeWidth={2.2} />
-                        </button>
+                        <>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setChatSettingsTarget(chat);
+                            }}
+                            className="absolute top-2 right-9 w-7 h-7 rounded-lg grid place-items-center text-ink-400 hover:text-ink-700 hover:bg-white/70 transition opacity-0 group-hover:opacity-100 focus:opacity-100"
+                            title="Настройки чата"
+                            aria-label="Настройки чата"
+                            data-testid={`chat-settings-${chat.id}`}
+                          >
+                            <Pencil className="w-3.5 h-3.5" strokeWidth={2.2} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void handleDeleteChat(chat, e.shiftKey);
+                            }}
+                            className="absolute top-2 right-2 w-7 h-7 rounded-lg grid place-items-center text-ink-400 hover:text-red-600 hover:bg-red-50 transition opacity-0 group-hover:opacity-100 focus:opacity-100"
+                            title="Удалить чат"
+                            aria-label="Удалить чат"
+                            data-testid={`chat-delete-${chat.id}`}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" strokeWidth={2.2} />
+                          </button>
+                        </>
                       )}
                     </div>
                   );
                 })
               )}
             </div>
+
+            <div
+              {...chatSidebarResize.handleProps}
+              className={`hidden md:block absolute top-0 right-0 h-full w-1.5 -mr-[3px] z-10 transition ${
+                chatSidebarResize.ctrlReady || chatSidebarResize.dragging
+                  ? "cursor-col-resize bg-warm-400/55"
+                  : "cursor-default hover:bg-white/0"
+              }`}
+              aria-label="Изменить ширину сайдбара (Ctrl + перетащить)"
+            />
           </aside>
 
-          <section className="flex-1 min-h-0">
+          <section className="flex-1 min-h-0 min-w-0">
             {activeChat ? (
               <ChatView
                 familyId={familyId}
@@ -513,6 +668,9 @@ export default function AppPage() {
 
       {section === "gallery" && (
         <GalleryView familyId={familyId} meId={me.id} />
+      )}
+      {section === "files" && (
+        <FilesView familyId={familyId} meId={me.id} />
       )}
       {section === "calendar" && (
         <CalendarView
@@ -559,7 +717,7 @@ export default function AppPage() {
           aria-label="Создать чат"
         >
           <div
-            className="w-full max-w-sm rounded-3xl border border-white/70 bg-white/85 backdrop-blur-2xl p-6 shadow-[0_30px_90px_rgba(28,23,20,0.25)]"
+            className="w-full max-w-sm rounded-3xl border border-[color:var(--border-glass-strong)] bg-[color:var(--bg-elevated)] backdrop-blur-2xl p-6 shadow-[0_30px_90px_var(--scrim-4)]"
             onClick={(e) => e.stopPropagation()}
           >
             <p className="text-xs uppercase tracking-[0.16em] text-ink-400 font-body">
@@ -616,7 +774,7 @@ export default function AppPage() {
           aria-label="Создать семью"
         >
           <div
-            className="w-full max-w-md rounded-3xl border border-white/70 bg-white/85 backdrop-blur-2xl p-6 shadow-[0_30px_90px_rgba(28,23,20,0.25)]"
+            className="w-full max-w-md rounded-3xl border border-[color:var(--border-glass-strong)] bg-[color:var(--bg-elevated)] backdrop-blur-2xl p-6 shadow-[0_30px_90px_var(--scrim-4)]"
             onClick={(e) => e.stopPropagation()}
           >
             <p className="text-xs uppercase tracking-[0.16em] text-ink-400 font-body">
@@ -682,6 +840,139 @@ export default function AppPage() {
           }}
         />
       )}
+
+      {renameTarget && (
+        <div
+          className="fixed inset-0 z-[80] bg-black/35 backdrop-blur-sm p-4 flex items-center justify-center"
+          onClick={() => !renaming && setRenameTarget(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Переименовать семью"
+        >
+          <div
+            className="w-full max-w-sm rounded-3xl border border-[color:var(--border-glass-strong)] bg-[color:var(--bg-elevated)] backdrop-blur-2xl p-6 shadow-[0_30px_90px_var(--scrim-4)]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="text-xs uppercase tracking-[0.16em] text-ink-400 font-body">
+              Семья
+            </p>
+            <h2 className="font-display text-2xl text-ink-900 mt-1">
+              Переименовать
+            </h2>
+            <form onSubmit={(e) => void submitRenameFamily(e)} className="mt-5 space-y-3">
+              <input
+                className="input-field"
+                value={renameValue}
+                onChange={(e) => setRenameValue(e.target.value)}
+                placeholder="Новое название"
+                autoFocus
+                maxLength={120}
+              />
+              {renameError && (
+                <p className="text-sm text-red-500 font-body">{renameError}</p>
+              )}
+              <div className="flex gap-2 justify-end pt-1">
+                <button
+                  type="button"
+                  className="ui-btn ui-btn-subtle"
+                  onClick={() => setRenameTarget(null)}
+                  disabled={renaming}
+                >
+                  Отмена
+                </button>
+                <button
+                  type="submit"
+                  className="ui-btn ui-btn-primary"
+                  disabled={renaming || !renameValue.trim()}
+                >
+                  {renaming ? "Сохранение…" : "Сохранить"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {joinOpen && (
+        <div
+          className="fixed inset-0 z-[80] bg-black/35 backdrop-blur-sm p-4 flex items-center justify-center"
+          onClick={() => !joining && setJoinOpen(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Вступить в семью"
+        >
+          <div
+            className="w-full max-w-sm rounded-3xl border border-[color:var(--border-glass-strong)] bg-[color:var(--bg-elevated)] backdrop-blur-2xl p-6 shadow-[0_30px_90px_var(--scrim-4)]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="text-xs uppercase tracking-[0.16em] text-ink-400 font-body">
+              Приглашение
+            </p>
+            <h2 className="font-display text-2xl text-ink-900 mt-1">
+              Вступить в семью
+            </h2>
+            <p className="text-sm text-ink-500 mt-2 font-body">
+              Вставьте ссылку приглашения или токен.
+            </p>
+            <form onSubmit={(e) => void submitJoinFamily(e)} className="mt-5 space-y-3">
+              <input
+                className="input-field"
+                value={joinValue}
+                onChange={(e) => setJoinValue(e.target.value)}
+                placeholder="https://… или токен"
+                autoFocus
+              />
+              {joinError && (
+                <p className="text-sm text-red-500 font-body">{joinError}</p>
+              )}
+              <div className="flex gap-2 justify-end pt-1">
+                <button
+                  type="button"
+                  className="ui-btn ui-btn-subtle"
+                  onClick={() => setJoinOpen(false)}
+                  disabled={joining}
+                >
+                  Отмена
+                </button>
+                <button
+                  type="submit"
+                  className="ui-btn ui-btn-primary"
+                  disabled={joining || !joinValue.trim()}
+                >
+                  {joining ? "Вступление…" : "Вступить"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      <FamilySettingsModal
+        open={familySettingsOpen}
+        family={family}
+        me={me}
+        isOwner={isOwner}
+        chats={chats}
+        channels={channels}
+        onClose={() => setFamilySettingsOpen(false)}
+        onRenamed={(updated) => {
+          setMyFamilies((prev) =>
+            prev.map((f) =>
+              f.family_id === updated.id ? { ...f, family_name: updated.name } : f,
+            ),
+          );
+          setFamily((prev) =>
+            prev && prev.id === updated.id ? { ...prev, name: updated.name } : prev,
+          );
+        }}
+        onLeft={() => {
+          setFamilySettingsOpen(false);
+          localStorage.removeItem("familyId");
+          void loadApp();
+        }}
+      />
     </AppLayout>
+    </PermissionsProvider>
+    </UserModeProvider>
   );
 }

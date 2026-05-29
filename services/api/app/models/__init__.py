@@ -19,6 +19,9 @@ from .note import Note
 from .post import Post
 from .reaction import MessageReaction
 from .reminder import Reminder, RepeatRule
+from .role import FamilyRole, MemberRole
+from .permission_override import ChannelPermissionOverride, ChatPermissionOverride
+from .audit_log import AuditLogEntry
 from .session import Session
 from .user import User
 
@@ -50,4 +53,9 @@ __all__ = [
     "Note",
     "Reminder",
     "RepeatRule",
+    "FamilyRole",
+    "MemberRole",
+    "ChannelPermissionOverride",
+    "ChatPermissionOverride",
+    "AuditLogEntry",
 ]

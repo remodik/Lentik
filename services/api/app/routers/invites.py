@@ -6,9 +6,12 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_current_user
+from app.core.permissions import Perm
 from app.db.deps import get_db
 from app.models import Family, Invite, Membership, Role, User
 from app.schemas.invites import CreateInviteRequest, CreateInviteResponse
+from app.services.audit import log_action
+from app.services.roles import require_family_perm
 
 router = APIRouter(prefix="/invites", tags=["invites"])
 
@@ -30,11 +33,12 @@ async def create_invite(
             Membership.user_id == current_user.id,
         )
     )
-    if not membership or membership.role != Role.OWNER:
+    if not membership:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only family owner can create invites",
+            detail="Not a family member",
         )
+    await require_family_perm(db, membership, Perm.CREATE_INVITES)
 
     if body.revoke_previous:
         await db.execute(
@@ -51,6 +55,19 @@ async def create_invite(
         expires_at=expires_at,
     )
     db.add(invite)
+    await db.flush()
+    await log_action(
+        db,
+        family_id=body.family_id,
+        actor_id=current_user.id,
+        action="family.invite_created",
+        target_type="invite",
+        target_id=invite.id,
+        metadata={
+            "max_uses": invite.max_uses,
+            "expires_at": invite.expires_at.isoformat(),
+        },
+    )
     await db.commit()
     await db.refresh(invite)
 

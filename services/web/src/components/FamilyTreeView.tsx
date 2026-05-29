@@ -32,6 +32,8 @@ import {
   type TreeRelation,
   type TreeRelationType,
 } from "@/lib/api";
+import { useConfirm } from "@/components/ConfirmDialog";
+import Select from "@/components/Select";
 
 const NODE_WIDTH = 220;
 const NODE_HEIGHT = 76;
@@ -263,6 +265,7 @@ function PersonNode({
 }
 
 export default function FamilyTreeView({ familyId, family, meId }: Props) {
+  const { confirm, notify } = useConfirm();
   const [persons, setPersons] = useState<TreePerson[]>([]);
   const [relations, setRelations] = useState<TreeRelation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -626,14 +629,20 @@ export default function FamilyTreeView({ familyId, family, meId }: Props) {
       }
       setEditState({ open: false, person: null });
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Ошибка");
+      void notify({ title: e instanceof Error ? e.message : "Ошибка", tone: "danger" });
     } finally {
       setBusy(false);
     }
   }
 
   async function handleDeletePerson(id: string) {
-    if (!confirm("Удалить человека из древа? Связи с ним тоже исчезнут.")) return;
+    const ok = await confirm({
+      title: "Удалить человека из древа?",
+      description: "Связи с ним тоже исчезнут.",
+      confirmLabel: "Удалить",
+      tone: "danger",
+    });
+    if (!ok) return;
     setBusy(true);
     try {
       await deleteTreePerson(id);
@@ -643,7 +652,10 @@ export default function FamilyTreeView({ familyId, family, meId }: Props) {
       );
       if (selectedPersonId === id) setSelectedPersonId(null);
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Не удалось удалить");
+      void notify({
+        title: e instanceof Error ? e.message : "Не удалось удалить",
+        tone: "danger",
+      });
     } finally {
       setBusy(false);
     }
@@ -664,20 +676,31 @@ export default function FamilyTreeView({ familyId, family, meId }: Props) {
       setRelations((prev) => [...prev, created]);
       setShowRelationModal(false);
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Не удалось добавить связь");
+      void notify({
+        title: e instanceof Error ? e.message : "Не удалось добавить связь",
+        tone: "danger",
+      });
     } finally {
       setBusy(false);
     }
   }
 
   async function handleDeleteRelation(relationId: string) {
-    if (!confirm("Удалить связь?")) return;
+    const ok = await confirm({
+      title: "Удалить связь?",
+      confirmLabel: "Удалить",
+      tone: "danger",
+    });
+    if (!ok) return;
     setBusy(true);
     try {
       await deleteTreeRelation(relationId);
       setRelations((prev) => prev.filter((r) => r.id !== relationId));
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Не удалось удалить связь");
+      void notify({
+        title: e instanceof Error ? e.message : "Не удалось удалить связь",
+        tone: "danger",
+      });
     } finally {
       setBusy(false);
     }
@@ -935,7 +958,7 @@ function PersonFormModal({
       aria-label={person ? "Редактировать человека" : "Добавить человека"}
     >
       <div
-        className="w-full max-w-md rounded-3xl border border-white/70 bg-white/88 backdrop-blur-2xl p-6 shadow-[0_30px_90px_rgba(28,23,20,0.25)] max-h-[92vh] overflow-y-auto"
+        className="w-full max-w-md rounded-3xl border border-[color:var(--border-glass-strong)] bg-[color:var(--bg-elevated)] backdrop-blur-2xl p-6 shadow-[0_30px_90px_var(--scrim-4)] max-h-[92vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-2">
@@ -975,21 +998,17 @@ function PersonFormModal({
 
           <label className="block">
             <span className="text-xs text-ink-500 font-body">Пол</span>
-            <select
-              className="input-field mt-1"
+            <Select<TreeGender>
+              className="mt-1"
               value={values.gender}
-              onChange={(e) =>
-                setValues((v) => ({
-                  ...v,
-                  gender: e.target.value as TreeGender,
-                }))
-              }
-            >
-              <option value="unknown">Не указан</option>
-              <option value="male">Мужской</option>
-              <option value="female">Женский</option>
-              <option value="other">Другой</option>
-            </select>
+              onChange={(g) => setValues((v) => ({ ...v, gender: g }))}
+              options={[
+                { value: "unknown", label: "Не указан" },
+                { value: "male", label: "Мужской" },
+                { value: "female", label: "Женский" },
+                { value: "other", label: "Другой" },
+              ]}
+            />
           </label>
 
           <div className="grid grid-cols-2 gap-2">
@@ -1034,25 +1053,26 @@ function PersonFormModal({
               <span className="text-xs text-ink-500 font-body">
                 Привязать к участнику семьи
               </span>
-              <select
-                className="input-field mt-1"
+              <Select<string>
+                className="mt-1"
                 value={values.user_id}
-                onChange={(e) =>
-                  setValues((v) => ({ ...v, user_id: e.target.value }))
-                }
-              >
-                <option value="">— не привязывать —</option>
-                {person?.user_id && (
-                  <option value={person.user_id}>
-                    {person.display_name} (текущая привязка)
-                  </option>
-                )}
-                {linkOptions.map((m) => (
-                  <option key={m.user_id} value={m.user_id}>
-                    {m.display_name} (@{m.username})
-                  </option>
-                ))}
-              </select>
+                onChange={(v) => setValues((s) => ({ ...s, user_id: v }))}
+                options={[
+                  { value: "", label: "— не привязывать —" },
+                  ...(person?.user_id
+                    ? [
+                        {
+                          value: person.user_id,
+                          label: `${person.display_name} (текущая привязка)`,
+                        },
+                      ]
+                    : []),
+                  ...linkOptions.map((m) => ({
+                    value: m.user_id,
+                    label: `${m.display_name} (@${m.username})`,
+                  })),
+                ]}
+              />
             </label>
           ) : null}
 
@@ -1142,7 +1162,7 @@ function RelationFormModal({
       aria-label="Создать связь"
     >
       <div
-        className="w-full max-w-md rounded-3xl border border-white/70 bg-white/88 backdrop-blur-2xl p-6 shadow-[0_30px_90px_rgba(28,23,20,0.25)]"
+        className="w-full max-w-md rounded-3xl border border-[color:var(--border-glass-strong)] bg-[color:var(--bg-elevated)] backdrop-blur-2xl p-6 shadow-[0_30px_90px_var(--scrim-4)]"
         onClick={(e) => e.stopPropagation()}
       >
         <p className="text-xs uppercase tracking-[0.16em] text-ink-400 font-body">
@@ -1155,48 +1175,45 @@ function RelationFormModal({
         <form onSubmit={handleSubmit} className="mt-5 space-y-3">
           <label className="block">
             <span className="text-xs text-ink-500 font-body">Тип связи</span>
-            <select
-              className="input-field mt-1"
+            <Select<TreeRelationType>
+              className="mt-1"
               value={type}
-              onChange={(e) => setType(e.target.value as TreeRelationType)}
-            >
-              <option value="parent">Родитель → ребёнок</option>
-              <option value="spouse">Супруги</option>
-            </select>
+              onChange={setType}
+              options={[
+                { value: "parent", label: "Родитель → ребёнок" },
+                { value: "spouse", label: "Супруги" },
+              ]}
+            />
           </label>
 
           <label className="block">
             <span className="text-xs text-ink-500 font-body">
               {type === "parent" ? "Родитель" : "Супруг(а)"}
             </span>
-            <select
-              className="input-field mt-1"
+            <Select<string>
+              className="mt-1"
               value={aId}
-              onChange={(e) => setAId(e.target.value)}
-            >
-              {persons.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.display_name}
-                </option>
-              ))}
-            </select>
+              onChange={setAId}
+              options={persons.map((p) => ({
+                value: p.id,
+                label: p.display_name,
+              }))}
+            />
           </label>
 
           <label className="block">
             <span className="text-xs text-ink-500 font-body">
               {type === "parent" ? "Ребёнок" : "Супруг(а)"}
             </span>
-            <select
-              className="input-field mt-1"
+            <Select<string>
+              className="mt-1"
               value={bId}
-              onChange={(e) => setBId(e.target.value)}
-            >
-              {persons.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.display_name}
-                </option>
-              ))}
-            </select>
+              onChange={setBId}
+              options={persons.map((p) => ({
+                value: p.id,
+                label: p.display_name,
+              }))}
+            />
           </label>
 
           {warn && <p className="text-xs text-red-500 font-body">{warn}</p>}

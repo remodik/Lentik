@@ -7,7 +7,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_current_user
+from app.core.permissions import Perm
 from app.db.deps import get_db
+from app.services.audit import log_action
+from app.services.roles import require_channel_perm, require_family_perm
 from app.models.channel import Channel
 from app.models.membership import Membership, Role
 from app.models.post import Post
@@ -59,6 +62,22 @@ def _ensure_age_gate(channel: Channel, user: User) -> None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Канал 18+. Доступ запрещён.",
+        )
+
+
+async def _ensure_channel_18plus_perm(
+    channel: Channel, membership: Membership, db: AsyncSession
+) -> None:
+    if not channel.is_18plus or membership.role.value == "owner":
+        return
+    from app.core.permissions import has_perm
+    from app.services.roles import effective_permissions
+
+    bits = await effective_permissions(db, membership.id)
+    if not has_perm(bits, Perm.ACCESS_18PLUS):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="У вашей роли нет права доступа к контенту 18+.",
         )
 
 
@@ -114,8 +133,7 @@ async def create_channel(
     user: User = Depends(get_current_user),
 ):
     m = await _require_member(family_id, user, db)
-    if m.role != Role.OWNER:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only owner can create channels")
+    await require_family_perm(db, m, Perm.MANAGE_CHANNELS)
 
     channel = Channel(
         family_id=family_id,
@@ -126,6 +144,16 @@ async def create_channel(
         created_by=user.id,
     )
     db.add(channel)
+    await db.flush()
+    await log_action(
+        db,
+        family_id=family_id,
+        actor_id=user.id,
+        action="channel.created",
+        target_type="channel",
+        target_id=channel.id,
+        metadata={"name": channel.name, "is_18plus": channel.is_18plus},
+    )
     await db.commit()
     await db.refresh(channel)
     return channel
@@ -140,26 +168,48 @@ async def update_channel(
     user: User = Depends(get_current_user),
 ):
     m = await _require_member(family_id, user, db)
-    if m.role != Role.OWNER:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only owner can edit channel settings",
-        )
+    await require_channel_perm(db, m, channel_id, Perm.MANAGE_CHANNELS)
 
     channel = await db.get(Channel, channel_id)
     if not channel or channel.family_id != family_id:
         raise HTTPException(status_code=404, detail="Channel not found")
 
     updated = body.model_fields_set
-    if "name" in updated and body.name is not None:
+    changes: dict[str, dict] = {}
+    if "name" in updated and body.name is not None and body.name != channel.name:
+        changes["name"] = {"from": channel.name, "to": body.name}
         channel.name = body.name
-    if "description" in updated:
+    if "description" in updated and body.description != channel.description:
+        changes["description"] = {"from": channel.description, "to": body.description}
         channel.description = body.description
-    if "slow_mode_seconds" in updated and body.slow_mode_seconds is not None:
+    if (
+        "slow_mode_seconds" in updated
+        and body.slow_mode_seconds is not None
+        and body.slow_mode_seconds != channel.slow_mode_seconds
+    ):
+        changes["slow_mode_seconds"] = {
+            "from": channel.slow_mode_seconds,
+            "to": body.slow_mode_seconds,
+        }
         channel.slow_mode_seconds = body.slow_mode_seconds
-    if "is_18plus" in updated and body.is_18plus is not None:
+    if (
+        "is_18plus" in updated
+        and body.is_18plus is not None
+        and body.is_18plus != channel.is_18plus
+    ):
+        changes["is_18plus"] = {"from": channel.is_18plus, "to": body.is_18plus}
         channel.is_18plus = body.is_18plus
 
+    if changes:
+        await log_action(
+            db,
+            family_id=family_id,
+            actor_id=user.id,
+            action="channel.updated",
+            target_type="channel",
+            target_id=channel_id,
+            metadata={"name": channel.name, "changes": changes},
+        )
     await db.commit()
     await db.refresh(channel)
     return channel
@@ -174,12 +224,13 @@ async def list_posts(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    await _require_member(family_id, user, db)
+    m = await _require_member(family_id, user, db)
 
     channel = await db.get(Channel, channel_id)
     if not channel or channel.family_id != family_id:
         raise HTTPException(status_code=404, detail="Channel not found")
     _ensure_age_gate(channel, user)
+    await _ensure_channel_18plus_perm(channel, m, db)
 
     posts = await db.scalars(
         select(Post)
@@ -200,14 +251,14 @@ async def create_post(
     user: User = Depends(get_current_user),
 ):
     membership = await _require_member(family_id, user, db)
-    if membership.role != Role.OWNER:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only owner can post to channels")
-
     channel = await db.get(Channel, channel_id)
     if not channel or channel.family_id != family_id:
         raise HTTPException(status_code=404, detail="Channel not found")
 
+    await require_channel_perm(db, membership, channel_id, Perm.SEND_MESSAGES)
+
     _ensure_age_gate(channel, user)
+    await _ensure_channel_18plus_perm(channel, membership, db)
     await _enforce_slow_mode(channel, user, membership, db)
 
     post = Post(

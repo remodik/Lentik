@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import React from "react";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import { ConfirmProvider } from "@/components/ConfirmDialog";
 
 export const metadata: Metadata = {
     title: "Lentik — Семейный альбом",
@@ -62,7 +63,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             />
         </head>
         <body>
-        <ThemeProvider>{children}</ThemeProvider>
+        <ThemeProvider>
+            <ConfirmProvider>{children}</ConfirmProvider>
+        </ThemeProvider>
         {/*
             Не регистрируем service worker. У ранних посетителей мог
             остаться зарегистрированный /sw.js — для них в /public/sw.js

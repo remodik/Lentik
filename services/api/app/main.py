@@ -2,7 +2,6 @@ import logging
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from sqlalchemy import update, func
 
 from app.core.config import settings
@@ -17,6 +16,9 @@ from app.routers.chats import router as chats_router
 from app.routers.expenses import router as expenses_router
 from app.routers.families import router as families_router
 from app.routers.families_join import router as families_join_router
+from app.routers.audit_log import router as audit_log_router
+from app.routers.family_roles import router as family_roles_router
+from app.routers.permission_overrides import router as permission_overrides_router
 from app.routers.family_tree import (
     family_router as family_tree_family_router,
     person_router as family_tree_person_router,
@@ -26,6 +28,7 @@ from app.routers.gallery import router as gallery_router
 from app.routers.invites import router as invites_router
 from app.routers.me import router as me_router
 from app.routers.notes import family_router as notes_family_router, note_router as notes_note_router
+from app.routers.uploads import router as uploads_router
 from app.routers.reminders import (
     family_router as reminders_family_router,
     reminder_router as reminders_reminder_router,
@@ -82,7 +85,6 @@ async def _check_migrations() -> None:
         logger.warning("Migration check skipped: %s", exc)
 
 
-
 async def _auto_migrate() -> None:
     try:
         import asyncio
@@ -102,17 +104,19 @@ def create_app() -> FastAPI:
     
     app_.add_middleware(
         CORSMiddleware,
-        allow_origin_regex=r"https?://.*",
+        allow_origins=settings.cors_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
 
-    app_.mount("/static/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
-
+    app_.include_router(uploads_router)
     app_.include_router(auth_router)
     app_.include_router(invites_router)
     app_.include_router(families_router)
+    app_.include_router(family_roles_router)
+    app_.include_router(permission_overrides_router)
+    app_.include_router(audit_log_router)
     app_.include_router(me_router)
     app_.include_router(chats_router)
     app_.include_router(channels_router)

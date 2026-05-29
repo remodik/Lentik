@@ -50,9 +50,9 @@ export default function LoginPage() {
             <div
               className="inline-flex items-center justify-center w-14 h-14 rounded-[20px] mb-4 glossy"
               style={{
-                background: "#1c1714",
+                background: "rgb(var(--ink-900))",
                 boxShadow:
-                  "0 12px 36px rgba(28,23,20,0.32), inset 0 1px 0 rgba(255,255,255,0.10)",
+                  "0 12px 36px var(--scrim-4), inset 0 1px 0 var(--highlight-1)",
               }}
             >
               <House className="w-5 h-5 text-cream-50" strokeWidth={2.1} />
@@ -136,7 +136,7 @@ export default function LoginPage() {
           font-weight: 600;
           text-transform: uppercase;
           letter-spacing: 0.08em;
-          color: #6b5a4e;
+          color: var(--text-tertiary);
           font-family: "DM Sans", sans-serif;
         }
       `}</style>
@@ -154,21 +154,21 @@ function Blobs() {
         className="absolute -top-48 -right-48 w-[560px] h-[560px] rounded-full opacity-55 blur-3xl"
         style={{
           background:
-            "radial-gradient(circle, rgba(245,213,176,0.85) 0%, rgba(232,213,184,0.45) 55%, transparent 100%)",
+            "radial-gradient(circle, rgb(var(--warm-200) / 0.85) 0%, rgb(var(--cream-300) / 0.45) 55%, transparent 100%)",
         }}
       />
       <div
         className="absolute -bottom-32 -left-32 w-[420px] h-[420px] rounded-full opacity-60 blur-3xl"
         style={{
           background:
-            "radial-gradient(circle, rgba(250,235,215,0.80) 0%, transparent 70%)",
+            "radial-gradient(circle, rgb(var(--warm-100) / 0.80) 0%, transparent 70%)",
         }}
       />
       <div
         className="absolute top-[32%] left-[58%] w-64 h-64 rounded-full opacity-35 blur-2xl"
         style={{
           background:
-            "radial-gradient(circle, rgba(196,149,106,0.55) 0%, transparent 70%)",
+            "radial-gradient(circle, rgb(var(--warm-400) / 0.55) 0%, transparent 70%)",
         }}
       />
     </div>

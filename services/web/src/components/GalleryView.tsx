@@ -25,6 +25,9 @@ import {
 import { createPortal } from "react-dom";
 import { getGallery, type GalleryItem } from "@/lib/api";
 import { apiFetch, normalizeApiPayload } from "@/lib/api-base";
+import { useConfirm } from "@/components/ConfirmDialog";
+import Select from "@/components/Select";
+import { hasBit, PERM, usePermissions } from "@/lib/usePermissions";
 
 type ViewMode = "grid" | "list";
 type SortMode = "newest" | "oldest" | "name" | "size";
@@ -331,6 +334,7 @@ function Lightbox({
   onClose,
   onDelete,
   meId,
+  canManageOthers,
   onPrev,
   onNext,
   onSelect,
@@ -340,6 +344,7 @@ function Lightbox({
   onClose: () => void;
   onDelete: (id: string) => void;
   meId: string;
+  canManageOthers?: boolean;
   onPrev: () => void;
   onNext: () => void;
   onSelect: (id: string) => void;
@@ -347,7 +352,7 @@ function Lightbox({
   const [deleting, setDeleting] = useState(false);
   const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
   const idx = items.findIndex((i) => i.id === item.id);
-  const canDelete = item.uploaded_by === meId;
+  const canDelete = item.uploaded_by === meId || !!canManageOthers;
   const itemPoster = item.media_type === "video" ? getVideoPoster(item) : null;
 
   useEffect(() => {
@@ -544,6 +549,26 @@ function Lightbox({
   );
 }
 
+type MediaFilter = "all" | "image" | "video";
+
+const FILTER_LABEL: Record<MediaFilter, string> = {
+  all: "Все",
+  image: "Фото",
+  video: "Видео",
+};
+
+const FILTER_EMPTY_TITLE: Record<MediaFilter, string> = {
+  all: "Галерея пуста",
+  image: "Фото пока нет",
+  video: "Видео пока нет",
+};
+
+const FILTER_EMPTY_SUB: Record<MediaFilter, string> = {
+  all: "Загрузи первое фото или видео",
+  image: "Загрузи первое фото",
+  video: "Загрузи первое видео",
+};
+
 export default function GalleryView({
   familyId,
   meId,
@@ -551,12 +576,20 @@ export default function GalleryView({
   familyId: string;
   meId: string;
 }) {
+  const { confirm } = useConfirm();
+  const { perms } = usePermissions();
+  const canManageOthers =
+    !!perms &&
+    (perms.is_owner ||
+      perms.is_administrator ||
+      hasBit(perms.base, PERM.MANAGE_GALLERY));
   const [items, setItems] = useState<GalleryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
 
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
+  const [mediaFilter, setMediaFilter] = useState<MediaFilter>("all");
   const [sort, setSort] = useState<SortMode>("newest");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -571,9 +604,24 @@ export default function GalleryView({
       .finally(() => setLoading(false));
   }, [familyId]);
 
+  const mediaItems = useMemo(
+    () => items.filter((it) => it.media_type !== "file"),
+    [items],
+  );
+
+  const counts = useMemo(
+    () => ({
+      all: mediaItems.length,
+      image: mediaItems.filter((it) => it.media_type === "image").length,
+      video: mediaItems.filter((it) => it.media_type === "video").length,
+    }),
+    [mediaItems],
+  );
+
   const filtered = useMemo(() => {
-    return items
+    return mediaItems
       .filter((it) => {
+        if (mediaFilter !== "all" && it.media_type !== mediaFilter) return false;
         if (!search) return true;
         const q = search.toLowerCase();
         return (
@@ -595,7 +643,7 @@ export default function GalleryView({
         if (sort === "size") return (b.file_size ?? 0) - (a.file_size ?? 0);
         return 0;
       });
-  }, [items, search, sort]);
+  }, [mediaItems, search, sort, mediaFilter]);
 
   async function uploadFiles(files: FileList | File[]) {
     const arr = Array.from(files);
@@ -782,6 +830,26 @@ export default function GalleryView({
         </div>
 
         <div className="head-row secondary">
+          <div
+            className="media-filter"
+            role="tablist"
+            aria-label="Тип медиа"
+          >
+            {(["all", "image", "video"] as const).map((f) => (
+              <button
+                key={f}
+                type="button"
+                role="tab"
+                aria-selected={mediaFilter === f}
+                onClick={() => setMediaFilter(f)}
+                className={`media-filter-btn ${mediaFilter === f ? "active" : ""}`}
+              >
+                <span>{FILTER_LABEL[f]}</span>
+                <span className="media-filter-count">{counts[f]}</span>
+              </button>
+            ))}
+          </div>
+
           <div className="search">
             <span className="search-ic" aria-hidden>
               <IconSearch />
@@ -794,16 +862,16 @@ export default function GalleryView({
             />
           </div>
 
-          <select
+          <Select<SortMode>
             value={sort}
-            onChange={(e) => setSort(e.target.value as SortMode)}
-            className="select"
-          >
-            <option value="newest">Сначала новые</option>
-            <option value="oldest">Сначала старые</option>
-            <option value="name">По имени</option>
-            <option value="size">По размеру</option>
-          </select>
+            onChange={setSort}
+            options={[
+              { value: "newest", label: "Сначала новые" },
+              { value: "oldest", label: "Сначала старые" },
+              { value: "name", label: "По имени" },
+              { value: "size", label: "По размеру" },
+            ]}
+          />
 
           {selected.size > 0 && (
             <div className="bulk">
@@ -845,12 +913,10 @@ export default function GalleryView({
             </div>
             <div>
               <p className="empty-title">
-                {search ? "Ничего не найдено" : "Галерея пуста"}
+                {search ? "Ничего не найдено" : FILTER_EMPTY_TITLE[mediaFilter]}
               </p>
               <p className="empty-sub">
-                {search
-                  ? "Попробуй другой запрос"
-                  : "Загрузи первое фото или видео"}
+                {search ? "Попробуй другой запрос" : FILTER_EMPTY_SUB[mediaFilter]}
               </p>
             </div>
             {!search && (
@@ -869,7 +935,7 @@ export default function GalleryView({
           <div className="grid-wrap">
             {filtered.map((item) => {
               const isSelected = selected.has(item.id);
-              const canDel = item.uploaded_by === meId;
+              const canDel = item.uploaded_by === meId || canManageOthers;
               const videoPoster =
                 item.media_type === "video" ? getVideoPoster(item) : null;
               const videoDuration =
@@ -930,7 +996,12 @@ export default function GalleryView({
                           onPointerDown={(e) => e.stopPropagation()}
                           onClick={async (e) => {
                             e.stopPropagation();
-                            if (confirm("Удалить?")) await deleteItem(item.id);
+                            const ok = await confirm({
+                              title: "Удалить?",
+                              confirmLabel: "Удалить",
+                              tone: "danger",
+                            });
+                            if (ok) await deleteItem(item.id);
                           }}
                           className="tile-btn danger"
                           title="Удалить"
@@ -1058,6 +1129,7 @@ export default function GalleryView({
           item={lightboxItem}
           items={filtered}
           meId={meId}
+          canManageOthers={canManageOthers}
           onClose={() => setLightbox(null)}
           onDelete={(id) => {
             setItems((p) => p.filter((i) => i.id !== id));

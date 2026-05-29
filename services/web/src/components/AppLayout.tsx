@@ -9,6 +9,9 @@ import {
   House,
   HousePlus,
   Images,
+  Link2,
+  Pencil,
+  Settings,
   Info,
   LayoutGrid,
   MessageCircle,
@@ -33,7 +36,7 @@ import {
   type PresenceUpdateEvent,
 } from "@/components/NotificationSystem";
 
-export type AppSection = "chat" | "gallery" | "calendar" | "members" | "channels" | "notes" | "budget" | "reminders" | "tree";
+export type AppSection = "chat" | "gallery" | "files" | "calendar" | "members" | "channels" | "notes" | "budget" | "reminders" | "tree";
 
 type NavCategory = "chat" | "plans" | "media" | "family";
 
@@ -91,6 +94,7 @@ const SECTION_TO_CATEGORY: Record<AppSection, NavCategory> = {
   notes: "plans",
   reminders: "plans",
   gallery: "media",
+  files: "media",
   members: "family",
   tree: "family",
 };
@@ -148,8 +152,7 @@ const SIDEBAR_CATEGORIES: SidebarCategory[] = [
         label: "Медиа",
         items: [
           { id: "gallery", label: "Галерея", section: "gallery" },
-          { id: "files", label: "Файлы", routeOnClick: "gallery" },
-          { id: "video", label: "Видео", disabled: true, soon: true },
+          { id: "files", label: "Файлы", section: "files" },
         ],
       },
     ],
@@ -181,6 +184,9 @@ type Props = {
   onSection: (s: AppSection) => void;
   onFamilySwitch: (familyId: string) => void;
   onCreateFamily: () => void;
+  onJoinFamily?: () => void;
+  onRenameFamily?: (familyId: string, currentName: string) => void;
+  onOpenFamilySettings?: () => void;
   onLogout: () => void;
   onMeUpdate: (m: Me) => void;
   onChatOpen?: (chatId: string) => void;
@@ -212,6 +218,9 @@ export default function AppLayout({
   onSection,
   onFamilySwitch,
   onCreateFamily,
+  onJoinFamily,
+  onRenameFamily,
+  onOpenFamilySettings,
   onLogout,
   onMeUpdate,
   onChatOpen,
@@ -299,8 +308,8 @@ export default function AppLayout({
   return (
     <div className="app-layout">
       <aside className="app-sidebar glass-sidebar glossy">
-          <div className="app-sidebar-brand">
-            <div className="app-family-menu-anchor" ref={familyMenuRef}>
+          <div className="app-sidebar-brand" ref={familyMenuRef}>
+            <div className="app-family-menu-anchor">
               <button
                 type="button"
                 className={`app-brand-mark app-brand-home-btn ${isFamilyMenuOpen ? "active" : ""}`}
@@ -317,26 +326,46 @@ export default function AppLayout({
                   <div className="app-family-menu-list">
                     {myFamilies.map((item) => {
                       const isActiveFamily = item.family_id === family.id;
+                      const canRename = item.role === "owner" && onRenameFamily;
                       return (
-                        <button
+                        <div
                           key={item.family_id}
-                          type="button"
-                          role="menuitemradio"
-                          aria-checked={isActiveFamily}
-                          className={`app-family-menu-item ${isActiveFamily ? "active" : ""}`}
-                          onClick={() => {
-                            setFamilyMenuOpen(false);
-                            if (!isActiveFamily) onFamilySwitch(item.family_id);
-                          }}
-                          title={item.family_name}
+                          className={`app-family-menu-item flex items-center gap-1.5 ${isActiveFamily ? "active" : ""}`}
                         >
-                          <span className="truncate">{item.family_name}</span>
-                        </button>
+                          <button
+                            type="button"
+                            role="menuitemradio"
+                            aria-checked={isActiveFamily}
+                            className="flex-1 min-w-0 text-left truncate"
+                            onClick={() => {
+                              setFamilyMenuOpen(false);
+                              if (!isActiveFamily) onFamilySwitch(item.family_id);
+                            }}
+                            title={item.family_name}
+                          >
+                            {item.family_name}
+                          </button>
+                          {canRename && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setFamilyMenuOpen(false);
+                                onRenameFamily?.(item.family_id, item.family_name);
+                              }}
+                              className="w-6 h-6 shrink-0 rounded-md grid place-items-center text-ink-400 hover:text-ink-700 hover:bg-white/60 transition"
+                              aria-label={`Переименовать семью «${item.family_name}»`}
+                              title="Переименовать"
+                            >
+                              <Pencil className="w-3 h-3" strokeWidth={2.3} />
+                            </button>
+                          )}
+                        </div>
                       );
                     })}
                   </div>
 
-                  <div className="app-family-menu-footer">
+                  <div className="app-family-menu-footer flex flex-col gap-1">
                     <button
                       type="button"
                       className="app-family-create"
@@ -348,14 +377,27 @@ export default function AppLayout({
                       <HousePlus className="w-[14px] h-[14px]" strokeWidth={2.2} />
                       <span>Создать семью</span>
                     </button>
+                    {onJoinFamily && (
+                      <button
+                        type="button"
+                        className="app-family-create"
+                        onClick={() => {
+                          setFamilyMenuOpen(false);
+                          onJoinFamily();
+                        }}
+                      >
+                        <Link2 className="w-[14px] h-[14px]" strokeWidth={2.2} />
+                        <span>Вступить по приглашению</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <button
                 type="button"
-                className="app-family-title-row"
+                className="app-family-title-row min-w-0 w-full"
                 onClick={() => setFamilyMenuOpen((open) => !open)}
                 aria-label="Открыть список семей"
                 aria-expanded={isFamilyMenuOpen}
@@ -369,9 +411,23 @@ export default function AppLayout({
                   aria-hidden
                 />
               </button>
-              <p className="text-[11px] text-ink-400 font-body mt-0.5 truncate">
-                Семейное пространство
-              </p>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <p className="text-[11px] text-ink-400 font-body truncate flex-1">
+                  Семейное пространство
+                </p>
+                {onOpenFamilySettings && (
+                  <button
+                    type="button"
+                    onClick={onOpenFamilySettings}
+                    className="w-7 h-7 rounded-md grid place-items-center text-ink-400 hover:text-ink-900 hover:bg-white/60 transition shrink-0"
+                    aria-label="Настройки семьи"
+                    data-tooltip="Настройки семьи"
+                    data-testid="family-settings-btn"
+                  >
+                    <Settings className="w-3.5 h-3.5" strokeWidth={2.2} />
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 

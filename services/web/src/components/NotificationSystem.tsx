@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getAuthToken, wsUrl } from "@/lib/api-base";
+import { fetchWsTicket, wsUrl } from "@/lib/api-base";
 
 export type NotificationType =
   | "mention"
@@ -269,11 +269,12 @@ export function useNotifications(
       }, 30000);
     };
 
-    function connect() {
+    async function connect() {
       if (!alive) return;
 
-      const token = getAuthToken();
-      const query = token ? `?token=${encodeURIComponent(token)}` : "";
+      const ticket = await fetchWsTicket();
+      if (!alive) return;
+      const query = ticket ? `?ticket=${encodeURIComponent(ticket)}` : "";
       const ws = new WebSocket(wsUrl(`/families/${familyId}/ws${query}`));
       wsRef.current = ws;
 
@@ -306,7 +307,7 @@ export function useNotifications(
       ws.onclose = () => {
         stopPing();
         if (!alive) return;
-        reconnectTimeout = setTimeout(connect, 3000);
+        reconnectTimeout = setTimeout(() => { void connect(); }, 3000);
       };
 
       ws.onerror = () => {
@@ -314,7 +315,7 @@ export function useNotifications(
       };
     }
 
-    connect();
+    void connect();
 
     return () => {
       alive = false;

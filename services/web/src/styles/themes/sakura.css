@@ -53,4 +53,31 @@
   --ink-700: 117 54 82;
   --ink-800: 90 39 62;
   --ink-900: 61 26 42;
+
+  /* Status colors — shifted toward magenta-red so danger coexists with pink accent */
+  --danger-bg-soft:       rgba(254, 220, 226, 0.72);
+  --danger-bg-medium:     rgba(252, 195, 205, 0.85);
+  --danger-border-faint:  rgba(232, 90, 126, 0.14);
+  --danger-border:        rgba(232, 90, 126, 0.42);
+  --danger-fg:            #e85a7e;
+  --danger-fg-strong:     #d63b65;
+  --danger-fg-bold:       #b8254d;
+  --danger-solid:         rgba(232, 90, 126, 0.90);
+
+  --warning-bg-soft:      rgba(255, 235, 220, 0.70);
+  --warning-bg:           rgba(245, 170, 60, 0.14);
+  --warning-bg-strong:    rgba(245, 170, 60, 0.22);
+  --warning-fg:           #f5a23c;
+
+  --success-bg:           rgba(120, 220, 160, 0.45);
+  --success-fg:           #54c98a;
+
+  --info-bg-soft:         rgba(220, 230, 255, 0.72);
+  --info-border:          rgba(160, 180, 250, 0.55);
+  --info-fg:              #5b7cd9;
+  --info-fg-light:        #8aa5e8;
+
+  --special-bg:           rgba(240, 220, 255, 0.72);
+  --special-border:       rgba(200, 160, 240, 0.55);
+  --special-fg:           #9b5fd9;
 }

@@ -1,13 +1,17 @@
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_current_user
+from app.core.config import settings
+from app.core.jwt import COOKIE_NAME, create_access_token
 from app.core.security import hash_pin, verify_pin
-from app.core.uploads import get_upload_root
+from app.core.uploads import get_upload_root, resolve_upload_path
+from app.ws.manager import ws_manager
 from app.db.deps import get_db
 from app.models.family import Family
 from app.models.membership import Membership
@@ -51,6 +55,9 @@ async def update_profile(
     if body.birthday is not None:
         user.birthday = body.birthday
 
+    if body.ui_mode is not None:
+        user.ui_mode = body.ui_mode
+
     await db.commit()
     await db.refresh(user)
     return user
@@ -59,13 +66,25 @@ async def update_profile(
 @router.patch("/pin", status_code=status.HTTP_204_NO_CONTENT)
 async def change_pin(
     body: ChangePinRequest,
+    response: Response,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     if not verify_pin(body.current_pin, user.password_hash):
         raise HTTPException(status_code=400, detail="Неверный текущий PIN")
     user.password_hash = hash_pin(body.new_pin)
+    # Отозвать все ранее выпущенные JWT этого пользователя (включая
+    # потенциально украденные). Текущая сессия получит свежую cookie ниже.
+    user.password_changed_at = datetime.now(timezone.utc)
     await db.commit()
+    await db.refresh(user)
+
+    fresh_token = create_access_token(user.id, not_before=user.password_changed_at)
+    response.set_cookie(
+        key=COOKIE_NAME, value=fresh_token,
+        httponly=True, secure=settings.is_production, samesite="lax",
+        max_age=30 * 24 * 3600, path="/",
+    )
 
 
 @router.post("/avatar", response_model=MeResponse)
@@ -94,8 +113,9 @@ async def upload_avatar(
         ) from exc
 
     if user.avatar_url:
-        old_path = UPLOAD_ROOT / user.avatar_url.removeprefix("/static/uploads/")
-        old_path.unlink(missing_ok=True)
+        old_path = resolve_upload_path(user.avatar_url)
+        if old_path:
+            old_path.unlink(missing_ok=True)
 
     user.avatar_url = f"/static/uploads/avatars/{filename}"
     await db.commit()
@@ -144,3 +164,4 @@ async def leave_family(
 
     await db.delete(m)
     await db.commit()
+    await ws_manager.kick_user_from_family(family_id, user.id)

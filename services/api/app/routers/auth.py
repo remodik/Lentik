@@ -1,13 +1,21 @@
 import random
 import string
+from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_current_user
+from app.core.config import settings
 from app.core.jwt import COOKIE_NAME, create_access_token
+from app.core.rate_limit import (
+    check_username_limiter,
+    pin_failure_ip_limiter,
+    pin_failure_limiter,
+)
 from app.core.security import hash_pin, verify_pin
+from app.core.ws_tickets import ws_ticket_store
 from app.db.deps import get_db
 from app.models.membership import Membership, Role
 from app.models.user import User
@@ -18,6 +26,10 @@ from app.services.invites import consume_invite, lock_active_invite
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 TOKEN_MAX_AGE = 30 * 24 * 3600
+
+
+def _client_ip(request: Request) -> str:
+    return request.client.host if request.client else "unknown"
 
 
 async def _generate_suggestions(base: str, db: AsyncSession, count: int = 3) -> list[str]:
@@ -33,11 +45,11 @@ async def _generate_suggestions(base: str, db: AsyncSession, count: int = 3) -> 
     return suggestions
 
 
-def _set_jwt_cookie(response: Response, user_id) -> str:
-    token = create_access_token(user_id)
+def _set_jwt_cookie(response: Response, user: User) -> str:
+    token = create_access_token(user.id, not_before=user.password_changed_at)
     response.set_cookie(
         key=COOKIE_NAME, value=token,
-        httponly=True, secure=False, samesite="lax",
+        httponly=True, secure=settings.is_production, samesite="lax",
         max_age=TOKEN_MAX_AGE, path="/",
     )
     return token
@@ -45,9 +57,15 @@ def _set_jwt_cookie(response: Response, user_id) -> str:
 
 @router.get("/check-username")
 async def check_username(
+    request: Request,
     username: str,
     db: AsyncSession = Depends(get_db),
 ):
+    if not await check_username_limiter.allow(f"ip:{_client_ip(request)}"):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Слишком много запросов, попробуйте позже",
+        )
     taken = await db.scalar(select(User.id).where(User.username == username))
     if not taken:
         return {"available": True, "suggestions": []}
@@ -74,29 +92,60 @@ async def register(
     await db.commit()
     await db.refresh(user)
 
-    token = _set_jwt_cookie(response, user.id)
+    token = _set_jwt_cookie(response, user)
     return AuthResponse(user_id=str(user.id), access_token=token)
 
 
 @router.post("/pin", response_model=AuthResponse)
 async def login_by_pin(
+    request: Request,
     body: AuthPinRequest,
     response: Response,
     db: AsyncSession = Depends(get_db),
 ):
+    user_key = f"user:{body.username.lower()}"
+    ip_key = f"ip:{_client_ip(request)}"
+    if (
+        await pin_failure_limiter.count(user_key) >= pin_failure_limiter.limit
+        or await pin_failure_ip_limiter.count(ip_key) >= pin_failure_ip_limiter.limit
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Слишком много неудачных попыток. Попробуйте позже.",
+        )
+
     user = await db.scalar(select(User).where(User.username == body.username))
     if not user or not verify_pin(body.pin, user.password_hash):
+        await pin_failure_limiter.record(user_key)
+        await pin_failure_ip_limiter.record(ip_key)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Неверные данные")
 
-    token = _set_jwt_cookie(response, user.id)
+    await pin_failure_limiter.reset(user_key)
+    token = _set_jwt_cookie(response, user)
     return AuthResponse(user_id=str(user.id), access_token=token)
+
+
+@router.post("/ws-ticket")
+async def issue_ws_ticket(user: User = Depends(get_current_user)):
+    """Выдать одноразовый короткоживущий тикет для WebSocket-handshake.
+
+    Клиент открывает WS с `?ticket=<value>` вместо `?token=<JWT>`, чтобы
+    долгоживущий JWT не попадал в URL/логи/Referer/историю браузера.
+    """
+    ticket, expires_in = await ws_ticket_store.issue(user.id)
+    return {"ticket": ticket, "expires_in": expires_in}
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 async def logout(
     response: Response,
-    _user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
+    # Logout-everywhere: сдвигаем password_changed_at, чтобы любые ранее
+    # выпущенные JWT этого пользователя перестали приниматься.
+    user.password_changed_at = datetime.now(timezone.utc)
+    await db.commit()
     response.delete_cookie(key=COOKIE_NAME, path="/")
 
 
@@ -122,7 +171,14 @@ async def join_by_invite(
     db.add(user)
     await db.flush()
 
-    db.add(Membership(user_id=user.id, family_id=invite.family_id, role=Role.MEMBER))
+    membership = Membership(user_id=user.id, family_id=invite.family_id, role=Role.MEMBER)
+    db.add(membership)
+    await db.flush()
+
+    from app.services.roles import assign_default_roles_on_join
+
+    await assign_default_roles_on_join(db, membership)
+
     consume_invite(invite)
     await db.commit()
 
@@ -136,7 +192,7 @@ async def join_by_invite(
         },
     )
 
-    token = _set_jwt_cookie(response, user.id)
+    token = _set_jwt_cookie(response, user)
     return JoinByInviteResponse(
         user_id=user.id,
         family_id=invite.family_id,

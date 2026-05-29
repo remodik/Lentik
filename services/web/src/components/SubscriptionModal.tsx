@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { X } from "lucide-react";
+import { useConfirm } from "@/components/ConfirmDialog";
 
 type Plan = {
   id: string;
@@ -65,6 +66,7 @@ type Props = {
 };
 
 export default function SubscriptionModal({ open, onClose }: Props) {
+  const { notify } = useConfirm();
   const [selectedPlanId, setSelectedPlanId] = useState<string>(PLANS[1].id);
 
   const selectedPlan = useMemo(
@@ -73,9 +75,10 @@ export default function SubscriptionModal({ open, onClose }: Props) {
   );
 
   function handleSubscribe() {
-    alert(
-      `Оплата пока не подключена.\nЗаглушка: выбран тариф «${selectedPlan.name}».`,
-    );
+    void notify({
+      title: "Оплата пока не подключена",
+      description: `Заглушка: выбран тариф «${selectedPlan.name}».`,
+    });
   }
 
   if (!open) return null;
@@ -89,7 +92,7 @@ export default function SubscriptionModal({ open, onClose }: Props) {
       aria-label="Покупка подписки"
     >
       <div
-        className="w-full max-w-4xl rounded-[28px] border border-white/65 bg-white/85 backdrop-blur-2xl shadow-[0_30px_90px_rgba(28,23,20,0.24)] p-5 sm:p-7"
+        className="w-full max-w-4xl rounded-[28px] border border-[color:var(--border-glass-strong)] bg-[color:var(--bg-elevated)] backdrop-blur-2xl shadow-[0_30px_90px_var(--scrim-4)] p-5 sm:p-7"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-4 mb-5">
@@ -127,8 +130,8 @@ export default function SubscriptionModal({ open, onClose }: Props) {
                 onClick={() => setSelectedPlanId(plan.id)}
                 className={`text-left rounded-3xl border p-4 transition-all ${
                   active
-                    ? "border-ink-900 bg-ink-900 text-cream-50 shadow-[0_20px_50px_rgba(17,24,39,0.3)]"
-                    : "border-white/70 bg-white/55 text-ink-800 hover:bg-white/75"
+                    ? "border-ink-900 bg-ink-900 text-cream-50 shadow-[0_20px_50px_var(--scrim-5)]"
+                    : "border-[color:var(--border-glass-strong)] bg-[color:var(--bg-surface)] text-ink-800 hover:bg-[color:var(--bg-surface-strong)]"
                 }`}
               >
                 <p

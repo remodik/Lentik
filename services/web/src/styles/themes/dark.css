@@ -46,4 +46,46 @@
   --ink-700: 200 178 159;
   --ink-800: 223 207 191;
   --ink-900: 240 230 217;
+
+  /* Status colors — darker, more saturated backgrounds; brighter foregrounds */
+  --danger-bg-soft:       rgba(127, 29, 29, 0.45);
+  --danger-bg-medium:     rgba(153, 27, 27, 0.55);
+  --danger-border-faint:  rgba(248, 113, 113, 0.18);
+  --danger-border:        rgba(248, 113, 113, 0.50);
+  --danger-fg:            #fca5a5;
+  --danger-fg-strong:     #f87171;
+  --danger-fg-bold:       #ef4444;
+  --danger-solid:         rgba(220, 38, 38, 0.85);
+
+  --warning-bg-soft:      rgba(120, 53, 15, 0.45);
+  --warning-bg:           rgba(251, 191, 36, 0.10);
+  --warning-bg-strong:    rgba(251, 191, 36, 0.18);
+  --warning-fg:           #fcd34d;
+
+  --success-bg:           rgba(22, 101, 52, 0.45);
+  --success-fg:           #86efac;
+
+  --info-bg-soft:         rgba(30, 58, 138, 0.40);
+  --info-border:          rgba(96, 165, 250, 0.40);
+  --info-fg:              #93c5fd;
+  --info-fg-light:        #bfdbfe;
+
+  --special-bg:           rgba(88, 28, 135, 0.42);
+  --special-border:       rgba(192, 132, 252, 0.45);
+  --special-fg:           #c4b5fd;
+
+  /* Overlays — white highlights muted on dark glass; dims deeper for backdrops.
+     Scrims auto-invert via --ink-900 (light beige in dark theme). */
+  --highlight-faint: rgba(255, 255, 255, 0.03);
+  --highlight-1:     rgba(255, 255, 255, 0.05);
+  --highlight-2:     rgba(255, 255, 255, 0.08);
+  --highlight-3:     rgba(255, 255, 255, 0.12);
+  --highlight-4:     rgba(255, 255, 255, 0.18);
+  --highlight-5:     rgba(255, 255, 255, 0.28);
+  --highlight-6:     rgba(255, 255, 255, 0.55);
+
+  --dim-1: rgba(0, 0, 0, 0.30);
+  --dim-2: rgba(0, 0, 0, 0.42);
+  --dim-3: rgba(0, 0, 0, 0.62);
+  --dim-4: rgba(0, 0, 0, 0.92);
 }

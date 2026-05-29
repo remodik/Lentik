@@ -20,14 +20,14 @@ export default function Home() {
           className="absolute -top-48 -right-48 w-[580px] h-[580px] rounded-full opacity-55 blur-3xl"
           style={{
             background:
-              "radial-gradient(circle, rgba(245,213,176,0.90) 0%, rgba(232,213,184,0.50) 55%, transparent 100%)",
+              "radial-gradient(circle, rgb(var(--warm-200) / 0.90) 0%, rgb(var(--cream-300) / 0.50) 55%, transparent 100%)",
           }}
         />
         <div
           className="absolute -bottom-36 -left-36 w-[440px] h-[440px] rounded-full opacity-60 blur-3xl"
           style={{
             background:
-              "radial-gradient(circle, rgba(250,235,215,0.85) 0%, transparent 70%)",
+              "radial-gradient(circle, rgb(var(--warm-100) / 0.85) 0%, transparent 70%)",
           }}
         />
       </div>
@@ -38,9 +38,9 @@ export default function Home() {
           <div
             className="inline-flex items-center justify-center w-20 h-20 rounded-[26px] mb-5 glossy"
             style={{
-              background: "#1c1714",
+              background: "rgb(var(--ink-900))",
               boxShadow:
-                "0 14px 40px rgba(28,23,20,0.30), inset 0 1px 0 rgba(255,255,255,0.10)",
+                "0 14px 40px var(--scrim-5), inset 0 1px 0 var(--highlight-1)",
             }}
           >
             <House className="w-9 h-9 text-cream-50" strokeWidth={2.1} />
@@ -80,12 +80,12 @@ export default function Home() {
                 key={text}
                 className="flex items-center gap-4 px-5 py-4 rounded-2xl glossy"
                 style={{
-                  background: "rgba(255,255,255,0.48)",
+                  background: "var(--bg-surface-subtle)",
                   backdropFilter: "blur(16px)",
                   WebkitBackdropFilter: "blur(16px)",
-                  border: "1px solid rgba(255,255,255,0.52)",
+                  border: "1px solid var(--border-glass)",
                   boxShadow:
-                    "0 2px 8px rgba(28,23,20,0.05), inset 0 1px 0 rgba(255,255,255,0.72)",
+                    "0 2px 8px var(--scrim-faint), inset 0 1px 0 var(--bg-surface-strong)",
                 }}
               >
                 <Icon className="w-5 h-5 shrink-0 text-warm-500" strokeWidth={2.1} />

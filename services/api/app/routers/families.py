@@ -1,13 +1,14 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
-from sqlalchemy import select
+from sqlalchemy import delete as sa_delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.auth.deps import get_current_user
 from app.core.jwt import COOKIE_NAME, decode_access_token
+from app.core.ws_tickets import ws_ticket_store
 from app.db.deps import get_db
 from app.models.family import Family
 from app.models.membership import Membership, Role
@@ -20,7 +21,10 @@ from app.schemas.families import (
     FamilyResponse,
     TransferOwnershipRequest,
 )
+from app.core.permissions import Perm
+from app.services.audit import log_action
 from app.services.family import create_family, require_membership, require_owner
+from app.services.roles import require_family_perm
 from app.ws.manager import ws_manager
 
 router = APIRouter(prefix="/families", tags=["families"])
@@ -65,6 +69,43 @@ def _family_to_detail_response(family: Family) -> FamilyDetailResponse:
     )
 
 
+async def _migrate_owner_role(
+    db: AsyncSession,
+    *,
+    family_id: UUID,
+    from_membership_id: UUID,
+    to_membership_id: UUID,
+) -> None:
+    """Переносит назначение FamilyRole со slug='owner' с одного участника на другого."""
+    from app.models.role import FamilyRole, MemberRole
+
+    owner_role = await db.scalar(
+        select(FamilyRole).where(
+            FamilyRole.family_id == family_id,
+            FamilyRole.slug == "owner",
+        )
+    )
+    if not owner_role:
+        return
+
+    # Снимаем owner-роль со старого владельца.
+    await db.execute(
+        sa_delete(MemberRole).where(
+            MemberRole.membership_id == from_membership_id,
+            MemberRole.role_id == owner_role.id,
+        )
+    )
+    # Выдаём новому, если ещё нет.
+    already = await db.scalar(
+        select(MemberRole).where(
+            MemberRole.membership_id == to_membership_id,
+            MemberRole.role_id == owner_role.id,
+        )
+    )
+    if not already:
+        db.add(MemberRole(membership_id=to_membership_id, role_id=owner_role.id))
+
+
 async def _transfer_ownership(
     family_id: UUID,
     target_user_id: UUID,
@@ -96,6 +137,27 @@ async def _transfer_ownership(
     async with db.begin_nested():
         current_owner_membership.role = Role.MEMBER
         target_membership.role = Role.OWNER
+        # Переносим FamilyRole "owner" (с ADMINISTRATOR) со старого владельца
+        # на нового, иначе старый сохранит админ-права через effective_permissions.
+        await _migrate_owner_role(
+            db,
+            family_id=family_id,
+            from_membership_id=current_owner_membership.id,
+            to_membership_id=target_membership.id,
+        )
+
+    await log_action(
+        db,
+        family_id=family_id,
+        actor_id=current_owner_id,
+        action="family.ownership_transferred",
+        target_type="user",
+        target_id=target_user_id,
+        metadata={
+            "new_owner_name": target_membership.user.display_name,
+            "new_owner_username": target_membership.user.username,
+        },
+    )
 
     await db.commit()
 
@@ -154,13 +216,24 @@ async def rename_family(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    await require_owner(family_id, user, db)
+    m = await require_membership(family_id, user, db)
+    await require_family_perm(db, m, Perm.MANAGE_FAMILY)
 
     family = await db.get(Family, family_id)
     if not family:
         raise HTTPException(status_code=404, detail="Family not found")
 
+    prev_name = family.name
     family.name = body.name
+    await log_action(
+        db,
+        family_id=family_id,
+        actor_id=user.id,
+        action="family.renamed",
+        target_type="family",
+        target_id=family_id,
+        metadata={"from": prev_name, "to": body.name},
+    )
     await db.commit()
     await db.refresh(family)
     return family
@@ -173,21 +246,39 @@ async def kick_member(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    await require_owner(family_id, user, db)
+    actor = await require_membership(family_id, user, db)
+    await require_family_perm(db, actor, Perm.KICK_MEMBERS)
 
     if member_id == user.id:
         raise HTTPException(status_code=400, detail="Cannot kick yourself")
 
-    m = await db.scalar(
+    target = await db.scalar(
         select(Membership).where(
             Membership.family_id == family_id,
             Membership.user_id == member_id,
         )
     )
-    if not m:
+    if not target:
         raise HTTPException(status_code=404, detail="Member not found")
+    # Защита: не-owner не может исключить владельца семьи.
+    if target.role.value == "owner" and actor.role.value != "owner":
+        raise HTTPException(status_code=403, detail="Только владелец может исключать владельца")
 
-    await db.delete(m)
+    kicked_user_obj = await db.get(User, member_id)
+    await log_action(
+        db,
+        family_id=family_id,
+        actor_id=user.id,
+        action="family.member_kicked",
+        target_type="user",
+        target_id=member_id,
+        metadata={
+            "display_name": kicked_user_obj.display_name if kicked_user_obj else None,
+            "username": kicked_user_obj.username if kicked_user_obj else None,
+        },
+    )
+
+    await db.delete(target)
     await db.commit()
 
     kicked_user = await db.get(User, member_id)
@@ -199,6 +290,7 @@ async def kick_member(
             "display_name": kicked_user.display_name if kicked_user else "Участник",
         },
     )
+    await ws_manager.kick_user_from_family(family_id, member_id)
 
 
 @router.patch("/{family_id}/members/{member_id}/role", response_model=FamilyMemberResponse)
@@ -288,16 +380,23 @@ async def family_ws(
     db: AsyncSession = Depends(get_db),
 ):
     token = websocket.cookies.get(COOKIE_NAME)
-    if not token:
-        token = websocket.query_params.get("token")
-
-    user_id = decode_access_token(token) if token else None
+    decoded = decode_access_token(token) if token else None
+    user_id = decoded[0] if decoded else None
+    token_iat = decoded[1] if decoded else None
+    if not user_id:
+        ticket = websocket.query_params.get("ticket")
+        if ticket:
+            user_id = await ws_ticket_store.consume(ticket)
     if not user_id:
         await websocket.close(code=4001)
         return
 
     user = await db.scalar(select(User).where(User.id == user_id))
     if not user:
+        await websocket.close(code=4001)
+        return
+
+    if token_iat is not None and token_iat + timedelta(seconds=1) < user.password_changed_at:
         await websocket.close(code=4001)
         return
 
@@ -312,7 +411,7 @@ async def family_ws(
         return
 
     await websocket.accept()
-    await ws_manager.connect_family(family_id, websocket)
+    await ws_manager.connect_family(family_id, websocket, user_id=user.id)
     became_online = ws_manager.register_presence_connection(family_id, user.id, websocket)
     if became_online or not user.is_online:
         user.is_online = True

@@ -5,9 +5,11 @@ import { createPortal } from "react-dom";
 import {
   Clock as ClockIcon,
   Download,
+  Eye,
   SmilePlus,
   CornerUpLeft,
   FileText,
+  Image as ImageIcon,
   Loader2,
   Mic,
   Paperclip,
@@ -46,10 +48,20 @@ import {
   type MessageAttachment,
   type MessageSearchResult,
 } from "@/lib/api";
-import { getAuthToken, toAbsoluteApiUrl, wsUrl } from "@/lib/api-base";
+import { fetchWsTicket, toAbsoluteApiUrl, wsUrl } from "@/lib/api-base";
 import UserMiniProfilePopover, {
   type UserMiniProfile,
 } from "@/components/UserMiniProfilePopover";
+import { useConfirm } from "@/components/ConfirmDialog";
+import {
+  hasBit,
+  PERM,
+  useChatPermissions,
+} from "@/lib/usePermissions";
+import MediaLightbox, {
+  CustomVideoPlayer,
+  type LightboxMedia,
+} from "@/components/MediaLightbox";
 import { useUserPopover } from "@/lib/useUserPopover";
 import Age18Gate, { useAge18Gate } from "@/components/Age18Gate";
 
@@ -197,8 +209,8 @@ function MessageAvatar({
     <button
       type="button"
       onClick={onClick}
-      className={`w-10 h-10 rounded-full overflow-hidden grid place-items-center font-semibold shrink-0 border border-white/80 shadow-[0_8px_20px_rgba(28,23,20,0.12)] bg-gradient-to-br from-[#d4a574] via-[#c4956a] to-[#b07d52] text-white transition ${
-        active ? "ring-2 ring-white/80" : "hover:scale-[1.03]"
+      className={`w-10 h-10 rounded-full overflow-hidden grid place-items-center font-semibold shrink-0 border border-[color:var(--border-glass-strong)] shadow-[0_8px_20px_var(--scrim-2)] bg-gradient-to-br from-warm-300 via-warm-400 to-warm-500 text-[color:var(--text-on-dark)] transition ${
+        active ? "ring-2 ring-[color:var(--border-glass-strong)]" : "hover:scale-[1.03]"
       }`}
       aria-label={label}
       title={label}
@@ -266,7 +278,7 @@ function VoiceAttachmentPlayer({ attachment }: { attachment: MessageAttachment }
       <button
         type="button"
         onClick={toggle}
-        className="w-8 h-8 rounded-full bg-[#1c1714] text-white grid place-items-center shrink-0 hover:bg-[#3d342c] transition"
+        className="w-8 h-8 rounded-full bg-ink-900 text-[color:var(--text-on-dark)] grid place-items-center shrink-0 hover:bg-ink-700 transition"
         aria-label={playing ? "Пауза" : "Воспроизвести"}
       >
         {playing ? (
@@ -291,7 +303,13 @@ function VoiceAttachmentPlayer({ attachment }: { attachment: MessageAttachment }
   );
 }
 
-function AttachmentView({ attachment }: { attachment: MessageAttachment }) {
+function AttachmentView({
+  attachment,
+  onOpenMedia,
+}: {
+  attachment: MessageAttachment;
+  onOpenMedia?: (media: LightboxMedia) => void;
+}) {
   const size = attachment.file_size ? formatBytes(attachment.file_size) : null;
 
   if (attachment.kind === "voice") {
@@ -300,31 +318,42 @@ function AttachmentView({ attachment }: { attachment: MessageAttachment }) {
 
   if (attachment.kind === "image") {
     return (
-      <a href={attachment.url} target="_blank" rel="noreferrer" className="inline-block">
+      <button
+        type="button"
+        onClick={() =>
+          onOpenMedia?.({
+            kind: "image",
+            url: attachment.url,
+            fileName: attachment.file_name,
+          })
+        }
+        className="inline-block group/img relative rounded-lg overflow-hidden border border-white/70 shadow-sm transition hover:brightness-95"
+        aria-label={`Открыть ${attachment.file_name}`}
+      >
         <img
           src={attachment.url}
           alt={attachment.file_name}
-          className="max-w-[min(360px,100%)] max-h-[320px] rounded-lg border border-white/70 object-cover shadow-sm"
+          className="max-w-[min(360px,100%)] max-h-[320px] block object-cover"
         />
-      </a>
+      </button>
     );
   }
 
   if (attachment.kind === "video") {
     return (
-      <video
-        src={attachment.url}
-        controls
-        className="max-w-[min(420px,100%)] max-h-[320px] rounded-lg border border-white/70 bg-black shadow-sm"
-      />
+      <div className="max-w-[min(420px,100%)] w-full">
+        <CustomVideoPlayer
+          src={attachment.url}
+          className="max-h-[320px] border border-white/70 shadow-sm"
+        />
+      </div>
     );
   }
 
   return (
     <a
       href={attachment.url}
-      target="_blank"
-      rel="noreferrer"
+      download={attachment.file_name}
       className="inline-flex items-center gap-2 rounded-lg border border-white/65 bg-white/52 px-3 py-2 text-ink-700 hover:bg-white/72 transition"
     >
       <FileText className="w-4 h-4 text-ink-500" />
@@ -348,6 +377,14 @@ export default function ChatView({
   onLeave?: () => void;
 }) {
   const ageGate = useAge18Gate(chat.id, !!chat.is_18plus, me.birthday);
+  const { confirm } = useConfirm();
+  const chatPerms = useChatPermissions(chat.id);
+  const canSendMessages = hasBit(chatPerms, PERM.SEND_MESSAGES);
+  const canAttachFiles = hasBit(chatPerms, PERM.ATTACH_FILES);
+  const canSendVoice = hasBit(chatPerms, PERM.SEND_VOICE);
+  const canAddReactions = hasBit(chatPerms, PERM.ADD_REACTIONS);
+  const canManageMessages = hasBit(chatPerms, PERM.MANAGE_MESSAGES);
+  const canManageOwn = hasBit(chatPerms, PERM.MANAGE_OWN_MESSAGES);
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -382,6 +419,7 @@ export default function ChatView({
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [mentionStart, setMentionStart] = useState(0);
   const [mentionIndex, setMentionIndex] = useState(0);
+  const [lightboxMedia, setLightboxMedia] = useState<LightboxMedia | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<MessageSearchResult[]>([]);
@@ -441,7 +479,7 @@ export default function ChatView({
   const pinnedMessageFromList = pinnedMessageId
     ? messageMap.get(pinnedMessageId) ?? null
     : null;
-  const canPinMessages = myRole === "owner";
+  const canPinMessages = canManageMessages;
 
   const resolveAuthorDisplayName = useCallback(
     (message: Message) => {
@@ -544,27 +582,11 @@ export default function ChatView({
     rowRefs.current.delete(id);
   }, []);
 
-  const updateToolbarPlacement = useCallback(
-    (id: string) => {
-      const row = rowRefs.current.get(id);
-      const viewport = messagesViewportRef.current;
-      if (!row || !viewport) return;
-
-      const rowRect = row.getBoundingClientRect();
-      const viewportRect = viewport.getBoundingClientRect();
-      const spaceAbove = rowRect.top - viewportRect.top;
-
-      let nextPlacement: ToolbarPlacement = "above";
-      if (spaceAbove < TOOLBAR_MIN_SPACE) {
-        nextPlacement = "below";
-      }
-
-      setToolbarPlacement((prev) =>
-        prev[id] === nextPlacement ? prev : { ...prev, [id]: nextPlacement },
-      );
-    },
-    [],
-  );
+  // Тулбар всегда сверху: даже если сообщение у верхнего края — пусть
+  // часть тулбара уходит за viewport, это удобнее, чем перемещать его вниз.
+  const updateToolbarPlacement = useCallback((_id: string) => {
+    /* no-op */
+  }, []);
 
   const clearToolbarHideTimeout = useCallback(() => {
     if (!toolbarHideTimeoutRef.current) return;
@@ -860,11 +882,12 @@ export default function ChatView({
       }
     }
 
-    function connect() {
+    async function connect() {
       if (!isMounted) return;
 
-      const token = getAuthToken();
-      const query = token ? `?token=${encodeURIComponent(token)}` : "";
+      const ticket = await fetchWsTicket();
+      if (!isMounted) return;
+      const query = ticket ? `?ticket=${encodeURIComponent(ticket)}` : "";
       ws = new WebSocket(wsUrl(`/families/${familyId}/chats/${chat.id}/ws${query}`));
 
       ws.onopen = () => {
@@ -956,7 +979,7 @@ export default function ChatView({
         clearTimers();
 
         reconnectTimeout = setTimeout(() => {
-          connect();
+          void connect();
         }, 3000);
       };
 
@@ -967,7 +990,7 @@ export default function ChatView({
       };
     }
 
-    connect();
+    void connect();
 
     return () => {
       isMounted = false;
@@ -1209,7 +1232,16 @@ export default function ChatView({
     }
   }
 
-  async function handleDelete(messageId: string) {
+  async function handleDelete(messageId: string, skipConfirm = false) {
+    if (!skipConfirm) {
+      const ok = await confirm({
+        title: "Удалить сообщение",
+        description: "Вы действительно хотите удалить это сообщение?",
+        confirmLabel: "Удалить",
+        tone: "danger",
+      });
+      if (!ok) return;
+    }
     try {
       await deleteMessage(familyId, chat.id, messageId);
       setMessages((prev) => prev.filter((m) => m.id !== messageId));
@@ -1474,13 +1506,22 @@ export default function ChatView({
                 {formatChatSlowMode(chat.slow_mode_seconds)}
               </span>
             )}
+            {!canSendMessages && (
+              <span
+                className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold border border-[color:var(--border-glass-strong)] bg-[color:var(--bg-surface-subtle)] text-ink-500"
+                title="У вашей роли нет права писать в этом чате"
+              >
+                <Eye className="w-3 h-3" strokeWidth={2.4} />
+                Только чтение
+              </span>
+            )}
           </h2>
           {chat.description?.trim() ? (
             <p className="text-[12px] text-ink-500 font-body mt-0.5 line-clamp-1" title={chat.description}>
               {chat.description}
             </p>
           ) : null}
-          <p className="text-[11px] text-ink-400 font-body mt-0.5 inline-flex items-center gap-1.5">
+          <p className="text-[11px] text-ink-400 font-body mt-0.5 inline-flex items-center gap-1.5 pl-[15px]">
             <span
               className={`w-1.5 h-1.5 rounded-full ${
                 headerPresence.isOnline
@@ -1504,7 +1545,7 @@ export default function ChatView({
               setSearchHint(null);
             }}
             className={`ui-btn ui-btn-subtle !px-2.5 !py-1.5 inline-flex items-center gap-1.5 ${
-              searchOpen ? "bg-white/85 border-white/80" : ""
+              searchOpen ? "bg-[color:var(--bg-elevated)] border-[color:var(--border-glass-strong)]" : ""
             }`}
             title={searchOpen ? "Закрыть поиск" : "Поиск в чате"}
             aria-label={searchOpen ? "Закрыть поиск" : "Поиск в чате"}
@@ -1532,9 +1573,9 @@ export default function ChatView({
 
       {searchOpen && (
         <div className="px-4 pt-3 pb-1">
-          <div className="rounded-2xl border border-white/70 bg-white/68 backdrop-blur-md shadow-[0_14px_42px_rgba(28,23,20,0.14)]">
+          <div className="rounded-2xl border border-[color:var(--border-glass-strong)] bg-[color:var(--bg-surface-strong)] backdrop-blur-md shadow-[0_14px_42px_var(--scrim-2)]">
             <div className="flex items-center gap-2 p-2.5">
-              <span className="w-8 h-8 rounded-xl border border-white/70 bg-white/74 grid place-items-center text-ink-500 shrink-0">
+              <span className="w-8 h-8 rounded-xl border border-[color:var(--border-glass-strong)] bg-[color:var(--bg-surface-strong)] grid place-items-center text-ink-500 shrink-0">
                 <Search className="w-4 h-4" strokeWidth={2.1} />
               </span>
 
@@ -1674,6 +1715,7 @@ export default function ChatView({
             const next = messages[index + 1];
             const isGrouped =
               index > 0 &&
+              !message.reply_to_id &&
               messages[index - 1].author_id === message.author_id &&
               new Date(message.created_at).getTime() -
                 new Date(messages[index - 1].created_at).getTime() <
@@ -1694,8 +1736,8 @@ export default function ChatView({
             const authorAvatarUrl = resolveAuthorAvatarUrl(message);
             const authorPopoverKey = `message:${message.id}`;
             const authorInitial = authorDisplayName[0]?.toUpperCase() ?? "?";
-            const canEdit = isMine;
-            const canDelete = isMine || myRole === "owner";
+            const canEdit = isMine && canManageOwn;
+            const canDelete = (isMine && canManageOwn) || canManageMessages;
             const isPinned = pinnedMessageId === message.id;
             const isToolbarVisible =
               (hoveredId === message.id || emojiPickerForId === message.id) &&
@@ -1707,12 +1749,21 @@ export default function ChatView({
             const originalAuthorDisplayName = originalMessage
               ? resolveAuthorDisplayName(originalMessage)
               : null;
+            const originalAuthorAvatarUrl = originalMessage
+              ? resolveAuthorAvatarUrl(originalMessage)
+              : null;
+            const originalAuthorInitial =
+              originalAuthorDisplayName?.[0]?.toUpperCase() ?? "?";
+            const originalHasAttachment =
+              (originalMessage?.attachments?.length ?? 0) > 0;
             const originalPreviewText = originalMessage
               ? originalMessage.text && originalMessage.text.trim()
-                ? originalMessage.text.length > 60
-                  ? `${originalMessage.text.slice(0, 60)}…`
+                ? originalMessage.text.length > 80
+                  ? `${originalMessage.text.slice(0, 80)}…`
                   : originalMessage.text
-                : "Без текста"
+                : originalHasAttachment
+                  ? "Вложение"
+                  : "Без текста"
               : "Оригинал недоступен";
             const reactions = message.reactions ?? [];
             const readers = Array.from(
@@ -1744,6 +1795,56 @@ export default function ChatView({
                       {formatDate(message.created_at)}
                     </div>
                     <div className="flex-1 h-px bg-white/40" />
+                  </div>
+                )}
+
+                {message.reply_to_id && editingId !== message.id && (
+                  <div className="msg-reply-context">
+                    <span className="msg-reply-hook" aria-hidden />
+                    {originalMessage ? (
+                      <button
+                        type="button"
+                        onClick={() => scrollToMessage(originalMessage.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            scrollToMessage(originalMessage.id);
+                          }
+                        }}
+                        className="msg-reply-link"
+                        title={`Перейти к сообщению от ${originalAuthorDisplayName}`}
+                      >
+                        {originalAuthorAvatarUrl ? (
+                          <img
+                            src={originalAuthorAvatarUrl}
+                            alt=""
+                            className="msg-reply-avatar"
+                          />
+                        ) : (
+                          <span className="msg-reply-avatar msg-reply-avatar--fallback">
+                            {originalAuthorInitial}
+                          </span>
+                        )}
+                        <span className="msg-reply-author">
+                          {originalAuthorDisplayName}
+                        </span>
+                        {originalHasAttachment && (
+                          <ImageIcon
+                            className="msg-reply-attach-ic"
+                            strokeWidth={2.1}
+                            aria-hidden
+                          />
+                        )}
+                        <span className="msg-reply-preview-text">
+                          {originalPreviewText}
+                        </span>
+                      </button>
+                    ) : (
+                      <span className="msg-reply-link msg-reply-link--missing">
+                        <CornerUpLeft className="w-3 h-3" strokeWidth={2.3} />
+                        <span>Оригинал недоступен</span>
+                      </span>
+                    )}
                   </div>
                 )}
 
@@ -1804,23 +1905,26 @@ export default function ChatView({
                       onMouseEnter={() => showToolbar(message.id)}
                       onMouseLeave={() => scheduleToolbarHide(message.id)}
                     >
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (emojiPickerForId === message.id) {
-                            setEmojiPickerForId(null);
-                            setEmojiPickerAnchorRect(null);
-                          } else {
-                            setEmojiPickerAnchorRect(e.currentTarget.getBoundingClientRect());
-                            setEmojiPickerForId(message.id);
-                          }
-                        }}
-                        className="msg-actions-btn"
-                        data-tooltip="Реакция"
-                      >
-                        <SmilePlus className="w-4 h-4" strokeWidth={2.2} />
-                      </button>
+                      {canAddReactions && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (emojiPickerForId === message.id) {
+                              setEmojiPickerForId(null);
+                              setEmojiPickerAnchorRect(null);
+                            } else {
+                              setEmojiPickerAnchorRect(e.currentTarget.getBoundingClientRect());
+                              setEmojiPickerForId(message.id);
+                            }
+                          }}
+                          className="msg-actions-btn"
+                          data-tooltip="Реакция"
+                        >
+                          <SmilePlus className="w-4 h-4" strokeWidth={2.2} />
+                        </button>
+                      )}
+                      {canSendMessages && (
                       <button
                         type="button"
                         onClick={() => setReplyTo(message)}
@@ -1829,6 +1933,7 @@ export default function ChatView({
                       >
                         <CornerUpLeft className="w-4 h-4" strokeWidth={2.2} />
                       </button>
+                      )}
                       {canPinMessages && (
                         <button
                           type="button"
@@ -1853,7 +1958,7 @@ export default function ChatView({
                       {canDelete && (
                         <button
                           type="button"
-                          onClick={() => handleDelete(message.id)}
+                          onClick={(e) => handleDelete(message.id, e.shiftKey)}
                           className="msg-actions-btn danger"
                           data-tooltip="Удалить"
                         >
@@ -1881,7 +1986,7 @@ export default function ChatView({
                           <button
                             type="button"
                             onClick={() => saveEdit(message.id)}
-                            className="px-3 py-1.5 rounded-md border border-[#1c1714] bg-[#1c1714] text-white"
+                            className="px-3 py-1.5 rounded-md border border-ink-900 bg-ink-900 text-[color:var(--text-on-dark)]"
                           >
                             Сохранить
                           </button>
@@ -1889,53 +1994,14 @@ export default function ChatView({
                       </div>
                     ) : (
                       <>
-                        {message.reply_to_id && (
-                          <div
-                            className={`reply-preview ${
-                              originalMessage ? "text-ink-700" : "text-ink-400"
-                            }`}
-                            style={{ cursor: originalMessage ? "pointer" : "default" }}
-                            onClick={() => {
-                              if (originalMessage) {
-                                scrollToMessage(originalMessage.id);
-                              }
-                            }}
-                            role={originalMessage ? "button" : undefined}
-                            tabIndex={originalMessage ? 0 : -1}
-                            onKeyDown={(e) => {
-                              if (
-                                originalMessage &&
-                                (e.key === "Enter" || e.key === " ")
-                              ) {
-                                e.preventDefault();
-                                scrollToMessage(originalMessage.id);
-                              }
-                            }}
-                          >
-                            <CornerUpLeft
-                              className="w-3 h-3 shrink-0 text-warm-700"
-                              strokeWidth={2.4}
-                            />
-                            {originalMessage ? (
-                              <div className="min-w-0 truncate">
-                                <span className="font-semibold text-ink-800">
-                                  {originalAuthorDisplayName}
-                                </span>
-                                <span className="mx-1 text-ink-400">·</span>
-                                <span className="text-ink-500">{originalPreviewText}</span>
-                              </div>
-                            ) : (
-                              <span className="text-ink-400">Оригинал недоступен</span>
-                            )}
-                          </div>
-                        )}
 
                         {message.attachments?.length > 0 && (
-                          <div className={`mt-1.5 flex flex-col gap-2 ${message.text ? "mb-1.5" : ""}`}>
+                          <div className={`mt-1.5 flex flex-col items-start gap-2 ${message.text ? "mb-1.5" : ""}`}>
                             {message.attachments.map((attachment, idx) => (
                               <AttachmentView
                                 key={`${message.id}-att-${idx}`}
                                 attachment={attachment}
+                                onOpenMedia={setLightboxMedia}
                               />
                             ))}
                           </div>
@@ -2104,22 +2170,29 @@ export default function ChatView({
           </div>
         )}
 
-        <div className="relative flex items-center gap-2 rounded-xl border border-white/65 bg-white/62 px-2.5 py-2">
+        {!canSendMessages ? (
+          <div className="rounded-xl border border-white/65 bg-white/52 px-3.5 py-3 text-[13px] text-ink-500 font-body">
+            У вас нет права писать в этом чате
+          </div>
+        ) : (
+        <div className="relative flex items-center gap-2 rounded-xl border border-white/65 bg-white/62 px-2.5 py-2 focus-within:outline-none [&_textarea]:focus:outline-none [&_textarea]:focus-visible:outline-none">
           {isRecording && (
             <div className="absolute -top-8 left-0 right-0 flex items-center justify-center gap-2 text-[12px] text-red-500 font-semibold font-body">
               <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
               Запись {recordingSeconds}с — отпустите для отправки
             </div>
           )}
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className="w-9 h-9 rounded-md grid place-items-center text-ink-500 hover:text-ink-900 hover:bg-white/75 transition shrink-0"
-            data-tooltip="Прикрепить файл"
-            aria-label="Прикрепить файл"
-          >
-            <Paperclip className="w-4 h-4" strokeWidth={2.2} />
-          </button>
+          {canAttachFiles && (
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="w-9 h-9 rounded-md grid place-items-center text-ink-500 hover:text-ink-900 hover:bg-white/75 transition shrink-0"
+              data-tooltip="Прикрепить файл"
+              aria-label="Прикрепить файл"
+            >
+              <Paperclip className="w-4 h-4" strokeWidth={2.2} />
+            </button>
+          )}
 
           <input
             ref={fileInputRef}
@@ -2165,7 +2238,7 @@ export default function ChatView({
               }
             }}
             placeholder={`Написать в #${chat.name}`}
-            className="flex-1 bg-transparent resize-none outline-none text-[14px] leading-[1.42] text-ink-900 placeholder:text-ink-300 max-h-[136px] min-h-[40px] py-[9px]"
+            className="flex-1 bg-transparent resize-none outline-none focus:outline-none focus:ring-0 focus-visible:outline-none text-[14px] leading-[1.42] text-ink-900 placeholder:text-ink-300 max-h-[136px] min-h-[40px] py-[9px] border-0 appearance-none"
             rows={1}
           />
 
@@ -2173,7 +2246,7 @@ export default function ChatView({
             type="button"
             onClick={handleSend}
             disabled={!canSend}
-            className="w-10 h-10 rounded-md bg-[#1c1714] text-white grid place-items-center shrink-0 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[#3d342c] transition"
+            className="w-10 h-10 rounded-md text-ink-900 grid place-items-center shrink-0 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-white/55 hover:text-ink-900 transition"
             aria-label="Отправить"
           >
             {sending ? (
@@ -2183,7 +2256,7 @@ export default function ChatView({
             )}
           </button>
 
-          {!text.trim() && selectedFiles.length === 0 && (
+          {canSendVoice && !text.trim() && selectedFiles.length === 0 && (
             <button
               type="button"
               onMouseDown={() => void startVoiceRecording()}
@@ -2209,11 +2282,7 @@ export default function ChatView({
             </button>
           )}
         </div>
-
-        <div className="text-[11px] text-ink-300 mt-2 px-1">
-          Enter — отправить · Shift+Enter — новая строка · @{` `}
-          упоминание · до {MAX_ATTACHMENTS_PER_MESSAGE} файлов
-        </div>
+        )}
       </div>
 
       {emojiPickerMessage && emojiPickerAnchorRect && createPortal(
@@ -2257,6 +2326,8 @@ export default function ChatView({
         anchorRect={popoverAnchorRect}
         popoverRef={popoverRef}
       />
+
+      <MediaLightbox media={lightboxMedia} onClose={() => setLightboxMedia(null)} />
     </div>
   );
 }

@@ -3,10 +3,10 @@
 .input-field {
     width: 100%;
     padding: 0.7rem 1rem;
-    background: var(--color-extra-046);
+    background: var(--bg-surface-strong);
     backdrop-filter: var(--blur-extra-003);
     -webkit-backdrop-filter: var(--blur-extra-003);
-    border: 1.5px solid var(--color-extra-170);
+    border: 1.5px solid var(--surface-cream-strong);
     border-radius: 0.875rem;
     color: var(--text-primary);
     font-size: 0.9375rem;
@@ -14,19 +14,19 @@
     outline: none;
     box-shadow:
         var(--shadow-xs),
-        inset 0 1px 2px var(--color-extra-171),
-        inset 0 1px 0 var(--color-extra-071);
+        inset 0 1px 2px var(--scrim-faint),
+        inset 0 1px 0 var(--bg-surface-strong);
     transition:
         border-color var(--dur-normal) var(--ease-smooth),
         background var(--dur-normal) var(--ease-smooth),
         box-shadow var(--dur-normal) var(--ease-smooth);
 }
 .input-field:focus {
-    border-color: var(--color-extra-172);
-    background: var(--color-extra-092);
+    border-color: var(--accent-solid-warm);
+    background: var(--highlight-6);
     box-shadow:
         var(--focus-ring),
-        inset 0 1px 2px var(--color-extra-173);
+        inset 0 1px 2px var(--scrim-faint);
 }
 .input-field::placeholder {
     color: var(--text-muted);
@@ -41,41 +41,41 @@
     text-align: center;
     font-size: 1.625rem;
     font-weight: 600;
-    border: 1.5px solid var(--color-extra-170);
+    border: 1.5px solid var(--surface-cream-strong);
     border-radius: 1rem;
-    background: var(--color-extra-046);
+    background: var(--bg-surface-strong);
     backdrop-filter: var(--blur-extra-003);
     -webkit-backdrop-filter: var(--blur-extra-003);
     color: var(--text-primary);
     outline: none;
     box-shadow:
         var(--shadow-xs),
-        inset 0 1px 2px var(--color-extra-047),
-        inset 0 1px 0 var(--color-extra-071);
+        inset 0 1px 2px var(--scrim-faint),
+        inset 0 1px 0 var(--bg-surface-strong);
     transition:
         border-color 0.18s ease,
         box-shadow 0.18s ease,
         transform 0.12s var(--ease-spring);
 }
 .pin-input:focus {
-    border-color: var(--color-extra-172);
+    border-color: var(--accent-solid-warm);
     box-shadow:
         var(--focus-ring),
-        inset 0 1px 2px var(--color-extra-171);
+        inset 0 1px 2px var(--scrim-faint);
     transform: scale(1.06);
-    background: var(--color-extra-174);
+    background: var(--highlight-6);
 }
 .pin-input:not(:placeholder-shown) {
-    background: var(--color-extra-049);
-    border-color: var(--color-extra-175);
+    background: var(--bg-elevated);
+    border-color: var(--surface-tan-strong);
 }
 .glass-input {
     width: 100%;
     padding: 0.75rem 1rem;
-    background: var(--color-extra-041);
+    background: var(--border-glass-strong);
     backdrop-filter: var(--blur-extra-004);
     -webkit-backdrop-filter: var(--blur-extra-004);
-    border: 1.5px solid var(--color-extra-041);
+    border: 1.5px solid var(--border-glass-strong);
     border-radius: 1rem;
     color: var(--text-primary);
     font-size: 0.9375rem;
@@ -86,19 +86,19 @@
         background var(--dur-normal) var(--ease-smooth),
         box-shadow var(--dur-normal) var(--ease-smooth);
     box-shadow:
-        0 1px 3px var(--color-extra-047),
-        inset 0 1px 0 var(--color-extra-046);
+        0 1px 3px var(--scrim-faint),
+        inset 0 1px 0 var(--bg-surface-strong);
 }
 .glass-input:hover {
-    border-color: var(--color-extra-061);
-    background: var(--color-extra-050);
+    border-color: var(--bg-surface-strong);
+    background: var(--border-glass);
 }
 .glass-input:focus {
-    border-color: var(--color-extra-176);
-    background: var(--color-extra-015);
+    border-color: var(--accent-vivid);
+    background: var(--bg-surface-strong);
     box-shadow:
         var(--focus-ring),
-        inset 0 1px 0 var(--color-extra-054);
+        inset 0 1px 0 var(--bg-elevated);
 }
 .glass-input::placeholder {
     color: var(--text-muted);
@@ -113,7 +113,7 @@
     height: 2.5rem;
     border-radius: 1rem;
     border: 1.5px solid var(--bg-surface);
-    background: var(--color-extra-050);
+    background: var(--border-glass);
     color: var(--text-primary);
     font-size: 0.9rem;
     font-family: var(--font-body);
@@ -122,8 +122,8 @@
     backdrop-filter: var(--blur-extra-021);
     -webkit-backdrop-filter: var(--blur-extra-021);
     box-shadow:
-        0 1px 3px var(--color-extra-120),
-        inset 0 1px 0 var(--color-extra-015);
+        0 1px 3px var(--scrim-faint),
+        inset 0 1px 0 var(--bg-surface-strong);
     transition:
         transform var(--dur-fast) var(--ease-smooth),
         background var(--dur-normal) var(--ease-smooth),
@@ -136,8 +136,8 @@
 .ui-input:focus,
 .ui-select:focus {
     transform: translateY(-1px);
-    background: var(--color-extra-015);
-    border-color: var(--color-extra-008);
+    background: var(--bg-surface-strong);
+    border-color: var(--accent-bold);
     box-shadow:
         var(--focus-ring),
         inset 0 1px 0 var(--bg-elevated);

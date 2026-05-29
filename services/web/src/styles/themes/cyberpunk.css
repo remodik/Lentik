@@ -58,4 +58,31 @@
   --ink-700: 146 230 214;
   --ink-800: 186 245 232;
   --ink-900: 224 255 248;
+
+  /* Status colors — neon palette on near-black background */
+  --danger-bg-soft:       rgba(255, 0, 100, 0.08);
+  --danger-bg-medium:     rgba(255, 0, 100, 0.16);
+  --danger-border-faint:  rgba(255, 60, 130, 0.18);
+  --danger-border:        rgba(255, 60, 130, 0.50);
+  --danger-fg:            #ff3b80;
+  --danger-fg-strong:     #ff0066;
+  --danger-fg-bold:       #ff1f7a;
+  --danger-solid:         rgba(255, 0, 100, 0.85);
+
+  --warning-bg-soft:      rgba(255, 255, 0, 0.06);
+  --warning-bg:           rgba(255, 255, 0, 0.10);
+  --warning-bg-strong:    rgba(255, 255, 0, 0.18);
+  --warning-fg:           #ffe600;
+
+  --success-bg:           rgba(0, 255, 200, 0.18);
+  --success-fg:           #00ffc8;
+
+  --info-bg-soft:         rgba(0, 200, 255, 0.10);
+  --info-border:          rgba(0, 200, 255, 0.40);
+  --info-fg:              #00c8ff;
+  --info-fg-light:        #66e0ff;
+
+  --special-bg:           rgba(200, 0, 255, 0.12);
+  --special-border:       rgba(200, 0, 255, 0.45);
+  --special-fg:           #d04dff;
 }

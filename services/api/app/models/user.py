@@ -33,6 +33,17 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+    password_changed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    ui_mode: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        server_default=text("'simple'"),
+        default="simple",
+    )
 
     memberships: Mapped[list["Membership"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"

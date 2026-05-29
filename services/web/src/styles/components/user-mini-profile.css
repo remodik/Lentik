@@ -12,12 +12,12 @@
   pointer-events: auto;
   border-radius: 20px;
   overflow: hidden;
-  background: var(--color-extra-062);
-  border: 1px solid var(--color-extra-050);
+  background: var(--bg-surface-strong);
+  border: 1px solid var(--border-glass);
   backdrop-filter: var(--blur-extra-008);
   box-shadow:
-    0 24px 72px var(--color-extra-065),
-    0 10px 30px var(--color-extra-058),
+    0 24px 72px var(--scrim-3),
+    0 10px 30px var(--scrim-2),
     inset 0 1px 0 var(--bg-elevated);
   animation: profile-pop 160ms ease both;
 }
@@ -35,8 +35,8 @@
   align-items: flex-start;
   gap: 12px;
   padding: 13px 14px 11px;
-  background: var(--color-extra-033);
-  border-bottom: 1px solid var(--color-extra-149);
+  background: var(--highlight-4);
+  border-bottom: 1px solid var(--surface-cream-soft);
 }
 
 .user-mini-avatar {
@@ -47,20 +47,20 @@
   display: grid;
   place-items: center;
   flex-shrink: 0;
-  color: var(--color-extra-012);
+  color: #fff;
   font-weight: 800;
   font-size: 18px;
   font-family: var(--font-display, inherit);
   background: linear-gradient(
     135deg,
-    var(--color-extra-156) 0%,
+    rgb(var(--warm-300)) 0%,
     var(--accent) 62%,
     var(--accent-hover) 100%
   );
-  border: 1px solid var(--color-extra-057);
+  border: 1px solid var(--border-glass);
   box-shadow:
-    0 14px 42px var(--color-extra-059),
-    inset 0 1px 0 var(--color-extra-021);
+    0 14px 42px var(--scrim-2),
+    inset 0 1px 0 var(--highlight-2);
 }
 
 .user-mini-popover__name {
@@ -99,14 +99,14 @@
   letter-spacing: 0.05em;
   text-transform: uppercase;
   font-family: var(--font-body, inherit);
-  border: 1px solid var(--color-extra-041);
-  background: var(--color-extra-102);
+  border: 1px solid var(--border-glass-strong);
+  background: var(--bg-surface-subtle);
   color: rgb(var(--ink-500));
 }
 
 .user-mini-role.owner {
-  background: var(--color-extra-126);
-  border-color: var(--color-extra-127);
+  background: var(--warning-bg-soft);
+  border-color: var(--warning-bg-strong);
   color: rgb(var(--warm-700));
 }
 

@@ -3,10 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { LucideIcon } from "lucide-react";
-import { Check, Palette, Shield, User, X } from "lucide-react";
+import { Check, Palette, Shield, Sparkles, User, X } from "lucide-react";
 import { type Me } from "@/lib/api";
 import { apiFetch, normalizeApiPayload } from "@/lib/api-base";
 import { ThemeSelector } from "@/components/ThemeSelector";
+import { useUserMode } from "@/lib/useUserMode";
 
 type Props = {
   me: Me;
@@ -14,12 +15,13 @@ type Props = {
   onUpdate: (updated: Me) => void;
 };
 
-type Category = "profile" | "security" | "appearance";
+type Category = "profile" | "security" | "appearance" | "advanced";
 
 const CATEGORIES: { id: Category; icon: LucideIcon; label: string }[] = [
   { id: "profile", icon: User, label: "Профиль" },
   { id: "security", icon: Shield, label: "Безопасность" },
   { id: "appearance", icon: Palette, label: "Оформление" },
+  { id: "advanced", icon: Sparkles, label: "Расширенное" },
 ];
 
 function Field({
@@ -450,6 +452,138 @@ function AppearanceSection() {
   );
 }
 
+function AdvancedSection() {
+  const { mode, setMode } = useUserMode();
+  const [saving, setSaving] = useState(false);
+
+  async function toggle(next: "simple" | "advanced") {
+    if (next === mode || saving) return;
+    setSaving(true);
+    try {
+      await setMode(next);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="p-6 overflow-y-auto h-full sidebar-scroll">
+      <div className="max-w-[640px] space-y-6">
+        <header>
+          <h3 className="font-display text-xl text-ink-900">
+            Режим интерфейса
+          </h3>
+          <p className="text-sm text-ink-500 font-body mt-1.5 leading-relaxed">
+            В обычном режиме скрыты гик-настройки, чтобы интерфейс оставался
+            простым. Включите продвинутый режим, чтобы получить доступ к ролям,
+            журналам аудита, интеграциям и другим возможностям. В любой момент
+            можно вернуться обратно.
+          </p>
+        </header>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <ModeCard
+            title="Обычный"
+            description="Минимум настроек. Подходит для семьи из нескольких человек, которой не нужны роли и тонкая модерация."
+            active={mode === "simple"}
+            onClick={() => void toggle("simple")}
+            saving={saving}
+            items={[
+              "Только базовые настройки",
+              "Простая модель прав (владелец / участник)",
+              "Без debug-инструментов",
+            ]}
+          />
+          <ModeCard
+            title="Продвинутый"
+            badge="БЕТА"
+            description="Полный контроль над семейным пространством. Появятся новые вкладки в настройках семьи."
+            active={mode === "advanced"}
+            onClick={() => void toggle("advanced")}
+            saving={saving}
+            items={[
+              "Роли и кастомные права на канал/чат",
+              "Журнал аудита и модерация",
+              "Интеграции и webhook'и (скоро)",
+              "Debug-режим: UUID, raw-события",
+            ]}
+          />
+        </div>
+
+        <p className="text-xs text-ink-400 font-body">
+          Настройка сохраняется в вашем аккаунте и работает во всех браузерах.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function ModeCard({
+  title,
+  description,
+  active,
+  onClick,
+  saving,
+  items,
+  badge,
+}: {
+  title: string;
+  description: string;
+  active: boolean;
+  onClick: () => void;
+  saving: boolean;
+  items: string[];
+  badge?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={saving}
+      className={`relative text-left rounded-2xl border p-4 transition group ${
+        active
+          ? "border-warm-400 bg-warm-50/60 shadow-sm"
+          : "border-[color:var(--border-glass)] bg-[color:var(--bg-surface-subtle)] hover:border-[color:var(--border-glass-strong)]"
+      } ${saving ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
+    >
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <div className="flex items-center gap-2">
+          <span className="font-display text-lg text-ink-900">{title}</span>
+          {badge && (
+            <span className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-warm-100 text-warm-700 font-semibold">
+              {badge}
+            </span>
+          )}
+        </div>
+        <span
+          className={`w-5 h-5 rounded-full grid place-items-center transition ${
+            active
+              ? "bg-warm-500 text-white"
+              : "border border-[color:var(--border-glass-strong)] bg-white"
+          }`}
+          aria-hidden
+        >
+          {active && <Check className="w-3 h-3" strokeWidth={3} />}
+        </span>
+      </div>
+      <p className="text-sm text-ink-600 font-body leading-relaxed">
+        {description}
+      </p>
+      <ul className="mt-3 space-y-1">
+        {items.map((it) => (
+          <li
+            key={it}
+            className="text-xs text-ink-500 font-body flex items-start gap-1.5"
+          >
+            <span className="text-warm-400 mt-0.5">•</span>
+            <span>{it}</span>
+          </li>
+        ))}
+      </ul>
+    </button>
+  );
+}
+
 export default function SettingsModal({ me, onClose, onUpdate }: Props) {
   const [category, setCategory] = useState<Category>("profile");
   const [mounted, setMounted] = useState(false);
@@ -557,6 +691,7 @@ export default function SettingsModal({ me, onClose, onUpdate }: Props) {
             )}
             {category === "security" && <SecuritySection />}
             {category === "appearance" && <AppearanceSection />}
+            {category === "advanced" && <AdvancedSection />}
           </main>
         </div>
 

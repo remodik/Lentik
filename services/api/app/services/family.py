@@ -33,6 +33,14 @@ async def create_family(name: str, owner: User, db: AsyncSession) -> Family:
 
     membership = Membership(family_id=family.id, user_id=owner.id, role=Role.OWNER)
     db.add(membership)
+    await db.flush()
+
+    # Сидим пресет-роли и сразу выдаём владельцу 'owner' + 'everyone'.
+    from app.services.roles import seed_family_presets
+
+    await seed_family_presets(
+        db, family_id=family.id, owner_membership_id=membership.id
+    )
 
     await db.commit()
     await db.refresh(family)

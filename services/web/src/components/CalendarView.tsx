@@ -21,6 +21,9 @@ import {
   type CalendarEventCreate,
   type FamilyMember,
 } from "@/lib/api";
+import { useConfirm } from "@/components/ConfirmDialog";
+import Select from "@/components/Select";
+import { hasBit, PERM, usePermissions } from "@/lib/usePermissions";
 
 const MONTHS = [
   "Январь",
@@ -393,41 +396,34 @@ function EventModal({
             <label className="text-[11px] font-semibold text-ink-400 uppercase tracking-widest font-body mb-1.5 block">
               Напоминание
             </label>
-            <div className="rounded-xl border border-white/70 bg-white/62 px-3 py-2.5">
-              <select
-                value={
-                  customMode
-                    ? "custom"
-                    : reminderMinutes === null
-                      ? ""
-                      : String(reminderMinutes)
+            <Select<string>
+              value={
+                customMode
+                  ? "custom"
+                  : reminderMinutes === null
+                    ? ""
+                    : String(reminderMinutes)
+              }
+              onChange={(raw) => {
+                if (raw === "custom") {
+                  setCustomMode(true);
+                  const split = splitReminderToUnits(reminderMinutes ?? 15);
+                  setCustomAmount(split.amount);
+                  setCustomUnit(split.unit);
+                  recomputeCustomMinutes(split.amount, split.unit);
+                } else {
+                  setCustomMode(false);
+                  setReminderMinutes(raw ? Number(raw) : null);
                 }
-                onChange={(event) => {
-                  const raw = event.target.value;
-                  if (raw === "custom") {
-                    setCustomMode(true);
-                    const split = splitReminderToUnits(reminderMinutes ?? 15);
-                    setCustomAmount(split.amount);
-                    setCustomUnit(split.unit);
-                    recomputeCustomMinutes(split.amount, split.unit);
-                  } else {
-                    setCustomMode(false);
-                    setReminderMinutes(raw ? Number(raw) : null);
-                  }
-                }}
-                className="w-full bg-transparent text-[13px] text-ink-900 outline-none font-body"
-              >
-                {REMINDER_PRESETS.map((option) => (
-                  <option
-                    key={option.value === null ? "none" : String(option.value)}
-                    value={option.value === null ? "" : String(option.value)}
-                  >
-                    {option.label}
-                  </option>
-                ))}
-                <option value="custom">Своё значение…</option>
-              </select>
-            </div>
+              }}
+              options={[
+                ...REMINDER_PRESETS.map((option) => ({
+                  value: option.value === null ? "" : String(option.value),
+                  label: option.label,
+                })),
+                { value: "custom", label: "Своё значение…" },
+              ]}
+            />
             {customMode && (
               <div className="mt-2 flex items-center gap-2">
                 <input
@@ -443,29 +439,27 @@ function EventModal({
                     if (Number.isNaN(next)) return;
                     recomputeCustomMinutes(next, customUnit);
                   }}
-                  className="w-24 rounded-xl border border-white/70 bg-white/62 px-3 py-2 text-[13px] text-ink-900 outline-none font-body focus:ring-2 focus:ring-warm-200"
+                  className="w-24 rounded-xl border border-[color:var(--border-glass-strong)] bg-[color:var(--bg-surface-strong)] px-3 py-2 text-[13px] text-ink-900 outline-none font-body focus:ring-2 focus:ring-warm-200"
                   aria-label="Количество"
                 />
-                <select
+                <Select<"minutes" | "hours" | "days">
+                  className="flex-1"
+                  ariaLabel="Единица"
                   value={customUnit}
-                  onChange={(event) => {
-                    const nextUnit = event.target.value as "minutes" | "hours" | "days";
+                  onChange={(nextUnit) => {
                     setCustomUnit(nextUnit);
                     recomputeCustomMinutes(customAmount, nextUnit);
                   }}
-                  className="flex-1 rounded-xl border border-white/70 bg-white/62 px-3 py-2 text-[13px] text-ink-900 outline-none font-body"
-                  aria-label="Единица"
-                >
-                  {REMINDER_UNITS.map((unit) => (
-                    <option key={unit.value} value={unit.value}>
-                      {unit.value === "minutes"
+                  options={REMINDER_UNITS.map((unit) => ({
+                    value: unit.value,
+                    label:
+                      unit.value === "minutes"
                         ? "минут"
                         : unit.value === "hours"
                           ? "часов"
-                          : "дней"}
-                    </option>
-                  ))}
-                </select>
+                          : "дней",
+                  }))}
+                />
                 <p className="text-[11px] text-ink-400 font-body">
                   до начала
                 </p>
@@ -504,6 +498,7 @@ function DayPanel({
   events,
   birthdays,
   meId,
+  canManageOthers,
   onEdit,
   onDelete,
   onAdd,
@@ -513,11 +508,13 @@ function DayPanel({
   events: CalendarEvent[];
   birthdays: BirthdayEvent[];
   meId: string;
+  canManageOthers?: boolean;
   onEdit: (e: CalendarEvent) => void;
   onDelete: (id: string) => void;
   onAdd: () => void;
   onClose: () => void;
 }) {
+  const { confirm } = useConfirm();
   const [deleting, setDeleting] = useState<string | null>(null);
   const isToday = isSameDay(date, new Date());
 
@@ -600,7 +597,7 @@ function DayPanel({
 
         {events.map((ev) => {
           const c = COLOR_MAP[ev.color];
-          const canEdit = ev.created_by === meId;
+          const canEdit = ev.created_by === meId || !!canManageOthers;
 
           return (
             <div
@@ -645,7 +642,12 @@ function DayPanel({
 
                     <button
                       onClick={async () => {
-                        if (!confirm("Удалить событие?")) return;
+                        const ok = await confirm({
+                          title: "Удалить событие?",
+                          confirmLabel: "Удалить",
+                          tone: "danger",
+                        });
+                        if (!ok) return;
                         setDeleting(ev.id);
                         try {
                           await onDelete(ev.id);
@@ -680,6 +682,12 @@ export default function CalendarView({
   meId: string;
   members?: FamilyMember[];
 }) {
+  const { perms } = usePermissions();
+  const canManageOthers =
+    !!perms &&
+    (perms.is_owner ||
+      perms.is_administrator ||
+      hasBit(perms.base, PERM.MANAGE_CALENDAR));
   const today = useMemo(() => new Date(), []);
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth());
@@ -861,7 +869,7 @@ export default function CalendarView({
               <div className="w-8 h-8 border-2 border-cream-300 border-t-warm-400 rounded-full animate-spin" />
             </div>
           ) : (
-            <div className="calendar-grid grid grid-cols-7 border-l border-t border-[rgba(240,228,204,0.35)]">
+            <div className="calendar-grid grid grid-cols-7 border-l border-t border-black">
               {Array.from({ length: totalCells }).map((_, idx) => {
                 const dayNum = idx - firstDay + 1;
                 const inMonth = dayNum >= 1 && dayNum <= daysInMonth;
@@ -891,7 +899,7 @@ export default function CalendarView({
                       if (!inMonth || !dayDate) return;
                       setSelectedDay(isSelected ? null : dayDate);
                     }}
-                    className={`cal-day min-h-[100px] p-2 border-b border-r cursor-pointer
+                    className={`cal-day min-h-[100px] p-2 border-b border-r border-black cursor-pointer
                       ${isToday2 ? "cal-day-today" : ""}
                       ${count > 0 ? "has-events" : ""}
                       ${!inMonth ? "cal-day-out" : ""}
@@ -992,6 +1000,7 @@ export default function CalendarView({
             events={dayPanelEvents}
             birthdays={dayPanelBirthdays}
             meId={meId}
+            canManageOthers={canManageOthers}
             onEdit={(ev) => setModal({ date: selectedDay, event: ev })}
             onDelete={handleDelete}
             onAdd={() => setModal({ date: selectedDay })}

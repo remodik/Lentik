@@ -46,6 +46,22 @@ async def join_family(
         role=Role.MEMBER,
     )
     db.add(membership)
+    await db.flush()
+
+    from app.services.roles import assign_default_roles_on_join
+    from app.services.audit import log_action
+
+    await assign_default_roles_on_join(db, membership)
+    await log_action(
+        db,
+        family_id=invite.family_id,
+        actor_id=user.id,
+        action="family.member_joined",
+        target_type="user",
+        target_id=user.id,
+        metadata={"display_name": user.display_name, "via": "invite"},
+    )
+
     consume_invite(invite)
     await db.commit()
 

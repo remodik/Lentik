@@ -70,3 +70,26 @@ def get_upload_root() -> Path:
         f"Upload directories '{configured}', '{FALLBACK_UPLOAD_DIR}' and "
         f"'{LEGACY_FALLBACK_UPLOAD_DIR}' are unavailable or not writable."
     )
+
+
+UPLOADS_URL_PREFIX = "/static/uploads/"
+
+
+def resolve_upload_path(stored_url: str) -> Path | None:
+    """Преобразовать сохранённый `url` обратно в путь под UPLOAD_DIR.
+
+    Возвращает None, если url некорректен или resolved-путь выходит за пределы
+    UPLOAD_DIR — защита от мусора/манипуляций (см. CWE-22).
+    """
+    if not isinstance(stored_url, str) or not stored_url.startswith(UPLOADS_URL_PREFIX):
+        return None
+    relative = stored_url[len(UPLOADS_URL_PREFIX):]
+    if not relative or relative.startswith("/") or ".." in relative.split("/"):
+        return None
+    root = get_upload_root().resolve()
+    candidate = (root / relative).resolve()
+    try:
+        candidate.relative_to(root)
+    except ValueError:
+        return None
+    return candidate

@@ -19,15 +19,29 @@ src/
 │   ├── login/            # Вход
 │   ├── onboarding/       # Создание / вступление в семью
 │   └── app/              # Основное приложение
-├── components/
-│   ├── ChatView.tsx       # Чат с WebSocket
-│   ├── GalleryView.tsx    # Галерея
-│   ├── MembersList.tsx    # Список участников
-│   ├── ProfileMenu.tsx    # Попап профиля
-│   ├── SettingsModal.tsx  # Модал настроек
-│   └── PinInput.tsx       # Компонент ввода PIN
+├── components/           # UI компоненты по разделам
+│   ├── ChatView.tsx, ChatSettingsModal.tsx   # Чат с WebSocket
+│   ├── ChannelsView.tsx, ChannelPermissionsEditor.tsx  # Каналы
+│   ├── GalleryView.tsx, FilesView.tsx, MediaLightbox.tsx  # Медиа и файлы
+│   ├── CalendarView.tsx, RemindersView.tsx   # Календарь и напоминания
+│   ├── NotesView.tsx                          # Заметки
+│   ├── BudgetView.tsx                         # Бюджет и расходы
+│   ├── FamilyTreeView.tsx                     # Семейное древо
+│   ├── MembersList.tsx, MemberRolesModal.tsx, RolesEditor.tsx  # Участники и роли
+│   ├── AuditLogView.tsx                       # Журнал аудита
+│   ├── NotificationSystem.tsx, NotificationBell.tsx, NotificationCenter.tsx  # Уведомления
+│   ├── AppLayout.tsx, MobileBottomNav.tsx     # Каркас приложения
+│   ├── ThemeProvider.tsx, ThemeSelector.tsx   # Темы
+│   ├── ProfileMenu.tsx, SettingsModal.tsx, FamilySettingsModal.tsx
+│   └── PinInput.tsx, ConfirmDialog.tsx, Select.tsx, ...
 └── lib/
-    └── api.ts             # Типизированный API клиент
+    ├── api.ts            # Типизированный API клиент
+    ├── api-base.ts       # Базовый fetch-слой
+    ├── families.ts       # Хелперы по семьям
+    ├── presence.ts       # Presence через WebSocket
+    ├── usePermissions.tsx # Хук прав доступа
+    ├── useUserMode.tsx   # Режим пользователя
+    └── useUserPopover.ts, useCtrlResize.ts
 ```
 
 ## Установка и запуск

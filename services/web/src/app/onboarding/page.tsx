@@ -16,6 +16,7 @@ import { FREE_FAMILY_LIMIT, isFamilyLimitError } from "@/lib/families";
 import PinInput from "@/components/PinInput";
 import { PartyPopper, ArrowLeft, Link2, HousePlus, ArrowRight } from "lucide-react";
 import { apiFetch } from "@/lib/api-base";
+import { useConfirm } from "@/components/ConfirmDialog";
 
 function Blobs() {
   return (
@@ -25,11 +26,11 @@ function Blobs() {
     >
       <div
         className="absolute -top-32 -right-32 w-96 h-96 rounded-full opacity-50 blur-3xl"
-        style={{ background: "radial-gradient(circle, rgba(245,213,176,0.85) 0%, transparent 70%)" }}
+        style={{ background: "radial-gradient(circle, rgb(var(--warm-200) / 0.85) 0%, transparent 70%)" }}
       />
       <div
         className="absolute -bottom-24 -left-24 w-72 h-72 rounded-full opacity-55 blur-3xl"
-        style={{ background: "radial-gradient(circle, rgba(250,235,215,0.85) 0%, transparent 70%)" }}
+        style={{ background: "radial-gradient(circle, rgb(var(--warm-100) / 0.85) 0%, transparent 70%)" }}
       />
     </div>
   );
@@ -54,6 +55,7 @@ function OnboardingContent() {
   const router = useRouter();
   const params = useSearchParams();
   const inviteToken = params.get("token");
+  const { notify } = useConfirm();
 
   // If token is present — go directly to join step
   const [step, setStep] = useState<Step>(inviteToken ? "join" : "choice");
@@ -152,9 +154,9 @@ function OnboardingContent() {
         <div className="glass-page-card glossy p-8 text-center">
           <div className="w-16 h-16 rounded-[22px] mx-auto mb-4 flex items-center justify-center glossy"
             style={{
-              background: "rgba(255,255,255,0.60)",
-              border: "1px solid rgba(255,255,255,0.55)",
-              boxShadow: "0 8px 24px rgba(28,23,20,0.08), inset 0 1px 0 rgba(255,255,255,0.85)",
+              background: "var(--bg-surface)",
+              border: "1px solid var(--border-glass-strong)",
+              boxShadow: "0 8px 24px var(--scrim-1), inset 0 1px 0 var(--highlight-6)",
             }}
           >
             <PartyPopper className="w-8 h-8 text-warm-500" strokeWidth={1.9} />
@@ -166,12 +168,12 @@ function OnboardingContent() {
           <button
             onClick={() => {
               navigator.clipboard.writeText(inviteLink);
-              alert("Ссылка скопирована!");
+              void notify({ title: "Ссылка скопирована" });
             }}
             className="w-full text-left p-4 rounded-2xl text-sm font-body text-ink-700 break-all transition-all active:scale-[0.99]"
             style={{
-              background: "rgba(255,255,255,0.48)",
-              border: "1px solid rgba(255,255,255,0.50)",
+              background: "var(--bg-surface-subtle)",
+              border: "1px solid var(--border-glass)",
               backdropFilter: "blur(12px)",
             }}
             data-testid="copy-invite-link-btn"
@@ -210,8 +212,8 @@ function OnboardingContent() {
               onClick={() => setStep("join")}
               className="w-full py-5 px-5 text-left rounded-2xl transition-all active:scale-[0.98]"
               style={{
-                background: "#1c1714",
-                boxShadow: "0 6px 20px rgba(28,23,20,0.25), inset 0 1px 0 rgba(255,255,255,0.08)",
+                background: "rgb(var(--ink-900))",
+                boxShadow: "0 6px 20px var(--scrim-4), inset 0 1px 0 var(--highlight-1)",
               }}
               data-testid="choice-join-btn"
             >
@@ -385,8 +387,8 @@ export default function OnboardingPage() {
           <div
             className="inline-flex items-center justify-center w-16 h-16 rounded-[22px] mb-5 glossy"
             style={{
-              background: "#1c1714",
-              boxShadow: "0 12px 36px rgba(28,23,20,0.32), inset 0 1px 0 rgba(255,255,255,0.10)",
+              background: "rgb(var(--ink-900))",
+              boxShadow: "0 12px 36px var(--scrim-4), inset 0 1px 0 var(--highlight-1)",
             }}
           >
             <House className="w-7 h-7 text-cream-50" strokeWidth={2.1} />

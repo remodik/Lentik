@@ -9,7 +9,7 @@
 
 .tree-head {
   padding: 14px 16px 12px;
-  border-bottom: 1px solid var(--color-extra-041);
+  border-bottom: 1px solid var(--border-glass-strong);
   flex-shrink: 0;
 }
 
@@ -92,12 +92,12 @@
   gap: 10px;
   padding: 10px 14px 10px 10px;
   border-radius: 18px;
-  background: var(--color-extra-050);
-  border: 1px solid var(--color-extra-041);
+  background: var(--border-glass);
+  border: 1px solid var(--border-glass-strong);
   backdrop-filter: var(--blur-extra-005);
   box-shadow:
-    0 2px 14px var(--color-extra-014),
-    0 18px 54px var(--color-extra-120),
+    0 2px 14px var(--scrim-1),
+    0 18px 54px var(--scrim-faint),
     inset 0 1px 0 var(--bg-surface-strong);
   transition:
     box-shadow 160ms ease,
@@ -114,22 +114,22 @@
   transition: none;
   z-index: 5;
   box-shadow:
-    0 12px 40px var(--color-extra-097),
-    0 30px 80px var(--color-extra-014);
+    0 12px 40px var(--scrim-1),
+    0 30px 80px var(--scrim-1);
 }
 
 .tree-node:hover {
   transform: translateY(-1px);
-  background: var(--color-extra-061);
-  border-color: var(--color-extra-050);
+  background: var(--bg-surface-strong);
+  border-color: var(--border-glass);
 }
 
 .tree-node.selected {
   border-color: rgb(var(--warm-400));
-  background: var(--color-extra-052);
+  background: rgb(var(--warm-100) / 0.75);
   box-shadow:
-    0 0 0 3px var(--color-extra-128),
-    0 18px 60px var(--color-extra-097);
+    0 0 0 3px var(--warning-bg),
+    0 18px 60px var(--scrim-1);
 }
 
 .tree-node.highlighted {
@@ -163,7 +163,7 @@
   place-items: center;
   background: white;
   color: rgb(var(--ink-500));
-  border: 1px solid var(--color-extra-050);
+  border: 1px solid var(--border-glass);
 }
 
 .tree-details {
@@ -174,17 +174,17 @@
   padding: 16px;
   border-radius: 22px;
   background: var(--bg-surface-strong);
-  border: 1px solid var(--color-extra-041);
+  border: 1px solid var(--border-glass-strong);
   box-shadow:
-    0 22px 60px var(--color-extra-120),
+    0 22px 60px var(--scrim-faint),
     inset 0 1px 0 var(--bg-surface-strong);
 }
 
 .tree-info-cell {
   border-radius: 14px;
   padding: 10px 12px;
-  background: var(--color-extra-042);
-  border: 1px solid var(--color-extra-041);
+  background: var(--bg-surface-subtle);
+  border: 1px solid var(--border-glass-strong);
 }
 
 .tree-info-k {
@@ -207,8 +207,8 @@
 .tree-bio {
   border-radius: 16px;
   padding: 12px;
-  background: var(--color-extra-042);
-  border: 1px solid var(--color-extra-041);
+  background: var(--bg-surface-subtle);
+  border: 1px solid var(--border-glass-strong);
 }
 
 .tree-bio-v {

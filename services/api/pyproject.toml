@@ -3,18 +3,20 @@ name = "api"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.13"
 dependencies = [
-    "aiofiles>=25.1.0",
-    "alembic>=1.18.4",
-    "asyncpg>=0.31.0",
-    "fastapi>=0.129.0",
-    "passlib>=1.7.4",
+    "aiofiles==25.1.0",
+    "alembic==1.18.4",
+    "asyncpg==0.31.0",
+    "fastapi==0.135.1",
+    "passlib==1.7.4",
     "psycopg2>=2.9.11",
-    "pydantic-settings>=2.13.1",
-    "python-jose[cryptography]>=3.5.0",
-    "python-multipart>=0.0.22",
-    "sqlalchemy>=2.0.46",
+    "psycopg2-binary==2.9.10",
+    "pydantic==2.12.5",
+    "pydantic-settings==2.13.1",
+    "python-jose[cryptography]==3.5.0",
+    "python-multipart==0.0.22",
+    "sqlalchemy[asyncio]==2.0.48",
     "uliweb-alembic>=0.6.9",
-    "uvicorn[standard]>=0.41.0",
+    "uvicorn[standard]==0.41.0",
 ]

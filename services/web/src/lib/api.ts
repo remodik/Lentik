@@ -56,6 +56,8 @@ export function joinByInvite(token: string, display_name: string, pin: string) {
   });
 }
 
+export type UiMode = "simple" | "advanced";
+
 export type Me = {
   id: string;
   username: string;
@@ -66,7 +68,211 @@ export type Me = {
   is_online?: boolean;
   last_seen_at?: string | null;
   created_at: string;
+  ui_mode?: UiMode;
 };
+
+export function updateUiMode(mode: UiMode) {
+  return request<Me>("/me", {
+    method: "PATCH",
+    body: JSON.stringify({ ui_mode: mode }),
+  });
+}
+
+// ─── Роли и права ──────────────────────────────────────────────────────────
+
+export type FamilyRole = {
+  id: string;
+  family_id: string;
+  slug: string | null;
+  name: string;
+  color: string;
+  priority: number;
+  permissions: number; // битовое поле (BigInt в JS = number с ограничением,
+                      // но влезает до 2^53; admin-бит 1<<62 храним как строку
+                      // ниже).
+  is_preset: boolean;
+  is_everyone: boolean;
+  is_system: boolean;
+  created_at: string;
+  member_count: number;
+};
+
+export type PermissionBit = {
+  bit: number;
+  label: string;
+  description: string;
+};
+
+export type PermissionGroup = {
+  name: string;
+  perms: PermissionBit[];
+};
+
+export type PermissionsCatalog = {
+  groups: PermissionGroup[];
+};
+
+export function getRoles(familyId: string) {
+  return request<FamilyRole[]>(`/families/${familyId}/roles`);
+}
+
+export function getPermissionsCatalog(familyId: string) {
+  return request<PermissionsCatalog>(`/families/${familyId}/permissions/catalog`);
+}
+
+export function createRole(
+  familyId: string,
+  data: { name: string; color?: string; priority?: number; permissions?: number },
+) {
+  return request<FamilyRole>(`/families/${familyId}/roles`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateRole(
+  familyId: string,
+  roleId: string,
+  data: { name?: string; color?: string; priority?: number; permissions?: number },
+) {
+  return request<FamilyRole>(`/families/${familyId}/roles/${roleId}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteRole(familyId: string, roleId: string) {
+  return request<void>(`/families/${familyId}/roles/${roleId}`, {
+    method: "DELETE",
+  });
+}
+
+export function setMemberRoles(familyId: string, userId: string, roleIds: string[]) {
+  return request<FamilyRole[]>(
+    `/families/${familyId}/members/${userId}/roles`,
+    {
+      method: "PUT",
+      body: JSON.stringify({ role_ids: roleIds }),
+    },
+  );
+}
+
+export function getMemberRoles(familyId: string, userId: string) {
+  return request<FamilyRole[]>(`/families/${familyId}/members/${userId}/roles`);
+}
+
+/** Map user_id → [role_id]. Один запрос вместо N. */
+export function getAllMemberRoles(familyId: string) {
+  return request<Record<string, string[]>>(`/families/${familyId}/members/roles`);
+}
+
+// ─── Permission overrides на каналы/чаты ───────────────────────────────────
+
+export type PermissionOverride = {
+  role_id: string;
+  allow: number;
+  deny: number;
+};
+
+export function getChannelOverrides(familyId: string, channelId: string) {
+  return request<PermissionOverride[]>(
+    `/families/${familyId}/channels/${channelId}/permissions`,
+  );
+}
+
+export function setChannelOverride(
+  familyId: string,
+  channelId: string,
+  roleId: string,
+  data: { allow: number; deny: number },
+) {
+  return request<PermissionOverride>(
+    `/families/${familyId}/channels/${channelId}/permissions/${roleId}`,
+    { method: "PUT", body: JSON.stringify(data) },
+  );
+}
+
+export function deleteChannelOverride(
+  familyId: string,
+  channelId: string,
+  roleId: string,
+) {
+  return request<void>(
+    `/families/${familyId}/channels/${channelId}/permissions/${roleId}`,
+    { method: "DELETE" },
+  );
+}
+
+export function getChatOverrides(familyId: string, chatId: string) {
+  return request<PermissionOverride[]>(
+    `/families/${familyId}/chats/${chatId}/permissions`,
+  );
+}
+
+export function setChatOverride(
+  familyId: string,
+  chatId: string,
+  roleId: string,
+  data: { allow: number; deny: number },
+) {
+  return request<PermissionOverride>(
+    `/families/${familyId}/chats/${chatId}/permissions/${roleId}`,
+    { method: "PUT", body: JSON.stringify(data) },
+  );
+}
+
+export function deleteChatOverride(
+  familyId: string,
+  chatId: string,
+  roleId: string,
+) {
+  return request<void>(
+    `/families/${familyId}/chats/${chatId}/permissions/${roleId}`,
+    { method: "DELETE" },
+  );
+}
+
+export type MyEffectivePermissions = {
+  base: number;
+  is_owner: boolean;
+  is_administrator: boolean;
+  chats: Record<string, number>;
+  channels: Record<string, number>;
+};
+
+export function getMyEffectivePermissions(familyId: string) {
+  return request<MyEffectivePermissions>(
+    `/families/${familyId}/me/permissions`,
+  );
+}
+
+// ─── Журнал аудита ─────────────────────────────────────────────────────────
+
+export type AuditLogEntry = {
+  id: string;
+  actor_id: string | null;
+  actor_display_name: string | null;
+  actor_username: string | null;
+  action: string;
+  target_type: string | null;
+  target_id: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+};
+
+export function getAuditLog(
+  familyId: string,
+  opts?: { limit?: number; before?: string; action?: string },
+) {
+  const params = new URLSearchParams();
+  if (opts?.limit) params.set("limit", String(opts.limit));
+  if (opts?.before) params.set("before", opts.before);
+  if (opts?.action) params.set("action", opts.action);
+  const qs = params.toString();
+  return request<AuditLogEntry[]>(
+    `/families/${familyId}/audit-log${qs ? `?${qs}` : ""}`,
+  );
+}
 
 export type MyFamily = {
   family_id: string;
@@ -128,6 +334,16 @@ export function createFamily(name: string) {
     method: "POST",
     body: JSON.stringify({ name }),
   });
+}
+
+export function renameFamily(familyId: string, name: string) {
+  return request<{ id: string; name: string; created_at: string }>(
+    `/families/${familyId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ name }),
+    },
+  );
 }
 
 export function kickMember(familyId: string, userId: string) {
@@ -346,6 +562,12 @@ export function deleteMessage(familyId: string, chatId: string, messageId: strin
   });
 }
 
+export function deleteChat(familyId: string, chatId: string) {
+  return request<void>(`/families/${familyId}/chats/${chatId}`, {
+    method: "DELETE",
+  });
+}
+
 export function addReaction(
   familyId: string,
   chatId: string,
@@ -466,7 +688,7 @@ export type GalleryItem = {
   family_id: string;
   uploaded_by: string | null;
   uploaded_by_name: string | null;
-  media_type: "image" | "video";
+  media_type: "image" | "video" | "file";
   url: string;
   file_name: string | null;
   file_size: number | null;

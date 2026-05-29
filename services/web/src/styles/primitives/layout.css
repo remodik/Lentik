@@ -108,10 +108,10 @@
     font-size: 0.95rem;
     color: var(--text-on-dark);
     background: var(--text-primary);
-    border: 1px solid var(--color-extra-019);
+    border: 1px solid var(--highlight-1);
     box-shadow:
-        0 12px 30px var(--color-extra-177),
-        inset 0 1px 0 var(--color-extra-021);
+        0 12px 30px var(--scrim-4),
+        inset 0 1px 0 var(--highlight-2);
 }
 
 .app-family-menu-anchor {
@@ -134,8 +134,8 @@
 .app-brand-home-btn.active {
     background: var(--accent);
     box-shadow:
-        0 14px 34px var(--color-extra-177),
-        inset 0 1px 0 var(--color-extra-049);
+        0 14px 34px var(--scrim-4),
+        inset 0 1px 0 var(--bg-elevated);
 }
 
 .app-family-title-row {
@@ -193,7 +193,7 @@
     text-align: left;
     padding: 0.56rem 0.68rem;
     border-radius: 0.78rem;
-    border: 1px solid var(--color-extra-001);
+    border: 1px solid transparent;
     color: var(--text-tertiary);
     font-size: 0.82rem;
     font-family: var(--font-body);
@@ -279,10 +279,10 @@
     display: grid;
     place-items: center;
     background: var(--accent);
-    color: var(--color-extra-012);
+    color: #fff;
     font-size: 0.64rem;
     font-weight: 700;
-    border: 1.5px solid var(--color-extra-049);
+    border: 1.5px solid var(--bg-elevated);
 }
 
 .app-topbar {

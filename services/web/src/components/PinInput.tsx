@@ -131,21 +131,21 @@ export default function PinInput({ value, onChange }: Props) {
         }
 
         .pin-input--glass {
-          background: rgba(255, 255, 255, 0.55);
-          border: 1px solid rgba(255, 255, 255, 0.7);
+          background: var(--bg-surface);
+          border: 1px solid var(--border-glass-strong);
           backdrop-filter: blur(16px);
           box-shadow:
-            0 18px 60px rgba(17, 24, 39, 0.08),
-            inset 0 1px 0 rgba(255, 255, 255, 0.82);
+            0 18px 60px var(--scrim-1),
+            inset 0 1px 0 var(--shadow-inset-top);
         }
 
         .pin-input--glass:hover {
           transform: translateY(-1px);
-          background: rgba(255, 255, 255, 0.62);
+          background: var(--bg-surface-strong);
           box-shadow:
-            0 22px 74px rgba(17, 24, 39, 0.1),
-            inset 0 1px 0 rgba(255, 255, 255, 0.86);
-          border-color: rgba(255, 255, 255, 0.78);
+            0 22px 74px var(--scrim-2),
+            inset 0 1px 0 var(--shadow-inset-top);
+          border-color: var(--border-glass-strong);
         }
 
         .pin-input--glass:active {
@@ -153,12 +153,12 @@ export default function PinInput({ value, onChange }: Props) {
         }
 
         .pin-input--glass:focus {
-          background: rgba(255, 255, 255, 0.7);
-          border-color: rgba(251, 191, 36, 0.45);
+          background: var(--bg-elevated);
+          border-color: var(--accent-border);
           box-shadow:
-            0 0 0 4px rgba(251, 191, 36, 0.14),
-            0 22px 74px rgba(17, 24, 39, 0.12),
-            inset 0 1px 0 rgba(255, 255, 255, 0.9);
+            0 0 0 4px var(--accent-focus-ring),
+            0 22px 74px var(--scrim-2),
+            inset 0 1px 0 var(--shadow-inset-top);
           transform: translateY(-1px);
         }
 

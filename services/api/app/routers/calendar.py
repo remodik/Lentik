@@ -7,10 +7,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.auth.deps import get_current_user
+from app.core.permissions import Perm, has_perm
 from app.db.deps import get_db
 from app.models.calendar_event import CalendarEvent
 from app.models.membership import Membership
 from app.models.user import User
+from app.services.roles import effective_permissions
 from app.schemas.calendar import (
     CalendarEventCreate, CalendarEventResponse, CalendarEventUpdate,
 )
@@ -127,7 +129,7 @@ async def update_event(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    await _require_member(family_id, user, db)
+    m = await _require_member(family_id, user, db)
 
     event = await db.scalar(
         select(CalendarEvent)
@@ -136,8 +138,10 @@ async def update_event(
     )
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
-    if event.created_by != user.id:
-        raise HTTPException(status_code=403, detail="Only creator can edit")
+    if event.created_by != user.id and m.role.value != "owner":
+        bits = await effective_permissions(db, m.id)
+        if not has_perm(bits, Perm.MANAGE_CALENDAR):
+            raise HTTPException(status_code=403, detail="Недостаточно прав для изменения чужих событий")
 
     updated_fields = body.model_fields_set
     reset_reminder = False
@@ -184,8 +188,10 @@ async def delete_event(
     )
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
-    if event.created_by != user.id and m.role != "owner":
-        raise HTTPException(status_code=403, detail="Not allowed")
+    if event.created_by != user.id and m.role.value != "owner":
+        bits = await effective_permissions(db, m.id)
+        if not has_perm(bits, Perm.MANAGE_CALENDAR):
+            raise HTTPException(status_code=403, detail="Недостаточно прав для удаления чужих событий")
 
     await db.delete(event)
     await db.commit()

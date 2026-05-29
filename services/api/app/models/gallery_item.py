@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 class MediaType(str, enum.Enum):
     IMAGE = "image"
     VIDEO = "video"
+    FILE = "file"
 
 
 class GalleryItem(Base):

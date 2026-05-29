@@ -10,7 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.auth.deps import get_current_user
+from app.core.permissions import Perm, has_perm
 from app.db.deps import get_db
+from app.services.roles import effective_permissions
 from app.models.budget_transaction import (
     BudgetTransaction,
     BudgetTransactionSplit,
@@ -399,11 +401,13 @@ async def update_transaction(
         raise HTTPException(status_code=404, detail="Transaction not found")
 
     m = await require_membership(tx.family_id, user, db)
-    if tx.author_id != user.id and m.role != "owner":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only the author or family owner can edit",
-        )
+    if tx.author_id != user.id and m.role.value != "owner":
+        bits = await effective_permissions(db, m.id)
+        if not has_perm(bits, Perm.MANAGE_BUDGET):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Недостаточно прав для управления чужими записями бюджета",
+            )
 
     updated = body.model_fields_set
     family_user_ids = await _family_user_ids(tx.family_id, db)

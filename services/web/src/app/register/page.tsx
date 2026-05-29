@@ -87,9 +87,9 @@ export default function RegisterPage() {
             <div
               className="inline-flex items-center justify-center w-14 h-14 rounded-[20px] mb-4 glossy"
               style={{
-                background: "#1c1714",
+                background: "rgb(var(--ink-900))",
                 boxShadow:
-                  "0 12px 36px rgba(28,23,20,0.32), inset 0 1px 0 rgba(255,255,255,0.10)",
+                  "0 12px 36px var(--scrim-4), inset 0 1px 0 var(--highlight-1)",
               }}
             >
               <House className="w-5 h-5 text-cream-50" strokeWidth={2.1} />
@@ -233,7 +233,7 @@ export default function RegisterPage() {
           font-weight: 600;
           text-transform: uppercase;
           letter-spacing: 0.08em;
-          color: #6b5a4e;
+          color: var(--text-tertiary);
           font-family: "DM Sans", sans-serif;
         }
       `}</style>
@@ -251,21 +251,21 @@ function Blobs() {
         className="absolute -top-32 -right-32 w-[480px] h-[480px] rounded-full opacity-50 blur-3xl"
         style={{
           background:
-            "radial-gradient(circle, rgba(245,213,176,0.85) 0%, transparent 70%)",
+            "radial-gradient(circle, rgb(var(--warm-200) / 0.85) 0%, transparent 70%)",
         }}
       />
       <div
         className="absolute -bottom-24 -left-24 w-80 h-80 rounded-full opacity-55 blur-3xl"
         style={{
           background:
-            "radial-gradient(circle, rgba(250,235,215,0.85) 0%, transparent 70%)",
+            "radial-gradient(circle, rgb(var(--warm-100) / 0.85) 0%, transparent 70%)",
         }}
       />
       <div
         className="absolute top-[40%] left-[60%] w-56 h-56 rounded-full opacity-30 blur-2xl"
         style={{
           background:
-            "radial-gradient(circle, rgba(196,149,106,0.5) 0%, transparent 70%)",
+            "radial-gradient(circle, rgb(var(--warm-400) / 0.5) 0%, transparent 70%)",
         }}
       />
     </div>

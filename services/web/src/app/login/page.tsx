@@ -5,26 +5,26 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { House } from "lucide-react";
 import { loginByPin, getMyFamilies } from "@/lib/api";
-import { setAuthToken } from "@/lib/api-base";
 import PinInput from "@/components/PinInput";
+import { PIN_BOXES, emptyPin, isValidPin, joinPin } from "@/lib/pin";
 
 export default function LoginPage() {
   const router = useRouter();
   const [username, setUsername] = useState("");
-  const [pin, setPin] = useState(["", "", "", ""]);
+  const [pin, setPin] = useState(emptyPin());
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!username.trim()) return setError("Введи имя пользователя");
-    if (pin.some((d) => !d)) return setError("Введи PIN");
+    const pinStr = joinPin(pin);
+    if (!isValidPin(pinStr)) return setError("PIN — от 4 до 8 цифр");
 
     setError("");
     setLoading(true);
     try {
-      const auth = await loginByPin(username.trim(), pin.join(""));
-      if (auth.access_token) setAuthToken(auth.access_token);
+      await loginByPin(username.trim(), pinStr);
       const families = await getMyFamilies();
       if (families.length === 0) {
         router.push("/onboarding");
@@ -34,7 +34,7 @@ export default function LoginPage() {
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Неверные данные");
-      setPin(["", "", "", ""]);
+      setPin(emptyPin());
     } finally {
       setLoading(false);
     }
@@ -91,7 +91,7 @@ export default function LoginPage() {
             <div>
               <label className="field-label">PIN-код</label>
               <div className="mt-3">
-                <PinInput value={pin} onChange={setPin} />
+                <PinInput value={pin} onChange={setPin} length={PIN_BOXES} />
               </div>
             </div>
 

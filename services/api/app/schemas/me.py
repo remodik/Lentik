@@ -25,18 +25,19 @@ class UpdateProfileRequest(BaseModel):
     username: str | None = Field(default=None, min_length=2, max_length=64)
     bio: str | None = Field(default=None, max_length=300)
     birthday: date | None = None
-    ui_mode: str | None = Field(default=None, pattern=r"^(simple|advanced)$")
+    ui_mode: str | None = Field(default=None, pattern=r"^(simple|advanced|expert)$")
 
 
 class ChangePinRequest(BaseModel):
-    current_pin: str = Field(min_length=4, max_length=4)
-    new_pin: str = Field(min_length=4, max_length=4)
+    # current_pin может быть старым 4-значным; new_pin — 4–8 цифр.
+    current_pin: str = Field(min_length=4, max_length=8)
+    new_pin: str = Field(min_length=4, max_length=8)
 
     @field_validator("new_pin")
     @classmethod
-    def new_pin_must_be_4_digits(cls, v: str) -> str:
-        if not re.fullmatch(r"\d{4}", v):
-            raise ValueError("PIN должен быть 4 цифры")
+    def new_pin_must_be_4_to_8_digits(cls, v: str) -> str:
+        if not re.fullmatch(r"\d{4,8}", v):
+            raise ValueError("PIN должен быть от 4 до 8 цифр")
         return v
 
 

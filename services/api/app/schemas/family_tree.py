@@ -2,7 +2,9 @@ from datetime import date, datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from app.core.url_safety import validate_user_url
 
 Gender = Literal["male", "female", "other", "unknown"]
 RelationType = Literal["parent", "spouse"]
@@ -19,6 +21,8 @@ class TreePersonCreate(BaseModel):
     pos_x: float | None = None
     pos_y: float | None = None
 
+    _validate_avatar = field_validator("avatar_url")(validate_user_url)
+
 
 class TreePersonUpdate(BaseModel):
     display_name: str | None = Field(default=None, min_length=1, max_length=120)
@@ -33,6 +37,8 @@ class TreePersonUpdate(BaseModel):
     clear_user_link: bool = False
     clear_birth_date: bool = False
     clear_death_date: bool = False
+
+    _validate_avatar = field_validator("avatar_url")(validate_user_url)
 
 
 class TreePersonResponse(BaseModel):

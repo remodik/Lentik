@@ -31,36 +31,63 @@ export const viewport: Viewport = {
     themeColor: "#1c1714",
 };
 
+function originOf(value: string | undefined, fallback: string): string {
+    try {
+        return new URL(value || fallback).origin;
+    } catch {
+        return "";
+    }
+}
+
+/**
+ * CSP для статического экспорта (CWE-693). Собирается на этапе сборки.
+ *
+ * Ограничения движка: это App Router со `output: export`, поэтому per-request
+ * nonce невозможен, а Next эмитит inline-bootstrap скрипты — без `'unsafe-inline'`
+ * приложение не загрузится. Поэтому script-src здесь оставляет inline, но
+ * остальная политика заперта: object-src 'none', base-uri/form-action 'self',
+ * connect/img/media — только свой origin и origin API. Строгий nonce-CSP и
+ * заголовок frame-ancestors/X-Frame-Options должны выставляться на отдающем
+ * статику слое (CDN/reverse-proxy) — см. заметку M7.
+ */
+function buildCsp(): string {
+    const apiOrigin = originOf(process.env.NEXT_PUBLIC_API_BASE, "http://localhost:8000");
+    const wsOrigin = originOf(process.env.NEXT_PUBLIC_WS_BASE, "ws://localhost:8000");
+    const isProd = process.env.NODE_ENV === "production";
+    // В dev Next использует eval/inline для HMR — иначе сломается `next dev`.
+    const scriptSrc = isProd
+        ? "'self' 'unsafe-inline'"
+        : "'self' 'unsafe-inline' 'unsafe-eval'";
+    const connect = ["'self'", apiOrigin, wsOrigin].filter(Boolean).join(" ");
+    const media = ["'self'", "blob:", apiOrigin].filter(Boolean).join(" ");
+    const img = ["'self'", "data:", "blob:", apiOrigin].filter(Boolean).join(" ");
+    return [
+        "default-src 'self'",
+        `script-src ${scriptSrc}`,
+        "style-src 'self' 'unsafe-inline'",
+        `img-src ${img}`,
+        `media-src ${media}`,
+        `connect-src ${connect}`,
+        "font-src 'self' data:",
+        "object-src 'none'",
+        "base-uri 'self'",
+        "form-action 'self'",
+        "frame-ancestors 'none'",
+    ].join("; ");
+}
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
     return (
         <html lang="ru" suppressHydrationWarning>
         <head>
+            <meta httpEquiv="Content-Security-Policy" content={buildCsp()} />
+            <meta name="referrer" content="no-referrer" />
             <meta name="mobile-web-app-capable" content="yes" />
             <meta name="apple-mobile-web-app-capable" content="yes" />
             <meta name="apple-mobile-web-app-status-bar-style" content="default" />
             <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-            <script
-                dangerouslySetInnerHTML={{
-                    __html: `
-                        (function () {
-                            try {
-                                var key = "lentik-theme";
-                                var stored = localStorage.getItem(key);
-                                var allowed = { warm: 1, dark: 1, cyberpunk: 1, retro: 1, sakura: 1 };
-                                var theme = allowed[stored] ? stored : "warm";
-                                var root = document.documentElement;
-                                if (theme === "warm") {
-                                    root.removeAttribute("data-theme");
-                                    root.style.colorScheme = "light";
-                                    return;
-                                }
-                                root.setAttribute("data-theme", theme);
-                                root.style.colorScheme = theme === "dark" ? "dark" : "light";
-                            } catch (_) {}
-                        })();
-                    `,
-                }}
-            />
+            {/* Применяет тему до первой отрисовки. Внешний файл — ради CSP. */}
+            <script src="/theme-init.js" />
         </head>
         <body>
         <ThemeProvider>
@@ -70,17 +97,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             Не регистрируем service worker. У ранних посетителей мог
             остаться зарегистрированный /sw.js — для них в /public/sw.js
             лежит self-unregistering worker, который при активации чистит
-            кэши и снимает регистрацию.
+            кэши и снимает регистрацию. Снятие регистрации — во внешнем файле.
         */}
-        <script dangerouslySetInnerHTML={{
-            __html: `
-                if ('serviceWorker' in navigator) {
-                    navigator.serviceWorker.getRegistrations().then(function (regs) {
-                        regs.forEach(function (reg) { reg.unregister().catch(function(){}); });
-                    }).catch(function(){});
-                }
-            `
-        }} />
+        <script src="/sw-unregister.js" defer />
         </body>
         </html>
     );

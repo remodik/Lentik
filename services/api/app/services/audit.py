@@ -67,8 +67,21 @@ ACTIONS = {
     "role.updated": "Изменена роль",
     "role.deleted": "Удалена роль",
     "role.assigned": "Назначены роли участнику",
+    "role.reordered": "Изменён порядок ролей",
 
     # Permission overrides
     "override.changed": "Изменены права на канале/чате",
     "override.removed": "Сброшены права на канале/чате",
+
+    # Модерация
+    "moderation.updated": "Изменены настройки модерации",
+
+    # Заметки / напоминания / древо (модерация чужого контента)
+    "note.deleted_by_moderator": "Модератор удалил заметку",
+    "note.edited_by_moderator": "Модератор отредактировал заметку",
+    "reminder.deleted_by_moderator": "Модератор удалил напоминание",
+    "reminder.edited_by_moderator": "Модератор отредактировал напоминание",
+    "tree.person_deleted": "Удалён человек из древа",
+    "tree.person_edited_by_moderator": "Изменён человек в древе",
+    "tree.relation_deleted": "Удалена связь в древе",
 }

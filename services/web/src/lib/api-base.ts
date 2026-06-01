@@ -26,7 +26,6 @@ export const API_BASE =
 
 export const WS_BASE =
   (process.env.NEXT_PUBLIC_WS_BASE ?? getDefaultWsBase()).replace(/\/+$/, "");
-export const AUTH_TOKEN_KEY = "lentik_access_token";
 
 function normalizePath(path: string): string {
   return path.startsWith("/") ? path : `/${path}`;
@@ -38,29 +37,6 @@ export function apiUrl(path: string): string {
 
 export function wsUrl(path: string): string {
   return `${WS_BASE}${normalizePath(path)}`;
-}
-
-export function getAuthToken(): string | null {
-  if (typeof window === "undefined") return null;
-  try {
-    return localStorage.getItem(AUTH_TOKEN_KEY);
-  } catch {
-    return null;
-  }
-}
-
-export function setAuthToken(token: string): void {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem(AUTH_TOKEN_KEY, token);
-  } catch {}
-}
-
-export function clearAuthToken(): void {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.removeItem(AUTH_TOKEN_KEY);
-  } catch {}
 }
 
 function isUrlField(key: string): boolean {
@@ -149,15 +125,13 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
   const hasBody = init.body !== undefined && init.body !== null;
   const isFormData =
     typeof FormData !== "undefined" && init.body instanceof FormData;
-  const token = getAuthToken();
 
   if (hasBody && !isFormData && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
-  if (token && !headers.has("Authorization")) {
-    headers.set("Authorization", `Bearer ${token}`);
-  }
 
+  // Аутентификация — исключительно через httpOnly-cookie lentik_token
+  // (credentials: "include"). Bearer-токен в localStorage больше не храним.
   try {
     return await fetch(apiUrl(path), {
       credentials: "include",

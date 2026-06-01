@@ -7,10 +7,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_current_user
-from app.core.config import settings
-from app.core.jwt import COOKIE_NAME, create_access_token
+from app.core.cookies import set_auth_cookie
+from app.core.jwt import create_access_token
 from app.core.security import hash_pin, verify_pin
-from app.core.uploads import get_upload_root, resolve_upload_path
+from app.core.storage import storage
 from app.ws.manager import ws_manager
 from app.db.deps import get_db
 from app.models.family import Family
@@ -21,8 +21,6 @@ from app.schemas.me import (
     UpdateProfileRequest,
 )
 
-UPLOAD_ROOT = get_upload_root()
-AVATAR_UPLOAD_DIR = UPLOAD_ROOT / "avatars"
 ALLOWED_EXT = {".jpg", ".jpeg", ".png", ".webp"}
 MAX_SIZE = 5 * 1024 * 1024
 
@@ -79,12 +77,9 @@ async def change_pin(
     await db.commit()
     await db.refresh(user)
 
+    # Текущая сессия получает свежую cookie (параметры — в core/cookies).
     fresh_token = create_access_token(user.id, not_before=user.password_changed_at)
-    response.set_cookie(
-        key=COOKIE_NAME, value=fresh_token,
-        httponly=True, secure=settings.is_production, samesite="lax",
-        max_age=30 * 24 * 3600, path="/",
-    )
+    set_auth_cookie(response, fresh_token)
 
 
 @router.post("/avatar", response_model=MeResponse)
@@ -102,10 +97,8 @@ async def upload_avatar(
         raise HTTPException(status_code=413, detail="File too large (max 5 MB)")
 
     filename = f"{uuid.uuid4()}{ext}"
-    dest = AVATAR_UPLOAD_DIR / filename
-    dest.parent.mkdir(parents=True, exist_ok=True)
     try:
-        dest.write_bytes(content)
+        await storage.save(f"avatars/{filename}", content, file.content_type)
     except OSError as exc:
         raise HTTPException(
             status_code=500,
@@ -113,9 +106,7 @@ async def upload_avatar(
         ) from exc
 
     if user.avatar_url:
-        old_path = resolve_upload_path(user.avatar_url)
-        if old_path:
-            old_path.unlink(missing_ok=True)
+        await storage.delete_by_url(user.avatar_url)
 
     user.avatar_url = f"/static/uploads/avatars/{filename}"
     await db.commit()

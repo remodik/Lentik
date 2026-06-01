@@ -27,6 +27,7 @@ import { useConfirm } from "@/components/ConfirmDialog";
 import FamilySettingsModal from "@/components/FamilySettingsModal";
 import { UserModeProvider } from "@/lib/useUserMode";
 import { PermissionsProvider } from "@/lib/usePermissions";
+import { ExpertIdRow } from "@/components/CopyIdButton";
 import { useCtrlResize } from "@/lib/useCtrlResize";
 import ChatView from "@/components/ChatView";
 import ChatSettingsModal from "@/components/ChatSettingsModal";
@@ -41,7 +42,7 @@ import RemindersView from "@/components/RemindersView";
 import FamilyTreeView from "@/components/FamilyTreeView";
 import SubscriptionModal from "@/components/SubscriptionModal";
 import { FREE_FAMILY_LIMIT, isFamilyLimitError } from "@/lib/families";
-import { apiFetch, clearAuthToken } from "@/lib/api-base";
+import { apiFetch } from "@/lib/api-base";
 import type { PresenceUpdateEvent } from "@/components/NotificationSystem";
 
 export default function AppPage() {
@@ -173,7 +174,6 @@ export default function AppPage() {
     } catch (err: unknown) {
       const status = (err as { status?: number })?.status;
       if (status === 401) {
-        clearAuthToken();
         localStorage.removeItem("familyId");
         router.push("/login");
         return;
@@ -191,6 +191,33 @@ export default function AppPage() {
     await loadApp(familyId);
   }
 
+  // Сброс активной семьи и перезагрузка списка (используется при выходе и
+  // при полном удалении семьи). loadApp сам уведёт на /onboarding, если семей
+  // не осталось.
+  function resetActiveFamily() {
+    setFamilySettingsOpen(false);
+    setSection("chat");
+    setActiveChatId(null);
+    localStorage.removeItem("familyId");
+    void loadApp();
+  }
+
+  // WS-событие "family_deleted": если удалили текущую семью — сбрасываем и
+  // перезагружаем. Чужие семьи нас здесь не касаются (ws привязан к family.id).
+  const handleFamilyDeleted = useCallback(
+    (deletedFamilyId: string) => {
+      setFamily((prev) => {
+        if (prev && prev.id === deletedFamilyId) {
+          resetActiveFamily();
+        }
+        return prev;
+      });
+    },
+    // resetActiveFamily стабильна по составу (использует сеттеры/loadApp).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
   async function handleLogout() {
     try {
       await logout();
@@ -200,7 +227,6 @@ export default function AppPage() {
   }
 
   function handleOpenLogin() {
-    clearAuthToken();
     localStorage.removeItem("familyId");
     router.push("/login");
   }
@@ -479,6 +505,7 @@ export default function AppPage() {
       onLogout={handleLogout}
       onMeUpdate={(m) => setMe(m)}
       onPresenceUpdate={handlePresenceUpdate}
+      onFamilyDeleted={handleFamilyDeleted}
       onChatOpen={(chatId) => {
         setSection("chat");
         setActiveChatId(chatId);
@@ -588,6 +615,12 @@ export default function AppPage() {
                       <p className="text-xs text-ink-400 font-body mt-1 line-clamp-2">
                         {subtitle}
                       </p>
+
+                      <ExpertIdRow
+                        value={chat.id}
+                        label={`чат # ${chat.name}`}
+                        onClick={(e) => e.stopPropagation()}
+                      />
 
                       {isOwner && (
                         <>
@@ -969,6 +1002,9 @@ export default function AppPage() {
           setFamilySettingsOpen(false);
           localStorage.removeItem("familyId");
           void loadApp();
+        }}
+        onDeleted={() => {
+          resetActiveFamily();
         }}
       />
     </AppLayout>

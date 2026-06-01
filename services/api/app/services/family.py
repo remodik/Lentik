@@ -42,6 +42,11 @@ async def create_family(name: str, owner: User, db: AsyncSession) -> Family:
         db, family_id=family.id, owner_membership_id=membership.id
     )
 
+    # Дефолтные настройки модерации для новой семьи.
+    from app.services.moderation import get_or_create_settings
+
+    await get_or_create_settings(db, family.id)
+
     await db.commit()
     await db.refresh(family)
     return family

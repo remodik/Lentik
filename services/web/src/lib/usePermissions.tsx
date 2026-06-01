@@ -35,6 +35,9 @@ export const PERM = {
   MANAGE_GALLERY: 1 << 17,
   MANAGE_CALENDAR: 1 << 18,
   MANAGE_BUDGET: 1 << 19,
+  MANAGE_NOTES: 1 << 20,
+  MANAGE_REMINDERS: 1 << 21,
+  MANAGE_TREE: 1 << 22,
   ADMINISTRATOR: 1 << 31,
 } as const;
 

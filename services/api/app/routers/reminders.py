@@ -7,7 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.auth.deps import get_current_user
+from app.core.permissions import Perm, has_perm
 from app.db.deps import get_db
+from app.models.membership import Membership
 from app.models.reminder import Reminder, RepeatRule
 from app.models.user import User
 from app.schemas.reminders import (
@@ -16,7 +18,40 @@ from app.schemas.reminders import (
     ReminderToggleDoneResponse,
     ReminderUpdate,
 )
+from app.services.audit import log_action
 from app.services.family import require_membership
+from app.services.roles import effective_permissions
+
+
+async def _ensure_can_modify_reminder(
+    r: Reminder, user: User, db: AsyncSession
+) -> Membership | None:
+    """Автор может всегда. Чужое напоминание — owner или MANAGE_REMINDERS (и
+    только если оно принадлежит семье). Возвращает membership модератора для
+    логирования, иначе None.
+    """
+    is_own = r.author_id == user.id
+
+    if r.family_id is None:
+        if not is_own:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Напоминание вам не принадлежит",
+            )
+        return None
+
+    m = await require_membership(r.family_id, user, db)
+    if is_own:
+        return None
+
+    if m.role.value != "owner":
+        bits = await effective_permissions(db, m.id)
+        if not has_perm(bits, Perm.MANAGE_REMINDERS):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Недостаточно прав для изменения чужих напоминаний",
+            )
+    return m
 
 family_router = APIRouter(prefix="/families/{family_id}/reminders", tags=["reminders"])
 reminder_router = APIRouter(prefix="/reminders", tags=["reminders"])
@@ -173,11 +208,8 @@ async def update_reminder(
     )
     if not r:
         raise HTTPException(status_code=404, detail="Reminder not found")
-    if r.author_id != user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only the author can edit this reminder",
-        )
+
+    moderator = await _ensure_can_modify_reminder(r, user, db)
 
     updated = body.model_fields_set
     reset_dispatch = False
@@ -199,6 +231,21 @@ async def update_reminder(
 
     if reset_dispatch:
         r.reminder_sent_at = None
+
+    if moderator is not None and r.family_id is not None:
+        author = await db.get(User, r.author_id) if r.author_id else None
+        await log_action(
+            db,
+            family_id=r.family_id,
+            actor_id=user.id,
+            action="reminder.edited_by_moderator",
+            target_type="reminder",
+            target_id=r.id,
+            metadata={
+                "title": r.title,
+                "author_name": author.display_name if author else None,
+            },
+        )
 
     await db.commit()
     await db.refresh(r, ["author"])
@@ -261,10 +308,23 @@ async def delete_reminder(
     r = await db.get(Reminder, reminder_id)
     if not r:
         raise HTTPException(status_code=404, detail="Reminder not found")
-    if r.author_id != user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only the author can delete",
+
+    moderator = await _ensure_can_modify_reminder(r, user, db)
+
+    if moderator is not None and r.family_id is not None:
+        author = await db.get(User, r.author_id) if r.author_id else None
+        await log_action(
+            db,
+            family_id=r.family_id,
+            actor_id=user.id,
+            action="reminder.deleted_by_moderator",
+            target_type="reminder",
+            target_id=r.id,
+            metadata={
+                "title": r.title,
+                "author_name": author.display_name if author else None,
+            },
         )
+
     await db.delete(r)
     await db.commit()

@@ -44,6 +44,8 @@ async def dispatch_due_calendar_reminders() -> int:
                 .options(selectinload(CalendarEvent.creator))
                 .order_by(CalendarEvent.starts_at.asc())
                 .limit(200)
+                # P2: SKIP LOCKED — несколько инстансов не задвоят рассылку.
+                .with_for_update(skip_locked=True)
             )
             events = result.all()
 

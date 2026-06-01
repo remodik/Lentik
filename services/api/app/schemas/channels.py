@@ -2,7 +2,9 @@ import json
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+from app.core.url_safety import validate_user_urls
 
 
 class ChannelCreate(BaseModel):
@@ -35,6 +37,8 @@ class ChannelResponse(BaseModel):
 class PostCreate(BaseModel):
     text: str = Field(min_length=1, max_length=10000)
     media_urls: list[str] | None = None
+
+    _validate_media = field_validator("media_urls")(validate_user_urls)
 
 
 class PostResponse(BaseModel):

@@ -1,4 +1,4 @@
-import { apiFetch, clearAuthToken, normalizeApiPayload } from "@/lib/api-base";
+import { apiFetch, normalizeApiPayload } from "@/lib/api-base";
 
 type ApiError = Error & { status?: number };
 
@@ -28,35 +28,33 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 export function register(display_name: string, username: string, pin: string) {
-  return request<{ user_id: string; access_token: string }>("/auth/register", {
+  return request<{ user_id: string }>("/auth/register", {
     method: "POST",
     body: JSON.stringify({ display_name, username, pin }),
   });
 }
 
 export function loginByPin(username: string, pin: string) {
-  return request<{ user_id: string; access_token: string }>("/auth/pin", {
+  return request<{ user_id: string }>("/auth/pin", {
     method: "POST",
     body: JSON.stringify({ username, pin }),
   });
 }
 
 export async function logout() {
-  try {
-    await request<void>("/auth/logout", { method: "POST" });
-  } finally {
-    clearAuthToken();
-  }
+  // Сервер сам сдвигает password_changed_at (logout-everywhere) и удаляет
+  // httpOnly-cookie. На фронте чистить нечего — токен в localStorage не хранится.
+  await request<void>("/auth/logout", { method: "POST" });
 }
 
 export function joinByInvite(token: string, display_name: string, pin: string) {
-  return request<{ user_id: string; family_id: string; access_token?: string }>("/auth/invite", {
+  return request<{ user_id: string; family_id: string }>("/auth/invite", {
     method: "POST",
     body: JSON.stringify({ token, display_name, pin }),
   });
 }
 
-export type UiMode = "simple" | "advanced";
+export type UiMode = "simple" | "advanced" | "expert";
 
 export type Me = {
   id: string;
@@ -141,6 +139,13 @@ export function updateRole(
   });
 }
 
+export function reorderRoles(familyId: string, orderedIds: string[]) {
+  return request<FamilyRole[]>(`/families/${familyId}/roles/reorder`, {
+    method: "PUT",
+    body: JSON.stringify({ ordered_ids: orderedIds }),
+  });
+}
+
 export function deleteRole(familyId: string, roleId: string) {
   return request<void>(`/families/${familyId}/roles/${roleId}`, {
     method: "DELETE",
@@ -169,7 +174,9 @@ export function getAllMemberRoles(familyId: string) {
 // ─── Permission overrides на каналы/чаты ───────────────────────────────────
 
 export type PermissionOverride = {
-  role_id: string;
+  subject_type: "role" | "member";
+  role_id: string | null;
+  user_id: string | null;
   allow: number;
   deny: number;
 };
@@ -187,7 +194,7 @@ export function setChannelOverride(
   data: { allow: number; deny: number },
 ) {
   return request<PermissionOverride>(
-    `/families/${familyId}/channels/${channelId}/permissions/${roleId}`,
+    `/families/${familyId}/channels/${channelId}/permissions/roles/${roleId}`,
     { method: "PUT", body: JSON.stringify(data) },
   );
 }
@@ -198,7 +205,30 @@ export function deleteChannelOverride(
   roleId: string,
 ) {
   return request<void>(
-    `/families/${familyId}/channels/${channelId}/permissions/${roleId}`,
+    `/families/${familyId}/channels/${channelId}/permissions/roles/${roleId}`,
+    { method: "DELETE" },
+  );
+}
+
+export function setChannelMemberOverride(
+  familyId: string,
+  channelId: string,
+  userId: string,
+  data: { allow: number; deny: number },
+) {
+  return request<PermissionOverride>(
+    `/families/${familyId}/channels/${channelId}/permissions/members/${userId}`,
+    { method: "PUT", body: JSON.stringify(data) },
+  );
+}
+
+export function deleteChannelMemberOverride(
+  familyId: string,
+  channelId: string,
+  userId: string,
+) {
+  return request<void>(
+    `/families/${familyId}/channels/${channelId}/permissions/members/${userId}`,
     { method: "DELETE" },
   );
 }
@@ -216,7 +246,7 @@ export function setChatOverride(
   data: { allow: number; deny: number },
 ) {
   return request<PermissionOverride>(
-    `/families/${familyId}/chats/${chatId}/permissions/${roleId}`,
+    `/families/${familyId}/chats/${chatId}/permissions/roles/${roleId}`,
     { method: "PUT", body: JSON.stringify(data) },
   );
 }
@@ -227,7 +257,30 @@ export function deleteChatOverride(
   roleId: string,
 ) {
   return request<void>(
-    `/families/${familyId}/chats/${chatId}/permissions/${roleId}`,
+    `/families/${familyId}/chats/${chatId}/permissions/roles/${roleId}`,
+    { method: "DELETE" },
+  );
+}
+
+export function setChatMemberOverride(
+  familyId: string,
+  chatId: string,
+  userId: string,
+  data: { allow: number; deny: number },
+) {
+  return request<PermissionOverride>(
+    `/families/${familyId}/chats/${chatId}/permissions/members/${userId}`,
+    { method: "PUT", body: JSON.stringify(data) },
+  );
+}
+
+export function deleteChatMemberOverride(
+  familyId: string,
+  chatId: string,
+  userId: string,
+) {
+  return request<void>(
+    `/families/${familyId}/chats/${chatId}/permissions/members/${userId}`,
     { method: "DELETE" },
   );
 }
@@ -348,6 +401,30 @@ export function renameFamily(familyId: string, name: string) {
 
 export function kickMember(familyId: string, userId: string) {
   return request<void>(`/families/${familyId}/members/${userId}`, { method: "DELETE" });
+}
+
+export function deleteFamily(familyId: string) {
+  return request<void>(`/families/${familyId}`, { method: "DELETE" });
+}
+
+// ─── Модерация ─────────────────────────────────────────────────────────────
+
+export type ModerationSettings = {
+  invite_max_active: number;
+  slowmode_default_seconds: number;
+  banned_words: string[];
+  max_message_length: number;
+};
+
+export function getModeration(familyId: string) {
+  return request<ModerationSettings>(`/families/${familyId}/moderation`);
+}
+
+export function updateModeration(familyId: string, data: ModerationSettings) {
+  return request<ModerationSettings>(`/families/${familyId}/moderation`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
 }
 
 export function transferOwnership(familyId: string, userId: string) {

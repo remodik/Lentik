@@ -12,13 +12,26 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.auth.deps import get_current_user
-from app.core.permissions import Perm
-from app.core.uploads import get_upload_root, resolve_upload_path
+from app.core.permissions import Perm, has_perm
+from app.core.uploads import (
+    ALLOWED_ATTACHMENT_EXT,
+    DANGEROUS_CONTENT_TYPES,
+    get_upload_root,
+    resolve_upload_path,
+)
+from app.core.storage import storage
+from app.core.ws_security import is_allowed_ws_origin
 from app.core.jwt import COOKIE_NAME, decode_access_token
 from app.core.ws_tickets import ws_ticket_store
 from app.db.deps import get_db
 from app.services.audit import log_action
-from app.services.roles import require_chat_perm, require_family_perm
+from app.services.moderation import enforce_message_content, get_settings
+from app.services.roles import (
+    effective_chat_permissions,
+    effective_permissions_for_chats,
+    require_chat_perm,
+    require_family_perm,
+)
 from app.models.chat import Chat
 from app.models.membership import Membership
 from app.models.message import Message
@@ -267,6 +280,28 @@ async def _enforce_slow_mode(
         )
 
 
+def _validate_attachment_type(original_name: str, content_type: str | None) -> str:
+    """Проверяет расширение и заявленный content-type вложения (CWE-79/434).
+
+    Возвращает нормализованное (lower) расширение с точкой или кидает 415.
+    Не доверяет одному источнику: и расширение, и content-type должны быть
+    безопасны.
+    """
+    ext = Path(original_name).suffix.lower()
+    if ext not in ALLOWED_ATTACHMENT_EXT:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail=f"Тип файла «{ext or original_name}» не поддерживается.",
+        )
+    declared = (content_type or "").split(";")[0].strip().lower()
+    if declared in DANGEROUS_CONTENT_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="Недопустимый тип содержимого вложения.",
+        )
+    return ext
+
+
 def _parse_mentions(text: str) -> list[str]:
     return list(set(MENTION_RE.findall(text)))
 
@@ -360,13 +395,21 @@ async def list_chats(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    await _require_member(family_id, user, db)
-    chats = await db.scalars(
-        select(Chat)
-        .where(Chat.family_id == family_id)
-        .options(selectinload(Chat.pinned_message).selectinload(Message.author))
-    )
-    return [_chat_to_response(chat) for chat in chats.all()]
+    m = await _require_member(family_id, user, db)
+    chats = (
+        await db.scalars(
+            select(Chat)
+            .where(Chat.family_id == family_id)
+            .options(selectinload(Chat.pinned_message).selectinload(Message.author))
+        )
+    ).all()
+    # Скрываем чаты, на которые у участника снят VIEW_CHANNEL (owner видит все).
+    perms = await effective_permissions_for_chats(db, m, [c.id for c in chats])
+    return [
+        _chat_to_response(chat)
+        for chat in chats
+        if has_perm(perms.get(chat.id, 0), Perm.VIEW_CHANNEL)
+    ]
 
 
 @router.post("", response_model=ChatResponse, status_code=status.HTTP_201_CREATED)
@@ -379,11 +422,18 @@ async def create_chat(
     m = await _require_member(family_id, user, db)
     await require_family_perm(db, m, Perm.MANAGE_CHANNELS)
 
+    # Дефолтный слоумод из настроек модерации, если явно не задан.
+    slow_mode = body.slow_mode_seconds
+    if not slow_mode:
+        mod = await get_settings(db, family_id)
+        if mod and mod.slowmode_default_seconds:
+            slow_mode = mod.slowmode_default_seconds
+
     chat = Chat(
         family_id=family_id,
         name=body.name,
         description=body.description,
-        slow_mode_seconds=body.slow_mode_seconds,
+        slow_mode_seconds=slow_mode,
         is_18plus=body.is_18plus,
         created_by=user.id,
     )
@@ -595,6 +645,8 @@ async def get_messages(
     chat = await db.get(Chat, chat_id)
     if not chat or chat.family_id != family_id:
         raise HTTPException(status_code=404, detail="Chat not found")
+    # Доступ к чату (VIEW_CHANNEL) и к его истории (READ_HISTORY).
+    await require_chat_perm(db, m, chat_id, Perm.VIEW_CHANNEL, Perm.READ_HISTORY)
     _ensure_age_gate(chat, user)
     await _ensure_18plus_perm(chat, m, db)
 
@@ -627,13 +679,15 @@ async def search_messages(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    await _require_member(family_id, user, db)
+    m = await _require_member(family_id, user, db)
 
     chat = await db.scalar(
         select(Chat.id).where(Chat.id == chat_id, Chat.family_id == family_id)
     )
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
+    # Поиск по истории чата требует видимости и доступа к истории.
+    await require_chat_perm(db, m, chat_id, Perm.VIEW_CHANNEL, Perm.READ_HISTORY)
 
     normalized_query = " ".join(q.split()).strip()
     if len(normalized_query) == 0:
@@ -762,8 +816,10 @@ async def send_message(
 
     _ensure_age_gate(chat, user)
     await _ensure_18plus_perm(chat, membership, db)
-    await require_chat_perm(db, membership, chat_id, Perm.SEND_MESSAGES)
+    await require_chat_perm(db, membership, chat_id, Perm.VIEW_CHANNEL, Perm.SEND_MESSAGES)
     await _enforce_slow_mode(chat, user, membership, db)
+
+    enforce_message_content(await get_settings(db, family_id), body.text)
 
     mentions = _parse_mentions(body.text)
 
@@ -814,8 +870,10 @@ async def send_message_with_attachments(
         raise HTTPException(status_code=404, detail="Chat not found")
 
     _ensure_age_gate(chat, user)
-    await require_chat_perm(db, membership, chat_id, Perm.SEND_MESSAGES)
-    await require_chat_perm(db, membership, chat_id, Perm.ATTACH_FILES)
+    await require_chat_perm(
+        db, membership, chat_id,
+        Perm.VIEW_CHANNEL, Perm.SEND_MESSAGES, Perm.ATTACH_FILES,
+    )
     await _enforce_slow_mode(chat, user, membership, db)
 
     clean_files = [f for f in files if f.filename]
@@ -831,11 +889,14 @@ async def send_message_with_attachments(
     if len(body_text) > 4000:
         raise HTTPException(status_code=400, detail="Text too long (max 4000)")
 
-    dest_dir = CHAT_UPLOAD_DIR / str(chat_id)
-    dest_dir.mkdir(parents=True, exist_ok=True)
+    enforce_message_content(await get_settings(db, family_id), body_text)
 
     attachments: list[dict] = []
     for upload in clean_files:
+        original_name = upload.filename or "file"
+        # Сначала валидируем тип — отклоняем html/svg/неизвестное до записи на диск.
+        ext = _validate_attachment_type(original_name, upload.content_type)
+
         payload = await upload.read()
         if len(payload) > MAX_ATTACHMENT_SIZE:
             raise HTTPException(
@@ -843,12 +904,11 @@ async def send_message_with_attachments(
                 detail=f"File '{upload.filename}' is too large (max 50 MB)",
             )
 
-        original_name = upload.filename or "file"
-        ext = Path(original_name).suffix[:16]
         stored_name = f"{uuid.uuid4()}{ext}"
-        target = dest_dir / stored_name
         try:
-            target.write_bytes(payload)
+            await storage.save(
+                f"chat_files/{chat_id}/{stored_name}", payload, upload.content_type
+            )
         except OSError as exc:
             raise HTTPException(
                 status_code=500,
@@ -919,20 +979,20 @@ async def send_voice_message(
 
     _ensure_age_gate(chat, user)
     await _ensure_18plus_perm(chat, membership, db)
-    await require_chat_perm(db, membership, chat_id, Perm.SEND_VOICE)
+    await require_chat_perm(db, membership, chat_id, Perm.VIEW_CHANNEL, Perm.SEND_VOICE)
     await _enforce_slow_mode(chat, user, membership, db)
 
     payload = await file.read()
     if len(payload) > MAX_VOICE_SIZE:
         raise HTTPException(status_code=413, detail="Voice message too large (max 10 MB)")
 
-    dest_dir = CHAT_UPLOAD_DIR / str(chat_id)
-    dest_dir.mkdir(parents=True, exist_ok=True)
-
     stored_name = f"voice_{uuid.uuid4()}.webm"
-    target = dest_dir / stored_name
     try:
-        target.write_bytes(payload)
+        await storage.save(
+            f"chat_files/{chat_id}/{stored_name}",
+            payload,
+            file.content_type or "audio/webm",
+        )
     except OSError as exc:
         raise HTTPException(status_code=500, detail="Failed to save voice message") from exc
 
@@ -1065,13 +1125,7 @@ async def delete_message(
     for item in msg.attachments or []:
         if not isinstance(item, dict):
             continue
-        path = resolve_upload_path(item.get("url"))
-        if not path:
-            continue
-        try:
-            path.unlink(missing_ok=True)
-        except OSError:
-            pass
+        await storage.delete_by_url(item.get("url"))
 
     await db.delete(msg)
     await db.commit()
@@ -1184,6 +1238,11 @@ async def chat_ws(
     chat_id: UUID,
     db: AsyncSession = Depends(get_db),
 ):
+    # Defense-in-depth против CSWSH: чужой Origin не пускаем (L8).
+    if not is_allowed_ws_origin(websocket):
+        await websocket.close(code=4403)
+        return
+
     token = websocket.cookies.get(COOKIE_NAME)
     decoded = decode_access_token(token) if token else None
     user_id = decoded[0] if decoded else None
@@ -1222,9 +1281,18 @@ async def chat_ws(
         await websocket.close(code=4003)
         return
 
+    # Право видеть чат (VIEW_CHANNEL) — иначе закрываем сокет. Owner шунтирует.
+    if m.role.value == "owner":
+        chat_bits = int(Perm.ADMINISTRATOR)
+    else:
+        chat_bits = await effective_chat_permissions(db, m.id, chat_id)
+    if not has_perm(chat_bits, Perm.VIEW_CHANNEL):
+        await websocket.close(code=4003)
+        return
+
     await websocket.accept()
     await ws_manager.connect(chat_id, websocket, family_id=family_id, user_id=user.id)
-    became_online = ws_manager.register_presence_connection(family_id, user.id, websocket)
+    became_online = await ws_manager.register_presence_connection(family_id, user.id, websocket)
     if became_online:
         user.is_online = True
         await db.commit()
@@ -1247,7 +1315,7 @@ async def chat_ws(
         pass
     finally:
         ws_manager.disconnect(chat_id, websocket)
-        became_offline = ws_manager.unregister_presence_connection(
+        became_offline = await ws_manager.unregister_presence_connection(
             family_id,
             user.id,
             websocket,

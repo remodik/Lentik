@@ -11,6 +11,7 @@ from app.db.deps import get_db
 from app.models import Family, Invite, Membership, Role, User
 from app.schemas.invites import CreateInviteRequest, CreateInviteResponse
 from app.services.audit import log_action
+from app.services.moderation import count_active_invites, get_settings
 from app.services.roles import require_family_perm
 
 router = APIRouter(prefix="/invites", tags=["invites"])
@@ -44,6 +45,20 @@ async def create_invite(
         await db.execute(
             delete(Invite).where(Invite.family_id == body.family_id)
         )
+
+    # Лимит одновременно активных приглашений (0 = без лимита). Считаем после
+    # возможного revoke_previous — удалённые в этой транзакции уже не активны.
+    mod = await get_settings(db, body.family_id)
+    if mod and mod.invite_max_active > 0:
+        active = await count_active_invites(db, body.family_id)
+        if active >= mod.invite_max_active:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"Достигнут лимит активных приглашений "
+                    f"({mod.invite_max_active}). Отзовите старые приглашения."
+                ),
+            )
 
     token = secrets.token_urlsafe(32)
     expires_at = datetime.now(timezone.utc) + timedelta(hours=body.expires_in_hours)

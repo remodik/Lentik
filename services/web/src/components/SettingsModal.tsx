@@ -3,11 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { LucideIcon } from "lucide-react";
-import { Check, Palette, Shield, Sparkles, User, X } from "lucide-react";
-import { type Me } from "@/lib/api";
+import { Check, Download, Loader2, Palette, Shield, Sparkles, Terminal, User, X } from "lucide-react";
+import { getFamily, type Me, type UiMode } from "@/lib/api";
 import { apiFetch, normalizeApiPayload } from "@/lib/api-base";
 import { ThemeSelector } from "@/components/ThemeSelector";
 import { useUserMode } from "@/lib/useUserMode";
+import { useConfirm } from "@/components/ConfirmDialog";
 
 type Props = {
   me: Me;
@@ -342,7 +343,7 @@ function SecuritySection() {
   const [error, setError] = useState("");
 
   async function handleSave() {
-    if (next.length !== 4) return setError("PIN должен быть 4 цифры");
+    if (!/^\d{4,8}$/.test(next)) return setError("PIN — от 4 до 8 цифр");
     if (next !== confirm) return setError("PIN-коды не совпадают");
 
     setSaving(true);
@@ -393,12 +394,12 @@ function SecuritySection() {
             <input
               type="password"
               inputMode="numeric"
-              maxLength={4}
+              maxLength={8}
               value={value}
               onChange={(e) =>
-                set(e.target.value.replace(/\D/g, "").slice(0, 4))
+                set(e.target.value.replace(/\D/g, "").slice(0, 8))
               }
-              placeholder="••••"
+              placeholder="4–8 цифр"
               className="input-field tracking-[0.4em] text-center w-36 text-lg font-semibold"
             />
           </Field>
@@ -453,10 +454,10 @@ function AppearanceSection() {
 }
 
 function AdvancedSection() {
-  const { mode, setMode } = useUserMode();
+  const { mode, isExpert, setMode } = useUserMode();
   const [saving, setSaving] = useState(false);
 
-  async function toggle(next: "simple" | "advanced") {
+  async function toggle(next: UiMode) {
     if (next === mode || saving) return;
     setSaving(true);
     try {
@@ -468,7 +469,7 @@ function AdvancedSection() {
 
   return (
     <div className="p-6 overflow-y-auto h-full sidebar-scroll">
-      <div className="max-w-[640px] space-y-6">
+      <div className="max-w-[680px] space-y-6">
         <header>
           <h3 className="font-display text-xl text-ink-900">
             Режим интерфейса
@@ -481,7 +482,7 @@ function AdvancedSection() {
           </p>
         </header>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <ModeCard
             title="Обычный"
             description="Минимум настроек. Подходит для семьи из нескольких человек, которой не нужны роли и тонкая модерация."
@@ -505,7 +506,20 @@ function AdvancedSection() {
               "Роли и кастомные права на канал/чат",
               "Журнал аудита и модерация",
               "Интеграции и webhook'и (скоро)",
-              "Debug-режим: UUID, raw-события",
+            ]}
+          />
+          <ModeCard
+            title="Эксперт"
+            badge="GEEK"
+            description="Всё из «Продвинутого» плюс диагностические инструменты для разработчиков и гиков."
+            active={mode === "expert"}
+            onClick={() => void toggle("expert")}
+            saving={saving}
+            items={[
+              "Кнопки «копировать UUID» у объектов",
+              "Raw target_id и action в журнале",
+              "Debug-панель WebSocket в чате",
+              "Быстрый экспорт семьи и чата в JSON",
             ]}
           />
         </div>
@@ -513,8 +527,99 @@ function AdvancedSection() {
         <p className="text-xs text-ink-400 font-body">
           Настройка сохраняется в вашем аккаунте и работает во всех браузерах.
         </p>
+
+        {isExpert && <ExpertTools />}
       </div>
     </div>
+  );
+}
+
+function ExpertTools() {
+  const { notify } = useConfirm();
+  const [exporting, setExporting] = useState(false);
+
+  async function handleExportFamily() {
+    if (exporting) return;
+    let familyId: string | null = null;
+    try {
+      familyId = window.localStorage.getItem("familyId");
+    } catch {}
+    if (!familyId) {
+      void notify({ title: "Активная семья не выбрана", tone: "danger" });
+      return;
+    }
+
+    setExporting(true);
+    try {
+      const family = await getFamily(familyId);
+      const payload = {
+        family: {
+          id: family.id,
+          name: family.name,
+          created_at: family.created_at,
+        },
+        members: family.members.map((m) => ({
+          user_id: m.user_id,
+          username: m.username,
+          display_name: m.display_name,
+          role: m.role,
+          joined_at: m.joined_at,
+          birthday: m.birthday,
+        })),
+        exported_at: new Date().toISOString(),
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const safe =
+        family.name
+          .trim()
+          .replace(/[^\p{L}\p{N}]+/gu, "-")
+          .replace(/^-+|-+$/g, "")
+          .toLowerCase() || "family";
+      a.href = url;
+      a.download = `lentik-${safe}-${Date.now()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      void notify({
+        title: "Не удалось экспортировать семью",
+        description: e instanceof Error ? e.message : undefined,
+        tone: "danger",
+      });
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  return (
+    <section className="rounded-2xl border border-[color:var(--border-glass)] bg-[color:var(--bg-surface-subtle)] p-4">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="w-7 h-7 rounded-lg grid place-items-center bg-ink-900 text-[color:var(--text-on-dark)] shrink-0">
+          <Terminal className="w-3.5 h-3.5" strokeWidth={2.2} />
+        </span>
+        <h4 className="font-display text-base text-ink-900">Инструменты эксперта</h4>
+      </div>
+      <p className="text-xs text-ink-500 font-body mb-3 leading-relaxed">
+        Быстрый доступ к диагностике. Экспорт семьи дублирует кнопку из «Опасной
+        зоны» настроек семьи.
+      </p>
+      <button
+        type="button"
+        onClick={() => void handleExportFamily()}
+        disabled={exporting}
+        className="ui-btn ui-btn-subtle inline-flex items-center gap-1.5"
+      >
+        {exporting ? (
+          <Loader2 className="w-3.5 h-3.5 animate-spin" strokeWidth={2.2} />
+        ) : (
+          <Download className="w-3.5 h-3.5" strokeWidth={2.2} />
+        )}
+        Экспорт семьи (JSON)
+      </button>
+    </section>
   );
 }
 

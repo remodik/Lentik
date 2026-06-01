@@ -22,6 +22,7 @@ import {
   type Reminder,
   type ReminderRepeatRule,
 } from "@/lib/api";
+import { hasBit, PERM, usePermissions } from "@/lib/usePermissions";
 
 const REPEAT_LABELS: Record<ReminderRepeatRule, string> = {
   none: "Не повторять",
@@ -116,12 +117,14 @@ function defaultRemindAt(): Date {
 function ReminderCard({
   reminder,
   meId,
+  canManageOthers,
   onToggle,
   onEdit,
   onDelete,
 }: {
   reminder: Reminder;
   meId: string;
+  canManageOthers: boolean;
   onToggle: (r: Reminder) => void;
   onEdit: (r: Reminder) => void;
   onDelete: (id: string) => void;
@@ -129,6 +132,7 @@ function ReminderCard({
   const overdue = isOverdue(reminder.remind_at, reminder.is_done);
   const today = isToday(reminder.remind_at) && !reminder.is_done && !overdue;
   const isAuthor = reminder.author_id === meId;
+  const canModify = isAuthor || canManageOthers;
   const repeatShort = REPEAT_SHORT[reminder.repeat_rule];
 
   let leftBorder = "var(--border-warm-dim)";
@@ -178,7 +182,7 @@ function ReminderCard({
             >
               {reminder.title}
             </h3>
-            {isAuthor && (
+            {canModify && (
               <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition">
                 <button
                   type="button"
@@ -254,6 +258,12 @@ export default function RemindersView({
   familyId: string;
   meId: string;
 }) {
+  const { perms } = usePermissions();
+  const canManageOthers =
+    !!perms &&
+    (perms.is_owner ||
+      perms.is_administrator ||
+      hasBit(perms.base, PERM.MANAGE_REMINDERS));
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<Filter>("upcoming");
@@ -449,6 +459,7 @@ export default function RemindersView({
                 key={r.id}
                 reminder={r}
                 meId={meId}
+                canManageOthers={canManageOthers}
                 onToggle={handleToggle}
                 onEdit={openEdit}
                 onDelete={handleDelete}

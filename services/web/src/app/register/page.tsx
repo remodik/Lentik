@@ -6,15 +6,16 @@ import Link from "next/link";
 import { Check, House } from "lucide-react";
 import { register } from "@/lib/api";
 import PinInput from "@/components/PinInput";
-import { apiFetch, setAuthToken } from "@/lib/api-base";
+import { apiFetch } from "@/lib/api-base";
+import { PIN_BOXES, emptyPin, isValidPin, joinPin } from "@/lib/pin";
 
 export default function RegisterPage() {
   const router = useRouter();
 
   const [displayName, setDisplayName] = useState("");
   const [username, setUsername] = useState("");
-  const [pin, setPin] = useState(["", "", "", ""]);
-  const [confirm, setConfirm] = useState(["", "", "", ""]);
+  const [pin, setPin] = useState(emptyPin());
+  const [confirm, setConfirm] = useState(emptyPin());
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -60,15 +61,15 @@ export default function RegisterPage() {
     if (!displayName.trim()) return setError("Введи своё имя");
     if (!username.trim()) return setError("Введи логин");
     if (nameTaken) return setError("Этот логин занят — выбери другой");
-    if (pin.some((d) => !d)) return setError("Введи PIN-код");
-    if (pin.join("") !== confirm.join(""))
+    const pinStr = joinPin(pin);
+    if (!isValidPin(pinStr)) return setError("PIN — от 4 до 8 цифр");
+    if (pinStr !== joinPin(confirm))
       return setError("PIN-коды не совпадают");
 
     setError("");
     setLoading(true);
     try {
-      const auth = await register(displayName.trim(), username.trim(), pin.join(""));
-      if (auth.access_token) setAuthToken(auth.access_token);
+      await register(displayName.trim(), username.trim(), pinStr);
       router.push("/onboarding");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Ошибка");
@@ -181,14 +182,14 @@ export default function RegisterPage() {
             <div>
               <label className="field-label">Придумай PIN-код</label>
               <div className="mt-3">
-                <PinInput value={pin} onChange={setPin} />
+                <PinInput value={pin} onChange={setPin} length={PIN_BOXES} />
               </div>
             </div>
 
             <div>
               <label className="field-label">Повтори PIN-код</label>
               <div className="mt-3">
-                <PinInput value={confirm} onChange={setConfirm} />
+                <PinInput value={confirm} onChange={setConfirm} length={PIN_BOXES} />
               </div>
             </div>
 

@@ -43,3 +43,7 @@ memory/
 *.env
 *.env.*
 -e
+/infra/build.log
+/.gitconfig
+/services/api/pytest.ini
+/infra/docker-compose.override.yml

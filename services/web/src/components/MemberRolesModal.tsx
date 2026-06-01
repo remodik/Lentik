@@ -128,7 +128,7 @@ export default function MemberRolesModal({
 
   return createPortal(
     <div
-      className={`lentik-overlay-anim ${closing ? "is-closing" : ""} fixed inset-0 z-[180] bg-black/45 backdrop-blur-sm p-4 flex items-center justify-center`}
+      className={`lentik-overlay-anim ${closing ? "is-closing" : ""} fixed inset-0 z-[180] bg-black/45 backdrop-blur-sm p-3 sm:p-4 flex items-end sm:items-center justify-center`}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) triggerClose();
       }}
@@ -137,10 +137,10 @@ export default function MemberRolesModal({
       aria-label={`Роли участника ${member.display_name}`}
     >
       <div
-        className={`lentik-dialog-anim ${closing ? "is-closing" : ""} w-full max-w-md flex flex-col rounded-3xl border border-[color:var(--border-glass-strong)] bg-[color:var(--bg-elevated)] backdrop-blur-2xl shadow-[0_30px_90px_var(--scrim-4)] overflow-hidden max-h-[80vh]`}
+        className={`lentik-dialog-anim ${closing ? "is-closing" : ""} w-full max-w-md flex flex-col rounded-3xl border border-[color:var(--border-glass-strong)] bg-[color:var(--bg-elevated)] backdrop-blur-2xl shadow-[0_30px_90px_var(--scrim-4)] overflow-hidden max-h-[88vh] sm:max-h-[80vh]`}
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <header className="flex items-center justify-between gap-3 px-6 pt-5 pb-3 border-b border-[color:var(--border-warm-dim)]">
+        <header className="flex items-center justify-between gap-3 px-5 sm:px-6 pt-5 pb-3 border-b border-[color:var(--border-warm-dim)]">
           <div className="min-w-0">
             <p className="text-[11px] uppercase tracking-[0.16em] text-ink-400 font-body">
               Роли участника
@@ -227,7 +227,7 @@ export default function MemberRolesModal({
           )}
         </div>
 
-        <footer className="flex items-center justify-end gap-2 px-6 py-4 border-t border-[color:var(--border-warm-dim)]">
+        <footer className="flex items-center justify-end gap-2 px-5 sm:px-6 py-4 border-t border-[color:var(--border-warm-dim)] pb-[max(1rem,env(safe-area-inset-bottom))]">
           <button
             type="button"
             className="ui-btn ui-btn-subtle"

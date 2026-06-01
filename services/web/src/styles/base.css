@@ -91,6 +91,16 @@ nav::-webkit-scrollbar-thumb {
 nav::-webkit-scrollbar-thumb:hover {
     background: var(--accent-bold);
 }
+/* Полностью скрытый скроллбар (горизонтальные полосы чипов на мобильном). */
+.no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+}
 /* Кастомные tooltips: bubble с тонким хвостом снизу,
    плавное появление через transform+opacity, без задержки на hover. */
 [data-tooltip] {

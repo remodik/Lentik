@@ -33,6 +33,7 @@ import { useConfirm } from "@/components/ConfirmDialog";
 import { useUserMode } from "@/lib/useUserMode";
 import MemberRolesModal from "@/components/MemberRolesModal";
 import { hasBit, PERM, usePermissions } from "@/lib/usePermissions";
+import CopyIdButton from "@/components/CopyIdButton";
 
 type Member = Family["members"][0];
 
@@ -114,6 +115,7 @@ function MemberCard({
   canTransferOwnership?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const { isExpert } = useUserMode();
   const isOwner = member.role === "owner";
   const birthdaySoon = isBirthdaySoon(member.birthday);
   const isOnline = member.is_online === true;
@@ -221,6 +223,14 @@ function MemberCard({
           <div className="member-bio">
             <p className="member-info__k">О себе</p>
             <p className="member-bio__v">{member.bio}</p>
+          </div>
+        )}
+
+        {/* Expert: user_id участника с кнопкой копирования. */}
+        {isExpert && (
+          <div className="mt-2 flex items-center gap-1.5 font-mono text-[10.5px] text-ink-400">
+            <CopyIdButton value={member.user_id} label={member.display_name} />
+            <span className="truncate">{member.user_id}</span>
           </div>
         )}
 

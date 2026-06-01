@@ -21,6 +21,7 @@ import {
   X,
 } from "lucide-react";
 import {
+  deleteFamily,
   leaveFamily,
   renameFamily,
   transferOwnership,
@@ -35,6 +36,7 @@ import { hasBit, PERM, usePermissions } from "@/lib/usePermissions";
 import RolesEditor from "@/components/RolesEditor";
 import ChannelPermissionsEditor from "@/components/ChannelPermissionsEditor";
 import AuditLogView from "@/components/AuditLogView";
+import ModerationEditor from "@/components/ModerationEditor";
 
 type TabId =
   | "overview"
@@ -54,6 +56,8 @@ type TabDef = {
   comingSoon?: boolean;
   /** Если true — только владельцам. */
   ownerOnly?: boolean;
+  /** Если true — только тем, кто может управлять семьёй (owner или MANAGE_FAMILY). */
+  manageOnly?: boolean;
   /** Если true — видна только в advanced-режиме. */
   advancedOnly?: boolean;
   /** Категория для группировки в сайдбаре. */
@@ -65,7 +69,7 @@ const TABS: TabDef[] = [
   { id: "roles", label: "Роли", icon: Shield, category: "configure", ownerOnly: true, advancedOnly: true },
   { id: "channels", label: "Каналы", icon: Hash, category: "configure", ownerOnly: true, advancedOnly: true },
   { id: "chats", label: "Чаты", icon: MessageCircle, category: "configure", ownerOnly: true, advancedOnly: true },
-  { id: "moderation", label: "Модерация", icon: Wand2, category: "configure", comingSoon: true, ownerOnly: true, advancedOnly: true },
+  { id: "moderation", label: "Модерация", icon: Wand2, category: "configure", manageOnly: true, advancedOnly: true },
   { id: "audit", label: "Журнал аудита", icon: History, category: "configure", ownerOnly: false, advancedOnly: true },
   { id: "integrations", label: "Интеграции", icon: Sparkles, category: "configure", comingSoon: true, ownerOnly: true, advancedOnly: true },
   { id: "danger", label: "Опасная зона", icon: AlertTriangle, category: "danger" },
@@ -89,6 +93,8 @@ type Props = {
   onClose: () => void;
   onRenamed: (next: Family) => void;
   onLeft: () => void;
+  /** Семья полностью удалена владельцем. */
+  onDeleted: () => void;
   /** Открыть модалку выбора нового владельца (вне этого компонента). */
   onTransferOwnership?: () => void;
 };
@@ -103,6 +109,7 @@ export default function FamilySettingsModal({
   onClose,
   onRenamed,
   onLeft,
+  onDeleted,
   onTransferOwnership,
 }: Props) {
   const { confirm, notify } = useConfirm();
@@ -158,9 +165,11 @@ export default function FamilySettingsModal({
     () =>
       TABS.filter(
         (t) =>
-          (!t.ownerOnly || isOwner) && (!t.advancedOnly || isAdvanced),
+          (!t.ownerOnly || isOwner) &&
+          (!t.manageOnly || canManageFamily) &&
+          (!t.advancedOnly || isAdvanced),
       ),
-    [isOwner, isAdvanced],
+    [isOwner, canManageFamily, isAdvanced],
   );
 
   // Если активная вкладка вдруг отфильтровалась (выключили advanced) — откатываемся.
@@ -184,7 +193,7 @@ export default function FamilySettingsModal({
 
   return createPortal(
     <div
-      className={`lentik-overlay-anim ${closing ? "is-closing" : ""} fixed inset-0 z-[150] bg-black/55 backdrop-blur-sm flex items-stretch md:p-6`}
+      className={`lentik-overlay-anim ${closing ? "is-closing" : ""} fixed inset-0 z-[150] bg-black/55 backdrop-blur-sm flex items-stretch p-2 sm:p-3 md:p-6`}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) triggerClose();
       }}
@@ -193,11 +202,64 @@ export default function FamilySettingsModal({
       aria-label="Настройки семьи"
     >
       <div
-        className={`lentik-dialog-anim ${closing ? "is-closing" : ""} relative flex w-full max-w-[1100px] mx-auto rounded-3xl overflow-hidden border border-[color:var(--border-glass-strong)] bg-[color:var(--bg-elevated)] backdrop-blur-2xl shadow-[0_30px_90px_var(--scrim-4)]`}
+        className={`lentik-dialog-anim ${closing ? "is-closing" : ""} relative flex flex-col md:flex-row w-full max-w-[1100px] mx-auto rounded-2xl md:rounded-3xl overflow-hidden border border-[color:var(--border-glass-strong)] bg-[color:var(--bg-elevated)] backdrop-blur-2xl shadow-[0_30px_90px_var(--scrim-4)]`}
         onMouseDown={(e) => e.stopPropagation()}
       >
-        {/* Левый сайдбар */}
-        <aside className="w-[240px] shrink-0 border-r border-[color:var(--border-warm-dim)] bg-[color:var(--bg-surface-subtle)] flex flex-col">
+        {/* Мобильная шапка + полоса чипов вкладок (<md) */}
+        <div className="md:hidden border-b border-[color:var(--border-warm-dim)] bg-[color:var(--bg-surface-subtle)]">
+          <div className="flex items-center justify-between gap-3 px-4 pt-4 pb-2">
+            <div className="min-w-0">
+              <p className="text-[10px] uppercase tracking-[0.16em] text-ink-400 font-body">
+                Семья
+              </p>
+              <h2 className="font-display text-base text-ink-900 truncate">
+                {family.name}
+              </h2>
+            </div>
+            <button
+              type="button"
+              onClick={triggerClose}
+              className="w-9 h-9 rounded-lg grid place-items-center text-ink-500 hover:text-ink-900 hover:bg-white/70 transition shrink-0"
+              aria-label="Закрыть"
+            >
+              <X className="w-4 h-4" strokeWidth={2.3} />
+            </button>
+          </div>
+          <div className="flex gap-1.5 overflow-x-auto px-4 pb-3 -mb-px no-scrollbar">
+            {visibleTabs.map((tab) => {
+              const Icon = tab.icon;
+              const isActive = tab.id === active;
+              const isDanger = tab.category === "danger";
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActive(tab.id)}
+                  className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-body border transition ${
+                    isActive
+                      ? isDanger
+                        ? "bg-red-500 text-white border-red-500"
+                        : "bg-ink-900 text-[color:var(--text-on-dark)] border-ink-900"
+                      : isDanger
+                        ? "text-red-600 border-red-200 bg-red-50/40"
+                        : "text-ink-600 border-[color:var(--border-glass)] bg-[color:var(--bg-surface)]"
+                  }`}
+                >
+                  <Icon className="w-3.5 h-3.5 shrink-0" strokeWidth={2.2} />
+                  <span className="whitespace-nowrap">{tab.label}</span>
+                  {tab.comingSoon && (
+                    <span className="text-[9px] uppercase tracking-wider px-1 py-0.5 rounded-full bg-warm-100 text-warm-700 font-semibold">
+                      скоро
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Левый сайдбар (только ≥md) */}
+        <aside className="hidden md:flex w-[240px] shrink-0 border-r border-[color:var(--border-warm-dim)] bg-[color:var(--bg-surface-subtle)] md:flex-col">
           <div className="px-5 pt-5 pb-3">
             <p className="text-[11px] uppercase tracking-[0.16em] text-ink-400 font-body">
               Семья
@@ -264,7 +326,7 @@ export default function FamilySettingsModal({
 
         {/* Контент */}
         <div className="flex-1 min-w-0 flex flex-col">
-          <header className="flex items-center justify-between gap-3 px-7 pt-5 pb-4 border-b border-[color:var(--border-warm-dim)]">
+          <header className="hidden md:flex items-center justify-between gap-3 px-7 pt-5 pb-4 border-b border-[color:var(--border-warm-dim)]">
             <div className="min-w-0">
               <p className="text-[11px] uppercase tracking-[0.16em] text-ink-400 font-body">
                 Настройки
@@ -284,7 +346,7 @@ export default function FamilySettingsModal({
             </button>
           </header>
 
-          <div className="flex-1 overflow-y-auto sidebar-scroll px-7 py-6 min-h-0">
+          <div className="flex-1 overflow-y-auto sidebar-scroll px-4 py-4 md:px-7 md:py-6 min-h-0">
             {active === "overview" && (
               <OverviewTab
                 family={family}
@@ -304,6 +366,7 @@ export default function FamilySettingsModal({
                 confirm={confirm}
                 notify={notify}
                 onLeft={onLeft}
+                onDeleted={onDeleted}
                 onTransferOwnership={onTransferOwnership}
               />
             )}
@@ -317,6 +380,7 @@ export default function FamilySettingsModal({
                 familyId={family.id}
                 kind="channel"
                 items={channels.map((c) => ({ id: c.id, name: c.name }))}
+                members={family.members}
                 canManage={isOwner}
               />
             )}
@@ -326,18 +390,24 @@ export default function FamilySettingsModal({
                 familyId={family.id}
                 kind="chat"
                 items={chats.map((c) => ({ id: c.id, name: c.name }))}
+                members={family.members}
                 canManage={isOwner}
               />
             )}
 
             {active === "audit" && <AuditLogView familyId={family.id} />}
 
+            {active === "moderation" && (
+              <ModerationEditor familyId={family.id} canManage={canManageFamily} />
+            )}
+
             {active !== "overview" &&
               active !== "danger" &&
               active !== "roles" &&
               active !== "channels" &&
               active !== "chats" &&
-              active !== "audit" && <ComingSoonTab tabId={active} />}
+              active !== "audit" &&
+              active !== "moderation" && <ComingSoonTab tabId={active} />}
           </div>
         </div>
       </div>
@@ -591,6 +661,7 @@ function DangerTab({
   confirm,
   notify,
   onLeft,
+  onDeleted,
   onTransferOwnership,
 }: {
   family: Family;
@@ -604,9 +675,52 @@ function DangerTab({
   }) => Promise<boolean>;
   notify: (opts: { title: string; description?: React.ReactNode; tone?: "default" | "danger" }) => Promise<void>;
   onLeft: () => void;
+  onDeleted: () => void;
   onTransferOwnership?: () => void;
 }) {
   const [leaving, setLeaving] = useState(false);
+  const [deleteStep, setDeleteStep] = useState(false);
+  const [deleteValue, setDeleteValue] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+
+  async function handleDelete() {
+    if (deleting) return;
+    // Шаг 1 — общий confirm с tone:"danger".
+    const ok = await confirm({
+      title: `Удалить «${family.name}»?`,
+      description:
+        "Это безвозвратно удалит всё пространство: чаты, каналы, галерею, файлы, " +
+        "календарь, бюджет, заметки, напоминания, древо и роли. " +
+        "Восстановить данные будет невозможно.",
+      confirmLabel: "Продолжить",
+      tone: "danger",
+    });
+    if (!ok) return;
+    // Шаг 2 — ввод точного названия семьи в отдельной мини-модалке.
+    setDeleteValue("");
+    setDeleteError("");
+    setDeleteStep(true);
+  }
+
+  async function confirmDelete() {
+    if (deleting) return;
+    if (deleteValue.trim() !== family.name) {
+      setDeleteError("Название не совпадает");
+      return;
+    }
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      await deleteFamily(family.id);
+      setDeleteStep(false);
+      onDeleted();
+    } catch (e) {
+      setDeleteError(e instanceof Error ? e.message : "Не удалось удалить семью");
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   async function handleLeave() {
     if (leaving) return;
@@ -735,20 +849,99 @@ function DangerTab({
       {isOwner && (
         <DangerCard
           title="Удалить семью"
-          description="Полное удаление пространства со всеми чатами, файлами и историей. Этой возможности пока нет — мы добавим её в одном из ближайших обновлений вместе с гарантированным экспортом данных."
+          description="Полное и безвозвратное удаление пространства со всеми чатами, файлами, историей и ролями. Перед удалением рекомендуем скачать экспорт данных."
           danger
           action={
             <button
               type="button"
-              className="ui-btn ui-btn-danger inline-flex items-center gap-1.5 opacity-50 cursor-not-allowed"
-              disabled
-              title="Скоро"
+              className="ui-btn ui-btn-danger inline-flex items-center gap-1.5"
+              onClick={() => void handleDelete()}
+              disabled={deleting}
             >
               <Trash2 className="w-3.5 h-3.5" strokeWidth={2.2} />
-              Скоро
+              {deleting ? "Удаление…" : "Удалить семью"}
             </button>
           }
         />
+      )}
+
+      {deleteStep && (
+        <div
+          className="fixed inset-0 z-[210] flex items-center justify-center p-4 glass-modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Подтверждение удаления семьи"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget && !deleting) setDeleteStep(false);
+          }}
+        >
+          <div
+            className="glass-modal-panel w-full max-w-sm p-6"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <span
+                className="w-10 h-10 rounded-2xl grid place-items-center shrink-0 bg-red-50 text-red-600 border border-red-200"
+                aria-hidden
+              >
+                <AlertTriangle className="w-5 h-5" strokeWidth={2.1} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <h3 className="font-display text-lg text-ink-900 leading-snug">
+                  Окончательное удаление
+                </h3>
+                <p className="text-sm text-ink-500 font-body mt-1.5 leading-relaxed">
+                  Чтобы подтвердить, введите название семьи{" "}
+                  <span className="font-semibold text-ink-800">«{family.name}»</span>.
+                </p>
+              </div>
+            </div>
+
+            <input
+              autoFocus
+              className="input-field mt-4"
+              value={deleteValue}
+              onChange={(e) => {
+                setDeleteValue(e.target.value);
+                if (deleteError) setDeleteError("");
+              }}
+              placeholder={family.name}
+              maxLength={120}
+              disabled={deleting}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  void confirmDelete();
+                } else if (e.key === "Escape") {
+                  if (!deleting) setDeleteStep(false);
+                }
+              }}
+            />
+            {deleteError && (
+              <p className="text-sm text-red-500 font-body mt-2">{deleteError}</p>
+            )}
+
+            <div className="flex justify-end gap-2 mt-6">
+              <button
+                type="button"
+                className="ui-btn ui-btn-subtle"
+                onClick={() => setDeleteStep(false)}
+                disabled={deleting}
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                className="ui-btn ui-btn-danger inline-flex items-center gap-1.5"
+                onClick={() => void confirmDelete()}
+                disabled={deleting || deleteValue.trim() !== family.name}
+              >
+                <Trash2 className="w-3.5 h-3.5" strokeWidth={2.2} />
+                {deleting ? "Удаление…" : "Удалить навсегда"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

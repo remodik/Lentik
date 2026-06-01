@@ -28,6 +28,29 @@ function formatChatSlowMode(sec: number): string {
   if (sec < 3600) return `${Math.round(sec / 60)} мин`;
   return `${Math.round(sec / 3600)} ч`;
 }
+
+// ── Expert: debug-панель WebSocket ──────────────────────────────────────────
+type WsDebugEntry = { raw: string; type: string; at: number };
+const WS_DEBUG_LIMIT = 40;
+
+function setWsDebugEntry(
+  entry: WsDebugEntry,
+  setter: React.Dispatch<React.SetStateAction<WsDebugEntry[]>>,
+) {
+  setter((prev) => {
+    const next = [entry, ...prev];
+    return next.length > WS_DEBUG_LIMIT ? next.slice(0, WS_DEBUG_LIMIT) : next;
+  });
+}
+
+function formatWsTime(ts: number): string {
+  const d = new Date(ts);
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  const ss = String(d.getSeconds()).padStart(2, "0");
+  const ms = String(d.getMilliseconds()).padStart(3, "0");
+  return `${hh}:${mm}:${ss}.${ms}`;
+}
 import {
   addReaction,
   deleteMessage,
@@ -53,6 +76,7 @@ import UserMiniProfilePopover, {
   type UserMiniProfile,
 } from "@/components/UserMiniProfilePopover";
 import { useConfirm } from "@/components/ConfirmDialog";
+import { useUserMode } from "@/lib/useUserMode";
 import {
   hasBit,
   PERM,
@@ -377,7 +401,8 @@ export default function ChatView({
   onLeave?: () => void;
 }) {
   const ageGate = useAge18Gate(chat.id, !!chat.is_18plus, me.birthday);
-  const { confirm } = useConfirm();
+  const { confirm, notify } = useConfirm();
+  const { isExpert } = useUserMode();
   const chatPerms = useChatPermissions(chat.id);
   const canSendMessages = hasBit(chatPerms, PERM.SEND_MESSAGES);
   const canAttachFiles = hasBit(chatPerms, PERM.ATTACH_FILES);
@@ -413,6 +438,26 @@ export default function ChatView({
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [sendingVoice, setSendingVoice] = useState(false);
+
+  // Expert: буфер последних сырых ws-сообщений для debug-панели.
+  const [wsDebugLog, setWsDebugLog] = useState<WsDebugEntry[]>([]);
+  const [wsDebugOpen, setWsDebugOpen] = useState(false);
+  const isExpertRef = useRef(isExpert);
+  useEffect(() => {
+    isExpertRef.current = isExpert;
+    if (!isExpert) setWsDebugOpen(false);
+  }, [isExpert]);
+  const pushWsDebug = useCallback((raw: string) => {
+    if (!isExpertRef.current) return;
+    let type = "—";
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed.type === "string") type = parsed.type;
+    } catch {
+      type = "(не JSON)";
+    }
+    setWsDebugEntry({ raw, type, at: Date.now() }, setWsDebugLog);
+  }, []);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<BlobPart[]>([]);
@@ -902,6 +947,7 @@ export default function ChatView({
 
       ws.onmessage = (e) => {
         try {
+          if (typeof e.data === "string") pushWsDebug(e.data);
           const d = JSON.parse(e.data);
 
           if (d.type === "new_message") {
@@ -1227,6 +1273,15 @@ export default function ChatView({
       }
     } catch (e) {
       console.error("sendMessage failed", e);
+      const message = e instanceof Error ? e.message : "Не удалось отправить сообщение";
+      // Ограничения модерации (стоп-слова, лимит длины) приходят как 422 —
+      // показываем серверный detail понятным уведомлением.
+      const statusCode = (e as { status?: number })?.status;
+      void notify({
+        title: statusCode === 422 ? "Сообщение отклонено" : "Не удалось отправить",
+        description: message,
+        tone: "danger",
+      });
     } finally {
       setSending(false);
     }
@@ -1342,6 +1397,78 @@ export default function ChatView({
       URL.revokeObjectURL(url);
     } catch (e) {
       console.error("exportChatHistory failed", e);
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  // Expert: экспорт истории чата в JSON. Та же выгрузка, что и .txt, но
+  // машиночитаемая (для разработчиков/гиков).
+  async function handleExportHistoryJson() {
+    if (exporting) return;
+
+    setExporting(true);
+    try {
+      const pageSize = 200;
+      let beforeId: string | undefined;
+      let collected: Message[] = [];
+
+      while (true) {
+        const chunk = await getMessages(familyId, chat.id, {
+          limit: pageSize,
+          beforeId,
+        });
+        if (chunk.length === 0) break;
+
+        const normalized = chunk.map(normalizeMessage);
+        collected = [...normalized, ...collected];
+
+        if (chunk.length < pageSize) break;
+        beforeId = chunk[0]?.id;
+        if (!beforeId) break;
+      }
+
+      const payload = {
+        chat: {
+          id: chat.id,
+          name: chat.name,
+          family_id: familyId,
+          is_18plus: !!chat.is_18plus,
+          slow_mode_seconds: chat.slow_mode_seconds ?? 0,
+        },
+        exported_at: new Date().toISOString(),
+        message_count: collected.length,
+        messages: collected.map((m) => ({
+          id: m.id,
+          author_id: m.author_id,
+          author_display_name: resolveAuthorDisplayName(m),
+          text: m.text,
+          edited: m.edited,
+          reply_to_id: m.reply_to_id,
+          mentions: m.mentions ?? [],
+          attachments: m.attachments ?? [],
+          created_at: m.created_at,
+        })),
+      };
+
+      const blob = new Blob([JSON.stringify(payload, null, 2)], {
+        type: "application/json;charset=utf-8",
+      });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      const safeName =
+        chat.name
+          .trim()
+          .replace(/[^\p{L}\p{N}]+/gu, "-")
+          .replace(/^-+|-+$/g, "")
+          .toLowerCase() || "chat";
+      anchor.href = url;
+      anchor.download = `lentik-${safeName}-${Date.now()}.json`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error("exportChatHistoryJson failed", e);
+      void notify({ title: "Не удалось экспортировать чат", tone: "danger" });
     } finally {
       setExporting(false);
     }
@@ -1484,7 +1611,7 @@ export default function ChatView({
   }
 
   return (
-    <div className="h-full flex flex-col min-w-0 overflow-x-hidden">
+    <div className="relative h-full flex flex-col min-w-0 overflow-x-hidden">
       <div className="flex items-center justify-between px-4 py-3 border-b border-white/40 gap-3">
         <div className="min-w-0">
           <h2 className="font-body text-[1.02rem] font-semibold text-ink-900 truncate inline-flex items-center gap-2">
@@ -1568,6 +1695,19 @@ export default function ChatView({
             )}
             <span className="hidden sm:inline">Экспорт</span>
           </button>
+          {isExpert && (
+            <button
+              type="button"
+              onClick={() => void handleExportHistoryJson()}
+              className="ui-btn ui-btn-subtle !px-2.5 !py-1.5 inline-flex items-center gap-1.5 font-mono"
+              disabled={exporting}
+              title="Экспортировать историю в JSON (эксперт)"
+              aria-label="Экспортировать историю в JSON"
+            >
+              <Download className="w-3.5 h-3.5" strokeWidth={2.2} />
+              <span className="hidden sm:inline">JSON</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -2328,6 +2468,80 @@ export default function ChatView({
       />
 
       <MediaLightbox media={lightboxMedia} onClose={() => setLightboxMedia(null)} />
+
+      {isExpert && (
+        <WsDebugPanel
+          entries={wsDebugLog}
+          open={wsDebugOpen}
+          onToggle={() => setWsDebugOpen((v) => !v)}
+          onClear={() => setWsDebugLog([])}
+        />
+      )}
+    </div>
+  );
+}
+
+function WsDebugPanel({
+  entries,
+  open,
+  onToggle,
+  onClear,
+}: {
+  entries: WsDebugEntry[];
+  open: boolean;
+  onToggle: () => void;
+  onClear: () => void;
+}) {
+  return (
+    <div className="absolute bottom-2 right-2 z-[60] w-[min(420px,calc(100%-1rem))] font-mono pointer-events-none">
+      <div className="pointer-events-auto rounded-xl border border-[color:var(--border-glass-strong)] bg-[color:var(--bg-surface-strong)] backdrop-blur-md shadow-[0_14px_42px_var(--scrim-2)] overflow-hidden">
+        <button
+          type="button"
+          onClick={onToggle}
+          className="w-full flex items-center justify-between gap-2 px-3 py-1.5 text-[11px] text-ink-600 hover:bg-white/40 transition"
+        >
+          <span className="inline-flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" aria-hidden />
+            WS debug · {entries.length}
+          </span>
+          <span className="text-ink-400">{open ? "▼" : "▲"}</span>
+        </button>
+
+        {open && (
+          <div className="border-t border-[color:var(--border-warm-dim)]">
+            <div className="flex items-center justify-between px-3 py-1 text-[10px] text-ink-400">
+              <span>последние {WS_DEBUG_LIMIT} сообщений</span>
+              <button
+                type="button"
+                onClick={onClear}
+                className="hover:text-ink-700 transition"
+              >
+                очистить
+              </button>
+            </div>
+            <ul className="max-h-[220px] overflow-y-auto sidebar-scroll px-2 pb-2 space-y-1 text-[10.5px]">
+              {entries.length === 0 ? (
+                <li className="text-ink-400 px-1 py-2">Пока нет событий…</li>
+              ) : (
+                entries.map((entry, i) => (
+                  <li
+                    key={`${entry.at}-${i}`}
+                    className="rounded-md border border-[color:var(--border-glass)] bg-[color:var(--bg-surface-subtle)] px-2 py-1"
+                  >
+                    <div className="flex items-center justify-between gap-2 text-ink-500">
+                      <span className="font-semibold text-ink-700 truncate">{entry.type}</span>
+                      <span className="text-ink-400 shrink-0">{formatWsTime(entry.at)}</span>
+                    </div>
+                    <pre className="mt-0.5 whitespace-pre-wrap break-all text-ink-500 leading-snug">
+                      {entry.raw}
+                    </pre>
+                  </li>
+                ))
+              )}
+            </ul>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

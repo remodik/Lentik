@@ -34,6 +34,7 @@ import {
 } from "@/lib/api";
 import { useConfirm } from "@/components/ConfirmDialog";
 import Select from "@/components/Select";
+import { hasBit, PERM, usePermissions } from "@/lib/usePermissions";
 
 const NODE_WIDTH = 220;
 const NODE_HEIGHT = 76;
@@ -266,6 +267,12 @@ function PersonNode({
 
 export default function FamilyTreeView({ familyId, family, meId }: Props) {
   const { confirm, notify } = useConfirm();
+  const { perms } = usePermissions();
+  const canManageTree =
+    !!perms &&
+    (perms.is_owner ||
+      perms.is_administrator ||
+      hasBit(perms.base, PERM.MANAGE_TREE));
   const [persons, setPersons] = useState<TreePerson[]>([]);
   const [relations, setRelations] = useState<TreeRelation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -864,6 +871,7 @@ export default function FamilyTreeView({ familyId, family, meId }: Props) {
           <PersonDetailsCard
             person={selectedPerson}
             relations={relationsOfSelected}
+            canManage={canManageTree}
             onClose={() => setSelectedPersonId(null)}
             onEdit={() => setEditState({ open: true, person: selectedPerson })}
             onDelete={() => void handleDeletePerson(selectedPerson.id)}
@@ -1244,6 +1252,7 @@ function RelationFormModal({
 function PersonDetailsCard({
   person,
   relations,
+  canManage,
   onClose,
   onEdit,
   onDelete,
@@ -1252,6 +1261,7 @@ function PersonDetailsCard({
 }: {
   person: TreePerson;
   relations: Array<{ relation: TreeRelation; other: TreePerson; label: string }>;
+  canManage: boolean;
   onClose: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -1321,42 +1331,46 @@ function PersonDetailsCard({
                     <p className="text-[11px] text-ink-400 font-body">{label}</p>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => onDeleteRelation(relation.id)}
-                  disabled={busy}
-                  className="w-7 h-7 rounded-lg grid place-items-center text-ink-400 hover:text-red-500 hover:bg-white/60 transition"
-                  title="Удалить связь"
-                  aria-label="Удалить связь"
-                >
-                  <Trash2 className="w-3.5 h-3.5" strokeWidth={2.2} />
-                </button>
+                {canManage && (
+                  <button
+                    type="button"
+                    onClick={() => onDeleteRelation(relation.id)}
+                    disabled={busy}
+                    className="w-7 h-7 rounded-lg grid place-items-center text-ink-400 hover:text-red-500 hover:bg-white/60 transition"
+                    title="Удалить связь"
+                    aria-label="Удалить связь"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" strokeWidth={2.2} />
+                  </button>
+                )}
               </li>
             ))}
           </ul>
         </div>
       )}
 
-      <div className="flex gap-2 justify-end mt-4">
-        <button
-          type="button"
-          className="ui-btn ui-btn-subtle inline-flex items-center gap-1.5"
-          onClick={onEdit}
-          disabled={busy}
-        >
-          <Pencil className="w-3.5 h-3.5" strokeWidth={2.2} />
-          Изменить
-        </button>
-        <button
-          type="button"
-          className="ui-btn ui-btn-danger inline-flex items-center gap-1.5"
-          onClick={onDelete}
-          disabled={busy}
-        >
-          <Trash2 className="w-3.5 h-3.5" strokeWidth={2.2} />
-          Удалить
-        </button>
-      </div>
+      {canManage && (
+        <div className="flex gap-2 justify-end mt-4">
+          <button
+            type="button"
+            className="ui-btn ui-btn-subtle inline-flex items-center gap-1.5"
+            onClick={onEdit}
+            disabled={busy}
+          >
+            <Pencil className="w-3.5 h-3.5" strokeWidth={2.2} />
+            Изменить
+          </button>
+          <button
+            type="button"
+            className="ui-btn ui-btn-danger inline-flex items-center gap-1.5"
+            onClick={onDelete}
+            disabled={busy}
+          >
+            <Trash2 className="w-3.5 h-3.5" strokeWidth={2.2} />
+            Удалить
+          </button>
+        </div>
+      )}
     </div>
   );
 }

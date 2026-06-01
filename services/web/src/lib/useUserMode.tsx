@@ -14,7 +14,10 @@ const STORAGE_KEY = "lentik:ui-mode";
 
 type Ctx = {
   mode: UiMode;
+  /** true для advanced ИЛИ expert — expert является надстройкой над advanced. */
   isAdvanced: boolean;
+  /** true только в режиме «эксперт» — гик-инструменты и диагностика. */
+  isExpert: boolean;
   setMode: (next: UiMode) => Promise<void>;
 };
 
@@ -33,7 +36,7 @@ export function UserModeProvider({
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY);
-      if (raw === "simple" || raw === "advanced") {
+      if (raw === "simple" || raw === "advanced" || raw === "expert") {
         setLocalMode(raw);
       }
     } catch {}
@@ -58,7 +61,13 @@ export function UserModeProvider({
   }, []);
 
   const value = useMemo<Ctx>(
-    () => ({ mode, isAdvanced: mode === "advanced", setMode }),
+    () => ({
+      mode,
+      // expert наследует все advanced-возможности.
+      isAdvanced: mode === "advanced" || mode === "expert",
+      isExpert: mode === "expert",
+      setMode,
+    }),
     [mode, setMode],
   );
 
@@ -75,6 +84,7 @@ export function useUserMode(): Ctx {
     return {
       mode: "simple",
       isAdvanced: false,
+      isExpert: false,
       setMode: async () => {},
     };
   }

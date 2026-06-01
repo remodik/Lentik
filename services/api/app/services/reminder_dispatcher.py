@@ -79,6 +79,10 @@ async def dispatch_due_reminders() -> int:
                 .options(selectinload(Reminder.author))
                 .order_by(Reminder.remind_at.asc())
                 .limit(200)
+                # P2: при нескольких инстансах строки блокируются за выбравшим
+                # их воркером, остальные их пропускают (SKIP LOCKED) — каждое
+                # напоминание уходит ровно один раз, без leader-election.
+                .with_for_update(skip_locked=True)
             )
             reminders = result.all()
 

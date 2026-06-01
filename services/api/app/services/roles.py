@@ -114,13 +114,15 @@ async def _apply_overrides(
     )
 
     # Соберём все роли участника
+    membership = await db.get(Membership, membership_id)
+    if not membership:
+        return base
+
     role_ids = (
         await db.scalars(
             select(MemberRole.role_id).where(MemberRole.membership_id == membership_id)
         )
     ).all()
-    if not role_ids:
-        return base
 
     if channel_id:
         overrides = (
@@ -134,10 +136,17 @@ async def _apply_overrides(
                 .where(
                     ChannelPermissionOverride.channel_id == channel_id,
                     ChannelPermissionOverride.role_id.in_(role_ids),
+                    ChannelPermissionOverride.role_id.is_not(None),
                 )
                 .order_by(FamilyRole.priority.desc())
             )
         ).all()
+        member_override = await db.scalar(
+            select(ChannelPermissionOverride).where(
+                ChannelPermissionOverride.channel_id == channel_id,
+                ChannelPermissionOverride.user_id == membership.user_id,
+            )
+        )
     else:
         overrides = (
             await db.execute(
@@ -150,14 +159,24 @@ async def _apply_overrides(
                 .where(
                     ChatPermissionOverride.chat_id == chat_id,
                     ChatPermissionOverride.role_id.in_(role_ids),
+                    ChatPermissionOverride.role_id.is_not(None),
                 )
                 .order_by(FamilyRole.priority.desc())
             )
         ).all()
+        member_override = await db.scalar(
+            select(ChatPermissionOverride).where(
+                ChatPermissionOverride.chat_id == chat_id,
+                ChatPermissionOverride.user_id == membership.user_id,
+            )
+        )
 
     for _prio, allow, deny in overrides:
         base &= ~(deny or 0)
         base |= allow or 0
+    if member_override:
+        base &= ~(member_override.deny or 0)
+        base |= member_override.allow or 0
     return base
 
 
@@ -208,19 +227,24 @@ async def require_channel_perm(
     db: AsyncSession,
     membership: Membership,
     channel_id: uuid.UUID,
-    perm: Perm,
+    *perms: Perm,
 ) -> int:
+    """Кидает 403, если у участника нет ВСЕХ перечисленных прав в канале.
+
+    Эффективные права считаются один раз (с учётом override-ов).
+    """
     from fastapi import HTTPException, status
     from app.core.permissions import has_perm as _has
 
     if membership.role.value == "owner":
         return int(Perm.ADMINISTRATOR)
     bits = await effective_channel_permissions(db, membership.id, channel_id)
-    if not _has(bits, perm):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Недостаточно прав ({perm.name}) в канале",
-        )
+    for perm in perms:
+        if not _has(bits, perm):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Недостаточно прав ({perm.name}) в канале",
+            )
     return bits
 
 
@@ -228,20 +252,125 @@ async def require_chat_perm(
     db: AsyncSession,
     membership: Membership,
     chat_id: uuid.UUID,
-    perm: Perm,
+    *perms: Perm,
 ) -> int:
+    """Кидает 403, если у участника нет ВСЕХ перечисленных прав в чате.
+
+    Эффективные права считаются один раз (с учётом override-ов).
+    """
     from fastapi import HTTPException, status
     from app.core.permissions import has_perm as _has
 
     if membership.role.value == "owner":
         return int(Perm.ADMINISTRATOR)
     bits = await effective_chat_permissions(db, membership.id, chat_id)
-    if not _has(bits, perm):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Недостаточно прав ({perm.name}) в чате",
-        )
+    for perm in perms:
+        if not _has(bits, perm):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Недостаточно прав ({perm.name}) в чате",
+            )
     return bits
+
+
+async def _effective_permissions_bulk(
+    db: AsyncSession,
+    membership: Membership,
+    target_ids: list[uuid.UUID],
+    *,
+    override_model,
+    id_attr: str,
+) -> dict[uuid.UUID, int]:
+    """Считает effective-права участника сразу для набора чатов/каналов.
+
+    Один проход без N+1: базовые права берём один раз, все override-ы для ролей
+    участника и его персональные — двумя batch-запросами, затем применяем в
+    памяти (deny, потом allow; роли по приоритету, персональный override — последним).
+    """
+    if not target_ids:
+        return {}
+    if membership.role.value == "owner":
+        return {tid: int(Perm.ADMINISTRATOR) for tid in target_ids}
+
+    base = await effective_permissions(db, membership.id)
+    if base & int(Perm.ADMINISTRATOR):
+        return {tid: base for tid in target_ids}
+
+    role_ids = (
+        await db.scalars(
+            select(MemberRole.role_id).where(MemberRole.membership_id == membership.id)
+        )
+    ).all()
+
+    id_col = getattr(override_model, id_attr)
+
+    # Override-ы ролей, уже отсортированные по приоритету (desc) — порядок применения.
+    role_overrides: dict[uuid.UUID, list[tuple[int, int]]] = {}
+    if role_ids:
+        rows = (
+            await db.execute(
+                select(id_col, override_model.allow, override_model.deny)
+                .join(FamilyRole, FamilyRole.id == override_model.role_id)
+                .where(
+                    id_col.in_(target_ids),
+                    override_model.role_id.in_(role_ids),
+                    override_model.role_id.is_not(None),
+                )
+                .order_by(FamilyRole.priority.desc())
+            )
+        ).all()
+        for tid, allow, deny in rows:
+            role_overrides.setdefault(tid, []).append((allow, deny))
+
+    # Персональные override-ы участника.
+    member_rows = (
+        await db.execute(
+            select(id_col, override_model.allow, override_model.deny).where(
+                id_col.in_(target_ids),
+                override_model.user_id == membership.user_id,
+            )
+        )
+    ).all()
+    member_overrides = {tid: (allow, deny) for tid, allow, deny in member_rows}
+
+    out: dict[uuid.UUID, int] = {}
+    for tid in target_ids:
+        bits = base
+        for allow, deny in role_overrides.get(tid, []):
+            bits &= ~(deny or 0)
+            bits |= allow or 0
+        if tid in member_overrides:
+            allow, deny = member_overrides[tid]
+            bits &= ~(deny or 0)
+            bits |= allow or 0
+        out[tid] = bits
+    return out
+
+
+async def effective_permissions_for_chats(
+    db: AsyncSession,
+    membership: Membership,
+    chat_ids: list[uuid.UUID],
+) -> dict[uuid.UUID, int]:
+    from app.models.permission_override import ChatPermissionOverride
+
+    return await _effective_permissions_bulk(
+        db, membership, list(chat_ids),
+        override_model=ChatPermissionOverride, id_attr="chat_id",
+    )
+
+
+async def effective_permissions_for_channels(
+    db: AsyncSession,
+    membership: Membership,
+    channel_ids: list[uuid.UUID],
+) -> dict[uuid.UUID, int]:
+    from app.models.permission_override import ChannelPermissionOverride
+
+    return await _effective_permissions_bulk(
+        db, membership, list(channel_ids),
+        override_model=ChannelPermissionOverride, id_attr="channel_id",
+    )
 
 
 def merge_perms(bits: Iterable[int]) -> int:

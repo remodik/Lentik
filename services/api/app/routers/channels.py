@@ -7,10 +7,15 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_current_user
-from app.core.permissions import Perm
+from app.core.permissions import Perm, has_perm
 from app.db.deps import get_db
 from app.services.audit import log_action
-from app.services.roles import require_channel_perm, require_family_perm
+from app.services.moderation import enforce_message_content, get_settings
+from app.services.roles import (
+    effective_permissions_for_channels,
+    require_channel_perm,
+    require_family_perm,
+)
 from app.models.channel import Channel
 from app.models.membership import Membership, Role
 from app.models.post import Post
@@ -120,9 +125,13 @@ async def list_channels(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    await _require_member(family_id, user, db)
-    channels = await db.scalars(select(Channel).where(Channel.family_id == family_id))
-    return channels.all()
+    m = await _require_member(family_id, user, db)
+    channels = (
+        await db.scalars(select(Channel).where(Channel.family_id == family_id))
+    ).all()
+    # Скрываем каналы, на которые у участника снят VIEW_CHANNEL (owner видит все).
+    perms = await effective_permissions_for_channels(db, m, [c.id for c in channels])
+    return [c for c in channels if has_perm(perms.get(c.id, 0), Perm.VIEW_CHANNEL)]
 
 
 @router.post("", response_model=ChannelResponse, status_code=status.HTTP_201_CREATED)
@@ -135,11 +144,18 @@ async def create_channel(
     m = await _require_member(family_id, user, db)
     await require_family_perm(db, m, Perm.MANAGE_CHANNELS)
 
+    # Дефолтный слоумод из настроек модерации, если явно не задан.
+    slow_mode = body.slow_mode_seconds
+    if not slow_mode:
+        mod = await get_settings(db, family_id)
+        if mod and mod.slowmode_default_seconds:
+            slow_mode = mod.slowmode_default_seconds
+
     channel = Channel(
         family_id=family_id,
         name=body.name,
         description=body.description,
-        slow_mode_seconds=body.slow_mode_seconds,
+        slow_mode_seconds=slow_mode,
         is_18plus=body.is_18plus,
         created_by=user.id,
     )
@@ -229,6 +245,8 @@ async def list_posts(
     channel = await db.get(Channel, channel_id)
     if not channel or channel.family_id != family_id:
         raise HTTPException(status_code=404, detail="Channel not found")
+    # Доступ к каналу (VIEW_CHANNEL) и к его истории постов (READ_HISTORY).
+    await require_channel_perm(db, m, channel_id, Perm.VIEW_CHANNEL, Perm.READ_HISTORY)
     _ensure_age_gate(channel, user)
     await _ensure_channel_18plus_perm(channel, m, db)
 
@@ -255,11 +273,13 @@ async def create_post(
     if not channel or channel.family_id != family_id:
         raise HTTPException(status_code=404, detail="Channel not found")
 
-    await require_channel_perm(db, membership, channel_id, Perm.SEND_MESSAGES)
+    await require_channel_perm(db, membership, channel_id, Perm.VIEW_CHANNEL, Perm.SEND_MESSAGES)
 
     _ensure_age_gate(channel, user)
     await _ensure_channel_18plus_perm(channel, membership, db)
     await _enforce_slow_mode(channel, user, membership, db)
+
+    enforce_message_content(await get_settings(db, family_id), body.text)
 
     post = Post(
         channel_id=channel_id,

@@ -5,18 +5,21 @@ import React, { useMemo, useRef } from "react";
 type Props = {
   value: string[];
   onChange: (v: string[]) => void;
+  /** Сколько ячеек показывать. PIN 4–8 цифр: лишние ячейки можно не заполнять. */
+  length?: number;
 };
 
-export default function PinInput({ value, onChange }: Props) {
-  const refs = useRef<Array<HTMLInputElement | null>>([null, null, null, null]);
+export default function PinInput({ value, onChange, length = 4 }: Props) {
+  const refs = useRef<Array<HTMLInputElement | null>>([]);
+  const lastIndex = length - 1;
 
   const digits = useMemo(() => {
     const v = Array.isArray(value) ? value : [];
-    return [v[0] ?? "", v[1] ?? "", v[2] ?? "", v[3] ?? ""];
-  }, [value]);
+    return Array.from({ length }, (_, i) => v[i] ?? "");
+  }, [value, length]);
 
   function setAt(i: number, digit: string) {
-    const next = [...digits];
+    const next = Array.from({ length }, (_, k) => digits[k] ?? "");
     next[i] = digit;
     onChange(next);
   }
@@ -28,7 +31,7 @@ export default function PinInput({ value, onChange }: Props) {
   function handleChange(i: number, raw: string) {
     const digit = raw.replace(/\D/g, "").slice(-1);
     setAt(i, digit);
-    if (digit && i < 3) focusIndex(i + 1);
+    if (digit && i < lastIndex) focusIndex(i + 1);
   }
 
   function handleKeyDown(i: number, e: React.KeyboardEvent<HTMLInputElement>) {
@@ -49,7 +52,7 @@ export default function PinInput({ value, onChange }: Props) {
       focusIndex(i - 1);
     }
 
-    if (e.key === "ArrowRight" && i < 3) {
+    if (e.key === "ArrowRight" && i < lastIndex) {
       e.preventDefault();
       focusIndex(i + 1);
     }
@@ -64,20 +67,20 @@ export default function PinInput({ value, onChange }: Props) {
     startIndex: number,
   ) {
     const txt = e.clipboardData.getData("text");
-    const onlyDigits = txt.replace(/\D/g, "").slice(0, 4);
+    const onlyDigits = txt.replace(/\D/g, "").slice(0, length);
     if (!onlyDigits) return;
 
     e.preventDefault();
 
-    const next = [...digits];
+    const next = Array.from({ length }, (_, k) => digits[k] ?? "");
     for (let k = 0; k < onlyDigits.length; k++) {
       const idx = startIndex + k;
-      if (idx > 3) break;
+      if (idx > lastIndex) break;
       next[idx] = onlyDigits[k];
     }
     onChange(next);
 
-    const focusTo = Math.min(startIndex + onlyDigits.length, 3);
+    const focusTo = Math.min(startIndex + onlyDigits.length, lastIndex);
     focusIndex(focusTo);
   }
 

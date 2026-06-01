@@ -1,3 +1,4 @@
+import shutil
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
@@ -8,8 +9,11 @@ from sqlalchemy.orm import selectinload
 
 from app.auth.deps import get_current_user
 from app.core.jwt import COOKIE_NAME, decode_access_token
+from app.core.uploads import get_upload_root
+from app.core.ws_security import is_allowed_ws_origin
 from app.core.ws_tickets import ws_ticket_store
 from app.db.deps import get_db
+from app.models.chat import Chat
 from app.models.family import Family
 from app.models.membership import Membership, Role
 from app.models.user import User
@@ -22,8 +26,10 @@ from app.schemas.families import (
     TransferOwnershipRequest,
 )
 from app.core.permissions import Perm
+from app.schemas.moderation import ModerationSettingsResponse, ModerationSettingsUpdate
 from app.services.audit import log_action
 from app.services.family import create_family, require_membership, require_owner
+from app.services.moderation import get_or_create_settings
 from app.services.roles import require_family_perm
 from app.ws.manager import ws_manager
 
@@ -239,6 +245,109 @@ async def rename_family(
     return family
 
 
+@router.get("/{family_id}/moderation", response_model=ModerationSettingsResponse)
+async def get_moderation(
+    family_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    m = await require_membership(family_id, user, db)
+    await require_family_perm(db, m, Perm.MANAGE_FAMILY)
+
+    settings = await get_or_create_settings(db, family_id)
+    await db.commit()  # фиксируем возможное ленивое создание дефолтной строки
+    return settings
+
+
+@router.put("/{family_id}/moderation", response_model=ModerationSettingsResponse)
+async def update_moderation(
+    family_id: UUID,
+    body: ModerationSettingsUpdate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    m = await require_membership(family_id, user, db)
+    await require_family_perm(db, m, Perm.MANAGE_FAMILY)
+
+    settings = await get_or_create_settings(db, family_id)
+
+    diff: dict[str, dict] = {}
+    for field in (
+        "invite_max_active",
+        "slowmode_default_seconds",
+        "banned_words",
+        "max_message_length",
+    ):
+        old = getattr(settings, field)
+        new = getattr(body, field)
+        if old != new:
+            diff[field] = {"from": old, "to": new}
+            setattr(settings, field, new)
+
+    if diff:
+        await log_action(
+            db,
+            family_id=family_id,
+            actor_id=user.id,
+            action="moderation.updated",
+            target_type="family",
+            target_id=family_id,
+            metadata={"changes": diff},
+        )
+    await db.commit()
+    await db.refresh(settings)
+    return settings
+
+
+@router.delete("/{family_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_family(
+    family_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    # Удаление пространства целиком — только у классического владельца.
+    # Намеренно НЕ даём по MANAGE_FAMILY: это право для управления настройками,
+    # а не для безвозвратного сноса всей семьи.
+    await require_owner(family_id, user, db)
+
+    family = await db.get(Family, family_id)
+    if not family:
+        raise HTTPException(status_code=404, detail="Family not found")
+
+    # Собираем id чатов заранее: после удаления строк их уже не достать,
+    # а нам нужно вычистить директории с вложениями с диска.
+    chat_ids = list(
+        (await db.scalars(select(Chat.id).where(Chat.family_id == family_id))).all()
+    )
+
+    # Каскадно удаляем семью. Все дочерние сущности (memberships, invites,
+    # chats→messages→reactions/reads, channels→posts, gallery_items, expenses,
+    # budget/calendar/notes/reminders/family_tree, family_roles→member_roles,
+    # channel/chat overrides, audit_log) уходят по FK ON DELETE CASCADE на
+    # уровне БД — все нужные внешние ключи объявлены с ondelete="CASCADE".
+    await db.execute(sa_delete(Family).where(Family.id == family_id))
+    await db.commit()
+
+    # Файлы чистим только ПОСЛЕ успешного коммита, чтобы не потерять их,
+    # если транзакция откатится. Все вложения семьи лежат под upload-root:
+    #   <root>/<family_id>/                — галерея и прочие файлы семьи,
+    #   <root>/chat_files/<chat_id>/       — вложения и голосовые сообщений.
+    upload_root = get_upload_root()
+    chat_files_root = upload_root / "chat_files"
+    for chat_id in chat_ids:
+        shutil.rmtree(chat_files_root / str(chat_id), ignore_errors=True)
+    shutil.rmtree(upload_root / str(family_id), ignore_errors=True)
+
+    # Журнал аудита здесь не ведём — запись всё равно ушла бы под каскад.
+    # Вместо этого уведомляем клиентов, чтобы они сбросили активную семью,
+    # и принудительно закрываем все WS-соединения удалённой семьи.
+    await ws_manager.broadcast_to_family(
+        family_id,
+        {"type": "family_deleted", "family_id": str(family_id)},
+    )
+    await ws_manager.disconnect_family_all(family_id)
+
+
 @router.delete("/{family_id}/members/{member_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def kick_member(
     family_id: UUID,
@@ -379,6 +488,11 @@ async def family_ws(
     family_id: UUID,
     db: AsyncSession = Depends(get_db),
 ):
+    # Defense-in-depth против CSWSH: чужой Origin не пускаем (L8).
+    if not is_allowed_ws_origin(websocket):
+        await websocket.close(code=4403)
+        return
+
     token = websocket.cookies.get(COOKIE_NAME)
     decoded = decode_access_token(token) if token else None
     user_id = decoded[0] if decoded else None
@@ -412,7 +526,7 @@ async def family_ws(
 
     await websocket.accept()
     await ws_manager.connect_family(family_id, websocket, user_id=user.id)
-    became_online = ws_manager.register_presence_connection(family_id, user.id, websocket)
+    became_online = await ws_manager.register_presence_connection(family_id, user.id, websocket)
     if became_online or not user.is_online:
         user.is_online = True
         await db.commit()
@@ -445,7 +559,7 @@ async def family_ws(
         pass
     finally:
         ws_manager.disconnect_family(family_id, websocket)
-        became_offline = ws_manager.unregister_presence_connection(
+        became_offline = await ws_manager.unregister_presence_connection(
             family_id,
             user.id,
             websocket,

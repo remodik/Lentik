@@ -9,6 +9,7 @@ import {
   updateNote,
   type Note,
 } from "@/lib/api";
+import { hasBit, PERM, usePermissions } from "@/lib/usePermissions";
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("ru", {
@@ -21,15 +22,18 @@ function formatDate(iso: string) {
 function NoteCard({
   note,
   meId,
+  canManageOthers,
   onEdit,
   onDelete,
 }: {
   note: Note;
   meId: string;
+  canManageOthers: boolean;
   onEdit: (note: Note) => void;
   onDelete: (id: string) => void;
 }) {
   const isAuthor = note.author_id === meId;
+  const canModify = isAuthor || canManageOthers;
   const preview = note.content.length > 160
     ? `${note.content.slice(0, 160)}…`
     : note.content;
@@ -44,7 +48,7 @@ function NoteCard({
         <h3 className="font-semibold text-ink-900 text-[0.97rem] leading-snug truncate flex-1">
           {note.title}
         </h3>
-        {isAuthor && (
+        {canModify && (
           <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition">
             <button
               type="button"
@@ -90,6 +94,12 @@ export default function NotesView({
   familyId: string;
   meId: string;
 }) {
+  const { perms } = usePermissions();
+  const canManageOthers =
+    !!perms &&
+    (perms.is_owner ||
+      perms.is_administrator ||
+      hasBit(perms.base, PERM.MANAGE_NOTES));
   const [tab, setTab] = useState<"personal" | "family">("personal");
   const [notes, setNotes] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
@@ -249,6 +259,7 @@ export default function NotesView({
                 key={note.id}
                 note={note}
                 meId={meId}
+                canManageOthers={canManageOthers}
                 onEdit={openEdit}
                 onDelete={handleDelete}
               />

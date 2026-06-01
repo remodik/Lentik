@@ -5,6 +5,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_current_user
+from app.core.permissions import Perm, has_perm
 from app.db.deps import get_db
 from app.models.family_tree import (
     FamilyTreePerson,
@@ -22,7 +23,25 @@ from app.schemas.family_tree import (
     TreeRelationResponse,
     TreeResponse,
 )
+from app.services.audit import log_action
 from app.services.family import require_membership
+from app.services.roles import effective_permissions
+
+# Поля, которые меняет перетаскивание карточки на холсте. Их вправе менять
+# любой участник — это раскладка, а не структура древа.
+_POSITION_ONLY_FIELDS = {"pos_x", "pos_y"}
+
+
+async def _require_manage_tree(m: Membership, db: AsyncSession) -> None:
+    """Требует owner или MANAGE_TREE для структурных изменений древа."""
+    if m.role.value == "owner":
+        return
+    bits = await effective_permissions(db, m.id)
+    if not has_perm(bits, Perm.MANAGE_TREE):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Недостаточно прав для изменения семейного древа",
+        )
 
 family_router = APIRouter(prefix="/families/{family_id}/tree", tags=["family-tree"])
 person_router = APIRouter(prefix="/tree/persons", tags=["family-tree"])
@@ -108,7 +127,9 @@ async def create_person(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    await require_membership(family_id, user, db)
+    m = await require_membership(family_id, user, db)
+    # Создание узлов — структурное изменение древа: требует MANAGE_TREE (L13).
+    await _require_manage_tree(m, db)
 
     if body.user_id is not None:
         existing = await db.scalar(
@@ -149,9 +170,15 @@ async def update_person(
     user: User = Depends(get_current_user),
 ):
     person = await _load_person(person_id, db)
-    await require_membership(person.family_id, user, db)
+    m = await require_membership(person.family_id, user, db)
 
     fields_set = body.model_fields_set
+
+    # Перетаскивание (только pos_x/pos_y) разрешено любому участнику. Любая
+    # структурная правка требует owner / MANAGE_TREE.
+    is_position_only = bool(fields_set) and fields_set.issubset(_POSITION_ONLY_FIELDS)
+    if not is_position_only:
+        await _require_manage_tree(m, db)
 
     if body.display_name is not None:
         person.display_name = body.display_name
@@ -194,6 +221,18 @@ async def update_person(
                 )
         person.user_id = body.user_id
 
+    # Логируем структурную правку (не перетаскивание).
+    if not is_position_only:
+        await log_action(
+            db,
+            family_id=person.family_id,
+            actor_id=user.id,
+            action="tree.person_edited_by_moderator",
+            target_type="tree_person",
+            target_id=person.id,
+            metadata={"display_name": person.display_name},
+        )
+
     await db.commit()
     await db.refresh(person)
     return _person_to_response(person)
@@ -206,7 +245,18 @@ async def delete_person(
     user: User = Depends(get_current_user),
 ):
     person = await _load_person(person_id, db)
-    await require_membership(person.family_id, user, db)
+    m = await require_membership(person.family_id, user, db)
+    await _require_manage_tree(m, db)
+
+    await log_action(
+        db,
+        family_id=person.family_id,
+        actor_id=user.id,
+        action="tree.person_deleted",
+        target_type="tree_person",
+        target_id=person.id,
+        metadata={"display_name": person.display_name},
+    )
 
     await db.delete(person)
     await db.commit()
@@ -223,7 +273,9 @@ async def create_relation(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    await require_membership(family_id, user, db)
+    m = await require_membership(family_id, user, db)
+    # Создание связей — структурное изменение древа: требует MANAGE_TREE (L13).
+    await _require_manage_tree(m, db)
 
     if body.person_a_id == body.person_b_id:
         raise HTTPException(status_code=400, detail="Нельзя связать человека с самим собой")
@@ -295,7 +347,22 @@ async def delete_relation(
     relation = await db.get(FamilyTreeRelation, relation_id)
     if not relation:
         raise HTTPException(status_code=404, detail="Relation not found")
-    await require_membership(relation.family_id, user, db)
+    m = await require_membership(relation.family_id, user, db)
+    await _require_manage_tree(m, db)
+
+    await log_action(
+        db,
+        family_id=relation.family_id,
+        actor_id=user.id,
+        action="tree.relation_deleted",
+        target_type="tree_relation",
+        target_id=relation.id,
+        metadata={
+            "relation_type": _relation_value(relation.relation_type),
+            "person_a_id": str(relation.person_a_id),
+            "person_b_id": str(relation.person_b_id),
+        },
+    )
 
     await db.delete(relation)
     await db.commit()

@@ -9,7 +9,7 @@ from sqlalchemy.orm import selectinload
 
 from app.auth.deps import get_current_user
 from app.core.permissions import Perm, has_perm
-from app.core.uploads import get_upload_root, resolve_upload_path
+from app.core.storage import storage
 from app.db.deps import get_db
 from app.models.gallery_item import GalleryItem, MediaType
 from app.models.membership import Membership
@@ -19,7 +19,6 @@ from app.services.roles import effective_permissions
 
 router = APIRouter(prefix="/families/{family_id}/gallery", tags=["gallery"])
 
-UPLOAD_DIR = get_upload_root()
 ALLOWED_IMAGES = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic", ".heif", ".bmp"}
 ALLOWED_VIDEOS = {".mp4", ".mov", ".avi", ".webm", ".mkv", ".m4v", ".3gp"}
 ALLOWED_FILES = {
@@ -112,11 +111,9 @@ async def upload_to_gallery(
     if len(content) > MAX_FILE_SIZE:
         raise HTTPException(status_code=413, detail="Файл слишком большой (макс. 50 МБ)")
 
-    dest_dir = UPLOAD_DIR / str(family_id)
-    dest_dir.mkdir(parents=True, exist_ok=True)
     filename = f"{uuid.uuid4()}{ext}"
     try:
-        (dest_dir / filename).write_bytes(content)
+        await storage.save(f"{family_id}/{filename}", content, file.content_type)
     except OSError as exc:
         raise HTTPException(
             status_code=500,
@@ -163,9 +160,7 @@ async def delete_gallery_item(
         if not has_perm(bits, Perm.MANAGE_GALLERY):
             raise HTTPException(status_code=403, detail="Недостаточно прав для удаления чужих файлов")
 
-    file_path = resolve_upload_path(item.url)
-    if file_path and file_path.exists():
-        file_path.unlink()
+    await storage.delete_by_url(item.url)
 
     await db.delete(item)
     await db.commit()
@@ -191,8 +186,6 @@ async def bulk_delete_gallery(
     for item in items.all():
         if item.uploaded_by != user.id and not can_manage_others:
             continue
-        file_path = resolve_upload_path(item.url)
-        if file_path and file_path.exists():
-            file_path.unlink()
+        await storage.delete_by_url(item.url)
         await db.delete(item)
     await db.commit()

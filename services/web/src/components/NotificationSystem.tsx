@@ -202,6 +202,8 @@ function cap<T>(arr: T[], limit: number): T[] {
 
 type UseNotificationsOptions = {
   onPresenceUpdate?: (event: PresenceUpdateEvent) => void;
+  /** Семья была удалена владельцем — клиент должен сбросить активную семью. */
+  onFamilyDeleted?: (familyId: string) => void;
 };
 
 export function useNotifications(
@@ -221,6 +223,9 @@ export function useNotifications(
   const onPresenceUpdateRef = useRef<((event: PresenceUpdateEvent) => void) | undefined>(
     undefined,
   );
+  const onFamilyDeletedRef = useRef<((familyId: string) => void) | undefined>(
+    undefined,
+  );
 
   useEffect(() => {
     familyIdRef.current = familyId;
@@ -230,6 +235,10 @@ export function useNotifications(
   useEffect(() => {
     onPresenceUpdateRef.current = options?.onPresenceUpdate;
   }, [options?.onPresenceUpdate]);
+
+  useEffect(() => {
+    onFamilyDeletedRef.current = options?.onFamilyDeleted;
+  }, [options?.onFamilyDeleted]);
 
   const toastTimeoutsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(
     new Map(),
@@ -292,6 +301,12 @@ export function useNotifications(
         const presenceUpdate = asPresenceUpdate(d);
         if (presenceUpdate) {
           onPresenceUpdateRef.current?.(presenceUpdate);
+          return;
+        }
+
+        if (str(d.type) === "family_deleted") {
+          const deletedId = str(d.family_id) || familyIdRef.current;
+          onFamilyDeletedRef.current?.(deletedId);
           return;
         }
 

@@ -5,9 +5,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import update, func
 
 from app.core.config import settings
+from app.core.redis_client import close_redis
 from app.core.uploads import get_upload_root
 from app.db.session import AsyncSessionLocal
 from app.models.user import User
+from app.ws.manager import ws_manager
 from app.routers.auth import router as auth_router
 from app.routers.budget import family_router as budget_family_router, tx_router as budget_tx_router
 from app.routers.calendar import router as calendar_router
@@ -99,6 +101,39 @@ async def _auto_migrate() -> None:
         logger.warning("Auto-migration failed (non-fatal): %s", exc)
 
 
+def _check_security_config() -> None:
+    """Предупреждения о небезопасной конфигурации на старте.
+
+    Жёсткие падения (пустой/`*` CORS, короткий JWT_SECRET) ловит валидатор
+    Settings; здесь — мягкие warning'и про прод-настройки.
+    """
+    if not settings.is_production:
+        logger.warning(
+            "IS_PRODUCTION=false: auth-cookie выставляется без флага Secure "
+            "(ок для локальной разработки по HTTP). В проде обязательно "
+            "выставьте IS_PRODUCTION=true."
+        )
+        return
+
+    # ── Прод: небезопасный конфиг должен валить старт, а не молча warning'ить.
+    insecure = [
+        o for o in settings.cors_origins
+        if o.startswith("http://") or "localhost" in o or "127.0.0.1" in o
+    ]
+    if insecure:
+        raise RuntimeError(
+            "IS_PRODUCTION=true, но cors_origins содержит небезопасные/локальные "
+            f"origin: {insecure}. Оставьте только https-origin фронтенда."
+        )
+
+    if settings.auto_migrate:
+        logger.warning(
+            "IS_PRODUCTION=true и AUTO_MIGRATE=true: при нескольких репликах "
+            "миграции могут гоняться при одновременном старте. Рекомендуется "
+            "AUTO_MIGRATE=false + отдельный шаг `alembic upgrade heads` в деплое."
+        )
+
+
 def create_app() -> FastAPI:
     app_ = FastAPI(title="Lentik API", version="0.3.0")
     
@@ -109,6 +144,24 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app_.middleware("http")
+    async def security_headers(request, call_next):
+        """Глобальные защитные заголовки на все ответы API (CWE-693).
+
+        setdefault — чтобы не затирать заголовки, выставленные эндпоинтами явно
+        (например, Content-Disposition/X-Content-Type-Options в отдаче файлов).
+        CSP здесь не ставим: API отдаёт JSON и медиа, а не HTML-документы —
+        строгая политика живёт на фронте (next.config.js).
+        """
+        response = await call_next(request)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("Referrer-Policy", "no-referrer")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault(
+            "Permissions-Policy", "geolocation=(), camera=(), microphone=()"
+        )
+        return response
 
     app_.include_router(uploads_router)
     app_.include_router(auth_router)
@@ -136,7 +189,9 @@ def create_app() -> FastAPI:
 
     @app_.on_event("startup")
     async def on_startup() -> None:
-        await _auto_migrate()
+        _check_security_config()
+        if settings.auto_migrate:
+            await _auto_migrate()
         await _check_migrations()
         async with AsyncSessionLocal() as db:
             await db.execute(
@@ -145,13 +200,19 @@ def create_app() -> FastAPI:
                 .values(is_online=False, last_seen_at=func.now())
             )
             await db.commit()
-        await start_reminder_scheduler()
-        await start_calendar_reminder_scheduler()
+        # Подписка на Redis fan-out (no-op, если REDIS_URL не задан).
+        await ws_manager.start()
+        # Планировщики можно отключить на web-инстансах (отдельный worker).
+        if settings.scheduler_enabled:
+            await start_reminder_scheduler()
+            await start_calendar_reminder_scheduler()
 
     @app_.on_event("shutdown")
     async def on_shutdown() -> None:
         await stop_calendar_reminder_scheduler()
         await stop_reminder_scheduler()
+        await ws_manager.stop()
+        await close_redis()
 
     return app_
 

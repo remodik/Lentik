@@ -13,6 +13,7 @@ import {
   type Post,
 } from "@/lib/api";
 import ChatSettingsModal from "@/components/ChatSettingsModal";
+import { ExpertIdRow } from "@/components/CopyIdButton";
 import Age18Gate, { useAge18Gate } from "@/components/Age18Gate";
 import { useCtrlResize } from "@/lib/useCtrlResize";
 import {
@@ -490,6 +491,12 @@ export default function ChannelsView({
                       {channel.description}
                     </p>
                   )}
+
+                  <ExpertIdRow
+                    value={channel.id}
+                    label={`канал # ${channel.name}`}
+                    onClick={(e) => e.stopPropagation()}
+                  />
 
                   {isOwner && (
                     <button

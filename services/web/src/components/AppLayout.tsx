@@ -191,6 +191,7 @@ type Props = {
   onMeUpdate: (m: Me) => void;
   onChatOpen?: (chatId: string) => void;
   onPresenceUpdate?: (event: PresenceUpdateEvent) => void;
+  onFamilyDeleted?: (familyId: string) => void;
   chats: Chat[];
   activeChatId: string | null;
   channels: Channel[];
@@ -225,6 +226,7 @@ export default function AppLayout({
   onMeUpdate,
   onChatOpen,
   onPresenceUpdate,
+  onFamilyDeleted,
   chats,
   activeChatId,
   channels,
@@ -244,6 +246,7 @@ export default function AppLayout({
     countsByType,
   } = useNotifications(family.id, me.username, {
     onPresenceUpdate,
+    onFamilyDeleted,
   });
 
   const [isCenterOpen, setCenterOpen] = useState(false);

@@ -35,6 +35,10 @@ class RoleCreateRequest(BaseModel):
     permissions: int = Field(default=0, ge=0)
 
 
+class RoleReorderRequest(BaseModel):
+    ordered_ids: list[UUID]
+
+
 class PermissionBitInfo(BaseModel):
     bit: int
     label: str

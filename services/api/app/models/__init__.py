@@ -22,7 +22,8 @@ from .reminder import Reminder, RepeatRule
 from .role import FamilyRole, MemberRole
 from .permission_override import ChannelPermissionOverride, ChatPermissionOverride
 from .audit_log import AuditLogEntry
-from .session import Session
+from .family_moderation_settings import FamilyModerationSettings
+from .login_throttle import LoginThrottle
 from .user import User
 
 __all__ = [
@@ -35,7 +36,6 @@ __all__ = [
     "Membership",
     "Role",
     "Invite",
-    "Session",
     "Chat",
     "Message",
     "MessageRead",
@@ -58,4 +58,6 @@ __all__ = [
     "ChannelPermissionOverride",
     "ChatPermissionOverride",
     "AuditLogEntry",
+    "FamilyModerationSettings",
+    "LoginThrottle",
 ]

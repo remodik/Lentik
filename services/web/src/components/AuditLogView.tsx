@@ -21,6 +21,8 @@ import {
   X,
 } from "lucide-react";
 import { getAuditLog, type AuditLogEntry } from "@/lib/api";
+import { useUserMode } from "@/lib/useUserMode";
+import CopyIdButton from "@/components/CopyIdButton";
 
 type Props = {
   familyId: string;
@@ -63,9 +65,20 @@ const ACTION_META: Record<string, ActionMeta> = {
   "role.updated": { label: "Изменена роль", icon: Shield },
   "role.deleted": { label: "Удалена роль", icon: Shield, tone: "danger" },
   "role.assigned": { label: "Назначены роли", icon: Shield },
+  "role.reordered": { label: "Изменён порядок ролей", icon: Shield, tone: "warm" },
 
   "override.changed": { label: "Изменены разрешения", icon: AlertTriangle, tone: "warm" },
   "override.removed": { label: "Сброшены разрешения", icon: AlertTriangle },
+
+  "moderation.updated": { label: "Изменены настройки модерации", icon: Settings, tone: "warm" },
+
+  "note.deleted_by_moderator": { label: "Модератор удалил заметку", icon: Trash2, tone: "danger" },
+  "note.edited_by_moderator": { label: "Модератор изменил заметку", icon: Pencil, tone: "warm" },
+  "reminder.deleted_by_moderator": { label: "Модератор удалил напоминание", icon: Trash2, tone: "danger" },
+  "reminder.edited_by_moderator": { label: "Модератор изменил напоминание", icon: Pencil, tone: "warm" },
+  "tree.person_deleted": { label: "Удалён человек из древа", icon: Trash2, tone: "danger" },
+  "tree.person_edited_by_moderator": { label: "Изменён человек в древе", icon: Pencil, tone: "warm" },
+  "tree.relation_deleted": { label: "Удалена связь в древе", icon: Trash2, tone: "danger" },
 };
 
 const FALLBACK_META: ActionMeta = { label: "Событие", icon: History };
@@ -103,7 +116,6 @@ const FIELD_LABELS: Record<string, string> = {
   slow_mode_seconds: "Медленный режим",
   is_18plus: "18+",
   color: "Цвет",
-  priority: "Приоритет",
 };
 
 function formatVal(field: string, val: unknown): string {
@@ -228,8 +240,18 @@ function describeAction(entry: AuditLogEntry): React.ReactNode {
       const target = meta.member_name ? <b>{s("member_name")}</b> : "участнику";
       return <>изменил роли {target}</>;
     }
+    case "role.reordered":
+      return <>изменил порядок ролей</>;
 
     case "override.changed":
+      if (meta.subject_type === "member" || meta.target_type === "member") {
+        return (
+          <>
+            изменил права участника <b>{s("member_name")}</b>
+            {meta.target_name ? <> в # {s("target_name")}</> : null}
+          </>
+        );
+      }
       return (
         <>
           изменил права роли <b>{s("role_name")}</b>
@@ -237,12 +259,66 @@ function describeAction(entry: AuditLogEntry): React.ReactNode {
         </>
       );
     case "override.removed":
+      if (meta.subject_type === "member" || meta.target_type === "member") {
+        return (
+          <>
+            сбросил права участника <b>{s("member_name")}</b>
+            {meta.target_name ? <> в # {s("target_name")}</> : null}
+          </>
+        );
+      }
       return (
         <>
           сбросил права роли <b>{s("role_name")}</b>
           {meta.target_name ? <> в # {s("target_name")}</> : null}
         </>
       );
+
+    case "moderation.updated":
+      return <>изменил настройки модерации</>;
+
+    case "note.deleted_by_moderator":
+      return (
+        <>
+          удалил заметку <b>{s("title")}</b>
+          {meta.author_name ? <> от <b>{s("author_name")}</b></> : null}
+        </>
+      );
+    case "note.edited_by_moderator":
+      return (
+        <>
+          изменил заметку <b>{s("title")}</b>
+          {meta.author_name ? <> от <b>{s("author_name")}</b></> : null}
+        </>
+      );
+    case "reminder.deleted_by_moderator":
+      return (
+        <>
+          удалил напоминание <b>{s("title")}</b>
+          {meta.author_name ? <> от <b>{s("author_name")}</b></> : null}
+        </>
+      );
+    case "reminder.edited_by_moderator":
+      return (
+        <>
+          изменил напоминание <b>{s("title")}</b>
+          {meta.author_name ? <> от <b>{s("author_name")}</b></> : null}
+        </>
+      );
+    case "tree.person_deleted":
+      return (
+        <>
+          удалил из древа <b>{s("display_name")}</b>
+        </>
+      );
+    case "tree.person_edited_by_moderator":
+      return (
+        <>
+          изменил в древе <b>{s("display_name")}</b>
+        </>
+      );
+    case "tree.relation_deleted":
+      return <>удалил связь в древе</>;
 
     default:
       return entry.action;
@@ -316,6 +392,14 @@ function renderDetails(entry: AuditLogEntry): React.ReactNode {
     }
   }
 
+  if (entry.action === "role.reordered" && Array.isArray(meta.order)) {
+    parts.push(
+      <div key="order" className="text-[12px] text-ink-500 font-body">
+        порядок: {(meta.order as string[]).join(" → ")}
+      </div>,
+    );
+  }
+
   // дифф прав роли
   if (permDiff && (permDiff.added?.length || permDiff.removed?.length)) {
     parts.push(
@@ -349,6 +433,7 @@ function renderDetails(entry: AuditLogEntry): React.ReactNode {
 }
 
 export default function AuditLogView({ familyId }: Props) {
+  const { isExpert } = useUserMode();
   const [items, setItems] = useState<AuditLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -435,7 +520,7 @@ export default function AuditLogView({ familyId }: Props) {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between gap-3 mb-3">
+      <div className="flex items-start justify-between gap-3 mb-3">
         <p className="text-sm text-ink-500 font-body">
           Записываются ключевые действия: переименования, удаления, изменения ролей и разрешений.
         </p>
@@ -446,12 +531,12 @@ export default function AuditLogView({ familyId }: Props) {
           disabled={loading}
         >
           <RefreshCw className="w-3.5 h-3.5" strokeWidth={2.2} />
-          Обновить
+          <span className="hidden sm:inline">Обновить</span>
         </button>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 mb-3">
-        <div className="flex flex-wrap gap-1">
+      <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2 mb-3">
+        <div className="flex flex-wrap gap-1 order-2 sm:order-1">
           {CATEGORIES.map((c) => (
             <button
               key={c.id}
@@ -468,7 +553,7 @@ export default function AuditLogView({ familyId }: Props) {
           ))}
         </div>
 
-        <div className="relative ml-auto min-w-[180px] flex-1 sm:flex-initial">
+        <div className="relative order-1 sm:order-2 w-full sm:w-auto sm:ml-auto sm:min-w-[180px] sm:flex-1 md:flex-initial">
           <Search
             className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-400"
             strokeWidth={2.2}
@@ -549,6 +634,22 @@ export default function AuditLogView({ familyId }: Props) {
                           {formatWhen(it.created_at)}
                           {it.actor_username && ` · @${it.actor_username}`}
                         </div>
+                        {isExpert && (
+                          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 font-mono text-[10.5px] text-ink-400">
+                            <span className="px-1.5 py-0.5 rounded bg-[color:var(--bg-elevated)] border border-[color:var(--border-glass)]">
+                              {it.action}
+                            </span>
+                            {it.target_type && (
+                              <span className="break-all min-w-0">
+                                target: {it.target_type}
+                                {it.target_id ? `=${it.target_id}` : ""}
+                              </span>
+                            )}
+                            {it.target_id && (
+                              <CopyIdButton value={it.target_id} label="target_id" />
+                            )}
+                          </div>
+                        )}
                       </div>
                     </li>
                   );

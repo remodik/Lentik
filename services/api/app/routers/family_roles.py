@@ -9,7 +9,14 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_current_user
-from app.core.permissions import PERM_GROUPS, Perm, has_perm
+from app.core.permissions import (
+    PERM_GROUPS,
+    PERM_MASK,
+    Perm,
+    has_perm,
+    permission_labels,
+    unknown_bits,
+)
 from app.db.deps import get_db
 from app.models.membership import Membership
 from app.models.role import FamilyRole, MemberRole
@@ -20,11 +27,12 @@ from app.schemas.role import (
     PermissionGroupInfo,
     PermissionsCatalogResponse,
     RoleCreateRequest,
+    RoleReorderRequest,
     RoleResponse,
     RoleUpdateRequest,
 )
 from app.services.audit import log_action
-from app.services.family import require_membership, require_owner
+from app.services.family import require_membership
 from app.services.roles import effective_permissions
 
 router = APIRouter(prefix="/families/{family_id}", tags=["roles"])
@@ -51,6 +59,43 @@ async def _require_manage_roles(
     )
 
 
+async def _ensure_can_grant_perms(
+    db: AsyncSession,
+    membership: Membership,
+    new_perms: int,
+    *,
+    prev_perms: int = 0,
+) -> None:
+    """Анти-эскалация: не-владелец не может ВКЛЮЧИТЬ в роль биты, которыми сам
+    не обладает (CWE-269). Биты, уже бывшие у роли (prev_perms) и не трогаемые,
+    допустимы. Бит ADMINISTRATOR валидируется отдельно (owner-only) в вызывающем
+    коде, здесь исключается из сообщения. Также отсекаем неизвестные биты.
+    """
+    if unknown_bits(new_perms):
+        raise HTTPException(
+            status_code=400,
+            detail="В правах роли переданы неизвестные биты",
+        )
+
+    if membership.role.value == "owner":
+        return
+    actor_bits = await effective_permissions(db, membership.id)
+    if actor_bits & int(Perm.ADMINISTRATOR):
+        return
+
+    # Только реально добавляемые битами (которых не было в роли) подлежат проверке.
+    added = new_perms & ~prev_perms
+    missing = added & ~actor_bits & PERM_MASK & ~int(Perm.ADMINISTRATOR)
+    if missing:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "Нельзя выдать роли права, которых нет у вас: "
+                + ", ".join(permission_labels(missing))
+            ),
+        )
+
+
 def _role_to_response(role: FamilyRole, member_count: int) -> RoleResponse:
     return RoleResponse(
         id=role.id,
@@ -66,6 +111,32 @@ def _role_to_response(role: FamilyRole, member_count: int) -> RoleResponse:
         created_at=role.created_at,
         member_count=member_count,
     )
+
+
+async def _list_roles_with_counts(
+    db: AsyncSession,
+    family_id: UUID,
+) -> list[RoleResponse]:
+    roles = (
+        await db.scalars(
+            select(FamilyRole)
+            .where(FamilyRole.family_id == family_id)
+            .order_by(FamilyRole.priority.asc(), FamilyRole.name.asc())
+        )
+    ).all()
+
+    counts = dict(
+        (
+            await db.execute(
+                select(MemberRole.role_id, func.count(MemberRole.id))
+                .join(FamilyRole, FamilyRole.id == MemberRole.role_id)
+                .where(FamilyRole.family_id == family_id)
+                .group_by(MemberRole.role_id)
+            )
+        ).all()
+    )
+
+    return [_role_to_response(r, counts.get(r.id, 0)) for r in roles]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -188,27 +259,7 @@ async def list_roles(
 ):
     await require_membership(family_id, user, db)
 
-    roles = (
-        await db.scalars(
-            select(FamilyRole)
-            .where(FamilyRole.family_id == family_id)
-            .order_by(FamilyRole.priority.asc(), FamilyRole.name.asc())
-        )
-    ).all()
-
-    # Считаем member_count одним запросом.
-    counts = dict(
-        (
-            await db.execute(
-                select(MemberRole.role_id, func.count(MemberRole.id))
-                .join(FamilyRole, FamilyRole.id == MemberRole.role_id)
-                .where(FamilyRole.family_id == family_id)
-                .group_by(MemberRole.role_id)
-            )
-        ).all()
-    )
-
-    return [_role_to_response(r, counts.get(r.id, 0)) for r in roles]
+    return await _list_roles_with_counts(db, family_id)
 
 
 @router.post("/roles", response_model=RoleResponse, status_code=status.HTTP_201_CREATED)
@@ -218,16 +269,17 @@ async def create_role(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    await _require_manage_roles(family_id, user, db)
+    membership = await _require_manage_roles(family_id, user, db)
 
     # Не даём пользователю выдать ADMINISTRATOR обычной роли, если он сам не админ
     # (или не классический owner).
-    membership = await require_membership(family_id, user, db)
     if (body.permissions & int(Perm.ADMINISTRATOR)) and membership.role.value != "owner":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Только владелец может выдавать роль администратора",
         )
+    # Анти-эскалация: нельзя создать роль с правами выше собственных.
+    await _ensure_can_grant_perms(db, membership, body.permissions)
 
     role = FamilyRole(
         family_id=family_id,
@@ -254,6 +306,73 @@ async def create_role(
     await db.commit()
     await db.refresh(role)
     return _role_to_response(role, 0)
+
+
+@router.put("/roles/reorder", response_model=list[RoleResponse])
+async def reorder_roles(
+    family_id: UUID,
+    body: RoleReorderRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    await _require_manage_roles(family_id, user, db)
+
+    roles = (
+        await db.scalars(
+            select(FamilyRole)
+            .where(FamilyRole.family_id == family_id)
+            .order_by(FamilyRole.priority.asc(), FamilyRole.name.asc())
+        )
+    ).all()
+
+    owner_role = next((r for r in roles if r.slug == "owner"), None)
+    everyone_role = next((r for r in roles if r.is_everyone), None)
+    if not owner_role or not everyone_role:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Системные роли семьи не найдены",
+        )
+
+    ordered_ids = body.ordered_ids
+    ordered_set = set(ordered_ids)
+    if len(ordered_set) != len(ordered_ids):
+        raise HTTPException(status_code=400, detail="В списке ролей есть дубликаты")
+
+    fixed_ids = {owner_role.id, everyone_role.id}
+    if ordered_set & fixed_ids:
+        raise HTTPException(
+            status_code=400,
+            detail="Владелец и @everyone закреплены и не участвуют в сортировке",
+        )
+
+    movable_roles = [r for r in roles if r.id not in fixed_ids]
+    expected_ids = {r.id for r in movable_roles}
+    if ordered_set != expected_ids:
+        raise HTTPException(
+            status_code=400,
+            detail="Передайте все роли семьи кроме владельца и @everyone",
+        )
+
+    roles_by_id = {r.id: r for r in movable_roles}
+    ordered_roles = [roles_by_id[role_id] for role_id in ordered_ids]
+
+    owner_role.priority = 0
+    for index, role in enumerate(ordered_roles, start=1):
+        role.priority = index * 10
+    everyone_role.priority = max(100, (len(ordered_roles) + 1) * 10)
+
+    final_order = [owner_role, *ordered_roles, everyone_role]
+    await db.flush()
+    await log_action(
+        db,
+        family_id=family_id,
+        actor_id=user.id,
+        action="role.reordered",
+        target_type="role",
+        metadata={"order": [role.name for role in final_order]},
+    )
+    await db.commit()
+    return await _list_roles_with_counts(db, family_id)
 
 
 @router.patch("/roles/{role_id}", response_model=RoleResponse)
@@ -286,6 +405,10 @@ async def update_role(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Только владелец может изменять права администратора",
             )
+        # Анти-эскалация: новые биты должны быть подмножеством прав актора.
+        await _ensure_can_grant_perms(
+            db, membership, body.permissions, prev_perms=role.permissions
+        )
 
     changes: dict[str, dict] = {}
     perm_diff: dict[str, list[str]] | None = None
@@ -408,6 +531,15 @@ async def set_member_roles(
     #  * owner-роль может выдавать только текущий владелец;
     #  * ADMINISTRATOR-роли — только владелец;
     #  * нельзя снять owner-роль с владельца кому-то другому.
+    # Анти-эскалация (CWE-269): не-владелец не может назначить участнику роль с
+    # правами, которых у него самого нет. Проверяем только ВНОВЬ добавляемые роли,
+    # чтобы не блокировать пере-сохранение уже имеющихся у участника назначений.
+    actor_is_admin = actor.role.value == "owner"
+    actor_bits = 0
+    if not actor_is_admin:
+        actor_bits = await effective_permissions(db, actor.id)
+        actor_is_admin = bool(actor_bits & int(Perm.ADMINISTRATOR))
+
     for r in requested_roles:
         if r.slug == "owner" and actor.role.value != "owner":
             raise HTTPException(
@@ -417,6 +549,17 @@ async def set_member_roles(
             raise HTTPException(
                 status_code=403, detail="Только владелец может выдавать роли с правом администратора"
             )
+        is_newly_added = not r.is_everyone and r.id not in prev_names
+        if is_newly_added and not actor_is_admin:
+            missing = r.permissions & ~actor_bits & PERM_MASK & ~int(Perm.ADMINISTRATOR)
+            if missing:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=(
+                        f"Нельзя назначить роль «{r.name}»: она даёт права, которых нет у вас: "
+                        + ", ".join(permission_labels(missing))
+                    ),
+                )
 
     # Чистим всё, кроме @everyone (его не убираем).
     await db.execute(

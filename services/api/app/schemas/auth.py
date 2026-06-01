@@ -11,9 +11,9 @@ class RegisterRequest(BaseModel):
 
     @field_validator("pin")
     @classmethod
-    def pin_must_be_4_digits(cls, v: str) -> str:
-        if not re.fullmatch(r"\d{4}", v):
-            raise ValueError("PIN должен быть 4 цифры")
+    def pin_must_be_4_to_8_digits(cls, v: str) -> str:
+        if not re.fullmatch(r"\d{4,8}", v):
+            raise ValueError("PIN должен быть от 4 до 8 цифр")
         return v
 
 
@@ -24,13 +24,14 @@ class JoinByInviteRequest(BaseModel):
 
     @field_validator("pin")
     @classmethod
-    def pin_must_be_4_digits(cls, v: str) -> str:
-        if not re.fullmatch(r"\d{4}", v):
-            raise ValueError("PIN должен быть 4 цифры")
+    def pin_must_be_4_to_8_digits(cls, v: str) -> str:
+        if not re.fullmatch(r"\d{4,8}", v):
+            raise ValueError("PIN должен быть от 4 до 8 цифр")
         return v
 
 
 class JoinByInviteResponse(BaseModel):
     user_id: UUID
     family_id: UUID
-    access_token: str
+    # JWT отдаётся только httpOnly-cookie (CWE-522), в тело не кладётся.
+    access_token: str | None = None

@@ -3,7 +3,7 @@
 Каждый бит = одно разрешение. Финальные права участника = OR прав всех его ролей.
 ADMINISTRATOR (последний бит) шунтирует все проверки.
 
-Будущие override-ы каналов/чатов будут давать allow/deny битовые поля,
+Будущие override каналов/чатов будут давать allow/deny битовые поля,
 которые применяются поверх базы: base = (base & ~deny) | allow.
 """
 
@@ -16,8 +16,8 @@ class Perm(IntFlag):
     NONE = 0
 
     # ── Просмотр и базовое участие ──────────────────────────────────────────
-    VIEW_CHANNEL = 1 << 0  # Видеть канал/чат
-    READ_HISTORY = 1 << 1  # Читать историю сообщений
+    VIEW_CHANNEL = 1 << 0
+    READ_HISTORY = 1 << 1
 
     # ── Отправка контента ───────────────────────────────────────────────────
     SEND_MESSAGES = 1 << 2
@@ -28,26 +28,26 @@ class Perm(IntFlag):
     SEND_VOICE = 1 << 7
 
     # ── Управление контентом ───────────────────────────────────────────────
-    MANAGE_OWN_MESSAGES = 1 << 8   # Редактировать/удалять СВОИ
-    MANAGE_MESSAGES = 1 << 9       # Удалять/закреплять ЛЮБЫЕ
-    MANAGE_CHANNELS = 1 << 10      # Создавать/настраивать каналы и чаты
+    MANAGE_OWN_MESSAGES = 1 << 8
+    MANAGE_MESSAGES = 1 << 9
+    MANAGE_CHANNELS = 1 << 10
 
     # ── Управление семьёй ───────────────────────────────────────────────────
-    MANAGE_ROLES = 1 << 11         # Создавать/редактировать роли
+    MANAGE_ROLES = 1 << 11
     KICK_MEMBERS = 1 << 12
     CREATE_INVITES = 1 << 13
-    MANAGE_FAMILY = 1 << 14        # Переименовать, удалить, экспорт
+    MANAGE_FAMILY = 1 << 14
     VIEW_AUDIT_LOG = 1 << 15
 
     # ── Спец-функции ────────────────────────────────────────────────────────
-    ACCESS_18PLUS = 1 << 16        # Право видеть 18+ контент
+    ACCESS_18PLUS = 1 << 16
     MANAGE_GALLERY = 1 << 17
     MANAGE_CALENDAR = 1 << 18
     MANAGE_BUDGET = 1 << 19
+    MANAGE_NOTES = 1 << 20
+    MANAGE_REMINDERS = 1 << 21
+    MANAGE_TREE = 1 << 22
 
-    # Шунтирующий бит — даёт все права (включая будущие).
-    # Намеренно держим бит в пределах 32-х, чтобы значение спокойно влезало
-    # в JS Number без потери точности (BigInt не нужен).
     ADMINISTRATOR = 1 << 31
 
 
@@ -97,6 +97,9 @@ PERM_GROUPS: list[tuple[str, list[tuple[Perm, str, str]]]] = [
             (Perm.MANAGE_GALLERY, "Управление галереей", "Удалять чужие фото и видео."),
             (Perm.MANAGE_CALENDAR, "Управление календарём", "Редактировать чужие события."),
             (Perm.MANAGE_BUDGET, "Управление бюджетом", "Удалять чужие траты."),
+            (Perm.MANAGE_NOTES, "Управление заметками", "Редактировать и удалять чужие заметки."),
+            (Perm.MANAGE_REMINDERS, "Управление напоминаниями", "Редактировать и удалять чужие напоминания."),
+            (Perm.MANAGE_TREE, "Управление древом", "Редактировать и удалять семейное древо."),
         ],
     ),
     (
@@ -208,7 +211,7 @@ PRESET_DEFS: list[dict] = [
         "slug": "everyone",
         "name": "@everyone",
         "color": "#a1a1aa",
-        "priority": 100,  # самая низкая в стеке
+        "priority": 100,
         "permissions": PRESET_EVERYONE_PERMS,
         "is_system": True,
     },
@@ -220,6 +223,19 @@ def has_perm(bits: int, perm: Perm) -> bool:
     if bits & int(Perm.ADMINISTRATOR):
         return True
     return bool(bits & int(perm))
+
+
+# Маска всех объявленных битов прав (включая ADMINISTRATOR). Используется для
+# валидации произвольных целочисленных значений permissions/override — любой бит
+# вне этой маски считается мусором.
+PERM_MASK: int = 0
+for _perm in Perm:
+    PERM_MASK |= int(_perm)
+
+
+def unknown_bits(bits: int) -> int:
+    """Биты, не входящие в известную маску прав. 0 → всё легитимно."""
+    return bits & ~PERM_MASK
 
 
 # Плоская карта { бит → человекочитаемая метка } из PERM_GROUPS.

@@ -146,6 +146,13 @@ async def login_by_pin(
             )
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Неверные данные")
 
+    # Глобальный бан: не пускаем даже при верном PIN. Структурированный 403
+    # (причина + срок) — отдельно от "неверные данные". Ленивое автоснятие
+    # внутри enforce_not_banned.
+    from app.services.bans import enforce_not_banned
+
+    await enforce_not_banned(db, user)
+
     # Успех — сбрасываем счётчики. (TODO 2FA: здесь, если у пользователя включён
     # второй фактор, вход завершать отдельным шагом — см. core/two_factor.py.)
     await login_throttle.reset(db, body.username)

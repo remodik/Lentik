@@ -22,6 +22,8 @@ from .reminder import Reminder, RepeatRule
 from .role import FamilyRole, MemberRole
 from .permission_override import ChannelPermissionOverride, ChatPermissionOverride
 from .audit_log import AuditLogEntry
+from .platform_audit_log import PlatformAuditLogEntry
+from .time_capsule import TimeCapsule, TimeCapsuleEntry
 from .family_moderation_settings import FamilyModerationSettings
 from .login_throttle import LoginThrottle
 from .user import User
@@ -58,6 +60,9 @@ __all__ = [
     "ChannelPermissionOverride",
     "ChatPermissionOverride",
     "AuditLogEntry",
+    "PlatformAuditLogEntry",
+    "TimeCapsule",
+    "TimeCapsuleEntry",
     "FamilyModerationSettings",
     "LoginThrottle",
 ]

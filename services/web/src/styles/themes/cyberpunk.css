@@ -2,6 +2,8 @@
 
 [data-theme="cyberpunk"] {
   --bg-page:              #080b0f;
+  /* Чистый тёмный фон без тёплого wash. */
+  --bg-page-gradient:     none;
   --bg-surface:           rgba(0, 255, 200, 0.05);
   --bg-surface-strong:    rgba(0, 255, 200, 0.10);
   --bg-surface-subtle:    rgba(0, 255, 200, 0.03);
@@ -72,10 +74,16 @@
   --warning-bg-soft:      rgba(255, 255, 0, 0.06);
   --warning-bg:           rgba(255, 255, 0, 0.10);
   --warning-bg-strong:    rgba(255, 255, 0, 0.18);
+  --warning-border:       rgba(255, 255, 0, 0.45);
   --warning-fg:           #ffe600;
+  --warning-fg-bold:      #ffe600;
 
   --success-bg:           rgba(0, 255, 200, 0.18);
+  --success-bg-soft:      rgba(0, 255, 200, 0.16);
+  --success-border:       rgba(0, 255, 200, 0.45);
   --success-fg:           #00ffc8;
+  --success-fg-bold:      #00ffc8;
+  --success-solid:        rgba(0, 255, 200, 0.80);
 
   --info-bg-soft:         rgba(0, 200, 255, 0.10);
   --info-border:          rgba(0, 200, 255, 0.40);

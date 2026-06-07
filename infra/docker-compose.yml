@@ -29,6 +29,8 @@ services:
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       IS_PRODUCTION: ${IS_PRODUCTION:-false}
       STRICT_MIGRATIONS: ${STRICT_MIGRATIONS:-false}
+      # Username аккаунта разработчика (god-mode + админ-панель /admin).
+      DEVELOPER_USERNAME: ${DEVELOPER_USERNAME:-}
       WATCHFILES_FORCE_POLLING: "true"
     ports:
       - "8000:8000"
@@ -60,5 +62,38 @@ services:
     depends_on:
       - api
 
+  # Сайдкар шифрованных бэкапов: pg_dump + загрузки → один AES-256 GPG-архив,
+  # ротация, опционально S3. Восстановление: docker compose run --rm backup restore.sh <archive>
+  backup:
+    build:
+      context: ./backup
+      dockerfile: Dockerfile
+    container_name: lentik_backup
+    restart: unless-stopped
+    environment:
+      PGHOST: db
+      PGUSER: lentik
+      PGDATABASE: lentik
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      # Ключ шифрования бэкапов (обязателен). Генерация: openssl rand -base64 48
+      BACKUP_ENCRYPTION_KEY: ${BACKUP_ENCRYPTION_KEY:?BACKUP_ENCRYPTION_KEY is required}
+      BACKUP_INTERVAL_HOURS: ${BACKUP_INTERVAL_HOURS:-24}
+      BACKUP_RETENTION_DAILY: ${BACKUP_RETENTION_DAILY:-7}
+      BACKUP_RETENTION_WEEKLY: ${BACKUP_RETENTION_WEEKLY:-4}
+      # Опциональный offsite (оставьте пустым, чтобы выключить).
+      BACKUP_S3_BUCKET: ${BACKUP_S3_BUCKET:-}
+      BACKUP_S3_ENDPOINT: ${BACKUP_S3_ENDPOINT:-}
+      AWS_ACCESS_KEY_ID: ${BACKUP_S3_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${BACKUP_S3_SECRET_ACCESS_KEY:-}
+      AWS_DEFAULT_REGION: ${BACKUP_S3_REGION:-}
+    volumes:
+      # Загрузки — только для чтения (бэкап их не меняет).
+      - ../services/cloud/uploads:/data/uploads:ro
+      - lentik_backups:/backups
+    depends_on:
+      db:
+        condition: service_healthy
+
 volumes:
   lentik_pgdata:
+  lentik_backups:

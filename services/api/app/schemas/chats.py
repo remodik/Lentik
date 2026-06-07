@@ -4,7 +4,38 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-EMOJI_PATTERN = r"^(?:[\U0001F300-\U0001FAFF\u2600-\u27BF](?:\uFE0F)?(?:[\U0001F3FB-\U0001F3FF])?)$"
+# Reaction-emoji validation.
+#
+# Goal: accept (essentially) *any* real emoji \u2014 including ZWJ sequences
+# (\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67\u200D\uD83D\uDC66, \uD83E\uDDD1\u200D\uD83D\uDCBB, \u2764\uFE0F\u200D\uD83D\uDD25), country flags (\uD83C\uDDF7\uD83C\uDDFA), keycaps (1\uFE0F\u20E3) and the symbol
+# ranges the old pattern missed (\u2B50 \u23F0 \u25B6\uFE0F \u00A9\uFE0F \u2026) \u2014 while still rejecting arbitrary
+# free text so reactions can't be abused as a side channel.
+#
+# Strategy: a reaction is one emoji "grapheme cluster". We allow only
+# pictographic/symbol codepoints (never ASCII letters, whitespace or general
+# punctuation). ASCII keycap bases (0-9 # *) are accepted *only* when followed
+# by the combining-enclosing-keycap mark, so a bare "5" can't pass.
+_EMOJI_RANGES = (
+    "\U0001F000-\U0001FAFF"   # all modern emoji blocks (+ skin tones, regional indicators)
+    "\u2600-\u27BF"           # misc symbols + dingbats (\u2600 \u2764 \u2705 \u2728 \u2026)
+    "\u2300-\u23FF"           # misc technical (\u231A \u23F0 \u23F3 \u2328 \u2026)
+    "\u2B00-\u2BFF"           # \u2B50 \u2B55 \u2B06 \u2B07 \u2B05 \u2026
+    "\u2190-\u21FF"           # arrows (\u2194 \u21A9 \u21AA \u2026)
+    "\u2934\u2935"            # \u2934 \u2935
+    "\u25A0-\u25FF"           # geometric shapes (\u25B6 \u25C0 \u25FB \u25FC \u2026)
+    "\u2122\u2139"            # \u2122 \u2139
+    "\u00A9\u00AE"            # \u00A9 \u00AE
+    "\u203C\u2049"            # \u203C \u2049
+    "\u3030\u303D\u3297\u3299"  # \u3030 \u303D \u3297 \u3299
+)
+# one base codepoint + optional skin-tone modifier + optional variation selector
+_EMOJI_ATOM = "[" + _EMOJI_RANGES + "][\U0001F3FB-\U0001F3FF]?\uFE0F?"
+_EMOJI_KEYCAP = "[0-9#*]\uFE0F?\u20E3"
+_EMOJI_FLAG = "[\U0001F1E6-\U0001F1FF]{2}"
+_EMOJI_ZWJ_SEQ = _EMOJI_ATOM + "(?:\u200D" + _EMOJI_ATOM + ")*"
+EMOJI_PATTERN = (
+    "^(?:" + _EMOJI_KEYCAP + "|" + _EMOJI_FLAG + "|" + _EMOJI_ZWJ_SEQ + ")$"
+)
 
 
 class ChatCreate(BaseModel):

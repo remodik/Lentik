@@ -233,7 +233,7 @@ function ProfileSection({
             <input
               value={username}
               onChange={(e) => handleUsernameChange(e.target.value)}
-              className={`input-field pr-10 ${usernameTaken ? "!border-red-300" : ""}`}
+              className={`input-field pr-10 ${usernameTaken ? "!border-[color:var(--danger-border)]" : ""}`}
               placeholder="nikita_325"
             />
             {checkingUsername && (
@@ -245,7 +245,7 @@ function ProfileSection({
               username &&
               !usernameTaken &&
               username !== me.username && (
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-green-600 text-sm font-bold">
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[color:var(--success-fg-bold)] text-sm font-bold">
                   ✓
                 </span>
               )}
@@ -253,7 +253,7 @@ function ProfileSection({
 
           {usernameTaken && (
             <div className="mt-2">
-              <p className="text-xs text-red-500 mb-1.5 font-body">
+              <p className="text-xs text-[color:var(--danger-fg-strong)] mb-1.5 font-body">
                 Логин занят. Попробуй:
               </p>
               <div className="flex flex-wrap gap-1.5">
@@ -301,7 +301,7 @@ function ProfileSection({
       </div>
 
       {error && (
-        <p className="text-red-500 text-sm mt-4 font-body animate-fade-in">
+        <p className="text-[color:var(--danger-fg-strong)] text-sm mt-4 font-body animate-fade-in">
           {error}
         </p>
       )}
@@ -324,7 +324,7 @@ function ProfileSection({
         </button>
 
         {saved && (
-          <span className="text-sm text-green-600 font-body animate-fade-in flex items-center gap-1.5">
+          <span className="text-sm text-[color:var(--success-fg-bold)] font-body animate-fade-in flex items-center gap-1.5">
             <Check className="w-4 h-4" strokeWidth={2.5} />
             Сохранено
           </span>
@@ -407,7 +407,7 @@ function SecuritySection() {
       </div>
 
       {error && (
-        <p className="text-red-500 text-sm mt-4 font-body animate-fade-in">
+        <p className="text-[color:var(--danger-fg-strong)] text-sm mt-4 font-body animate-fade-in">
           {error}
         </p>
       )}
@@ -435,7 +435,7 @@ function SecuritySection() {
         </button>
 
         {saved && (
-          <span className="text-sm text-green-600 font-body animate-fade-in flex items-center gap-1.5">
+          <span className="text-sm text-[color:var(--success-fg-bold)] font-body animate-fade-in flex items-center gap-1.5">
             <Check className="w-4 h-4" strokeWidth={2.5} />
             PIN изменён
           </span>

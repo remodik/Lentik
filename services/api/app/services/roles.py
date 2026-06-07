@@ -201,6 +201,16 @@ async def effective_chat_permissions(
 # ─── Проверки прав в HTTP-стиле ────────────────────────────────────────────
 
 
+async def is_developer_membership(db: AsyncSession, membership: Membership) -> bool:
+    """True, если владелец membership — платформенный разработчик (god-mode).
+    Флаг живёт на User; читаем точечно, без загрузки всей записи."""
+    from app.models.user import User
+
+    return bool(
+        await db.scalar(select(User.is_developer).where(User.id == membership.user_id))
+    )
+
+
 async def require_family_perm(
     db: AsyncSession,
     membership: Membership,
@@ -209,8 +219,8 @@ async def require_family_perm(
     """Кидает 403 если у участника нет права в рамках семьи (без override-ов)."""
     from fastapi import HTTPException, status
 
-    # Owner-membership всегда разрешает.
-    if membership.role.value == "owner":
+    # Owner-membership и разработчик всегда разрешают.
+    if membership.role.value == "owner" or await is_developer_membership(db, membership):
         return int(Perm.ADMINISTRATOR)
     bits = await effective_permissions(db, membership.id)
     from app.core.permissions import has_perm as _has
@@ -236,7 +246,7 @@ async def require_channel_perm(
     from fastapi import HTTPException, status
     from app.core.permissions import has_perm as _has
 
-    if membership.role.value == "owner":
+    if membership.role.value == "owner" or await is_developer_membership(db, membership):
         return int(Perm.ADMINISTRATOR)
     bits = await effective_channel_permissions(db, membership.id, channel_id)
     for perm in perms:
@@ -261,7 +271,7 @@ async def require_chat_perm(
     from fastapi import HTTPException, status
     from app.core.permissions import has_perm as _has
 
-    if membership.role.value == "owner":
+    if membership.role.value == "owner" or await is_developer_membership(db, membership):
         return int(Perm.ADMINISTRATOR)
     bits = await effective_chat_permissions(db, membership.id, chat_id)
     for perm in perms:

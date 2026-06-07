@@ -1,7 +1,9 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Loader2, Pencil, Plus, SendHorizontal, Timer } from "lucide-react";
+import { Eye, Hash, Loader2, Pencil, Plus, SendHorizontal, Settings as SettingsIcon, Timer } from "lucide-react";
+import { useContextMenu } from "@/lib/useContextMenu";
+import type { ContextMenuEntry } from "@/components/ContextMenu";
 import {
   createChannel,
   createPost,
@@ -135,6 +137,7 @@ export default function ChannelsView({
   const channelPerms = useChannelPermissions(selectedChannelId ?? null);
   const canPostToChannel = hasBit(channelPerms, PERM.SEND_MESSAGES);
   const { perms: familyPerms } = usePermissions();
+  const { openContextMenu } = useContextMenu();
   const canManageChannels =
     !!familyPerms &&
     (familyPerms.is_owner ||
@@ -460,6 +463,26 @@ export default function ChannelsView({
                       setSelectedChannelId(channel.id);
                     }
                   }}
+                  onContextMenu={(e) => {
+                    const entries: ContextMenuEntry[] = [
+                      { label: "Открыть", icon: Eye, onClick: () => setSelectedChannelId(channel.id) },
+                    ];
+                    if (isOwner) {
+                      entries.push({
+                        label: "Настройки канала",
+                        icon: SettingsIcon,
+                        onClick: () => setChannelSettingsTarget(channel),
+                      });
+                    }
+                    if (familyPerms?.is_developer) {
+                      entries.push({
+                        label: "Копировать ID",
+                        icon: Hash,
+                        onClick: () => void navigator.clipboard?.writeText(channel.id),
+                      });
+                    }
+                    openContextMenu(e, entries);
+                  }}
                   className={`group relative w-full text-left rounded-xl border px-3 py-2.5 transition cursor-pointer ${
                     isOwner ? "pr-9" : ""
                   } ${active ? "shadow-sm" : "hover:translate-y-[-1px]"}`}
@@ -472,7 +495,7 @@ export default function ChannelsView({
                     <p className="text-sm font-semibold text-ink-800 truncate flex-1"># {channel.name}</p>
                     {channel.is_18plus && (
                       <span
-                        className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-bold border border-red-300 bg-red-50 text-red-600"
+                        className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-bold border border-[color:var(--danger-border)] bg-[var(--danger-bg-soft)] text-[color:var(--danger-fg-bold)]"
                         title="Только для 18+"
                       >
                         18+
@@ -480,7 +503,7 @@ export default function ChannelsView({
                     )}
                     {!!channel.slow_mode_seconds && channel.slow_mode_seconds > 0 && (
                       <Timer
-                        className="w-3.5 h-3.5 text-amber-600 shrink-0"
+                        className="w-3.5 h-3.5 text-[color:var(--warning-fg-bold)] shrink-0"
                         strokeWidth={2.4}
                         aria-label="Включён медленный режим"
                       />
@@ -555,7 +578,7 @@ export default function ChannelsView({
                 <span className="truncate"># {selectedChannel.name}</span>
                 {selectedChannel.is_18plus && (
                   <span
-                    className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-bold border border-red-300 bg-red-50 text-red-600"
+                    className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-bold border border-[color:var(--danger-border)] bg-[var(--danger-bg-soft)] text-[color:var(--danger-fg-bold)]"
                     title="Только для 18+"
                   >
                     18+

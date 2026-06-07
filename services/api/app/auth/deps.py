@@ -53,4 +53,19 @@ async def get_current_user(
             detail="Token revoked",
         )
 
+    # Глобальный бан: 403 со структурированным payload (либо ленивое снятие).
+    from app.services.bans import enforce_not_banned
+
+    await enforce_not_banned(db, user)
+
+    return user
+
+
+async def require_developer(user: User = Depends(get_current_user)) -> User:
+    """Гейт для платформенных (админских) роутов: пускает только разработчика."""
+    if not user.is_developer:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Доступ только для разработчика",
+        )
     return user

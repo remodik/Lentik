@@ -36,6 +36,8 @@ class FamilyMemberResponse(BaseModel):
     is_online: bool
     last_seen_at: datetime | None = None
     role: Role
+    is_developer: bool = False
+    is_banned: bool = False
     joined_at: datetime
 
 

@@ -1,10 +1,16 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { House } from "lucide-react";
-import { loginByPin, getMyFamilies } from "@/lib/api";
+import {
+  loginByPin,
+  getMyFamilies,
+  parseBanDetail,
+  formatBanMessage,
+  type ApiError,
+} from "@/lib/api";
 import PinInput from "@/components/PinInput";
 import { PIN_BOXES, emptyPin, isValidPin, joinPin } from "@/lib/pin";
 
@@ -14,6 +20,15 @@ export default function LoginPage() {
   const [pin, setPin] = useState(emptyPin());
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // Если нас сюда привёл force_logout (бан) — сразу показываем подсказку.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("reason") === "banned") {
+      setError("Ваш аккаунт заблокирован. Войдите для подробностей.");
+    }
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -33,7 +48,12 @@ export default function LoginPage() {
         router.push("/app");
       }
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Неверные данные");
+      const ban = parseBanDetail((err as ApiError)?.detail);
+      if (ban) {
+        setError(formatBanMessage(ban));
+      } else {
+        setError(err instanceof Error ? err.message : "Неверные данные");
+      }
       setPin(emptyPin());
     } finally {
       setLoading(false);
@@ -96,7 +116,7 @@ export default function LoginPage() {
             </div>
 
             {error && (
-              <p className="text-red-500 text-sm text-center animate-fade-in font-body">
+              <p className="text-[color:var(--danger-fg-strong)] text-sm text-center animate-fade-in font-body">
                 {error}
               </p>
             )}

@@ -245,7 +245,7 @@ export default function ChatSettingsModal({
           </div>
 
           {error && (
-            <p className="text-sm text-red-500 font-body" data-testid="chat-settings-error">
+            <p className="text-sm text-[color:var(--danger-fg-strong)] font-body" data-testid="chat-settings-error">
               {error}
             </p>
           )}

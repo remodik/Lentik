@@ -249,7 +249,7 @@ function OverridesPanel({
   }
   if (error) {
     return (
-      <div className="rounded-xl border border-red-200 bg-red-50/60 px-4 py-3 text-sm text-red-700">
+      <div className="rounded-xl border border-[color:var(--danger-border-faint)] bg-[var(--danger-bg-soft)] px-4 py-3 text-sm text-[color:var(--danger-fg-bold)]">
         {error}
       </div>
     );
@@ -433,8 +433,8 @@ function OverridesPanel({
                 </p>
                 <p className="text-[11px] text-ink-400 font-body">
                   Три состояния: <b className="text-ink-500">наследовать</b> →{" "}
-                  <b className="text-emerald-600">разрешить</b> →{" "}
-                  <b className="text-red-600">запретить</b>
+                  <b className="text-[color:var(--success-fg-bold)]">разрешить</b> →{" "}
+                  <b className="text-[color:var(--danger-fg-bold)]">запретить</b>
                 </p>
               </div>
               {canManage && (
@@ -510,7 +510,7 @@ function TriToggle({
         disabled={disabled || state === "deny"}
         onClick={() => onSet("deny")}
         className={`w-7 h-7 rounded-full grid place-items-center transition ${
-          state === "deny" ? "bg-red-500 text-white" : "text-ink-400 hover:text-red-600"
+          state === "deny" ? "bg-[var(--danger-solid)] text-white" : "text-ink-400 hover:text-[color:var(--danger-fg-bold)]"
         }`}
         data-tooltip="Запретить"
         aria-label="Запретить"
@@ -534,7 +534,7 @@ function TriToggle({
         disabled={disabled || state === "allow"}
         onClick={() => onSet("allow")}
         className={`w-7 h-7 rounded-full grid place-items-center transition ${
-          state === "allow" ? "bg-emerald-500 text-white" : "text-ink-400 hover:text-emerald-600"
+          state === "allow" ? "bg-[var(--success-solid)] text-white" : "text-ink-400 hover:text-[color:var(--success-fg-bold)]"
         }`}
         data-tooltip="Разрешить"
         aria-label="Разрешить"

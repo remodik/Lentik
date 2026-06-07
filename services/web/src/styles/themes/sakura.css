@@ -2,6 +2,10 @@
 
 [data-theme="sakura"] {
   --bg-page:              #fff0f5;
+  /* Мягкий розовый wash — тёплый дефолтный на светлой теме читался как белёсый. */
+  --bg-page-gradient:
+      radial-gradient(ellipse at 16% 52%, rgb(var(--warm-200) / 0.22) 0%, transparent 56%),
+      radial-gradient(ellipse at 86% 16%, rgb(var(--warm-100) / 0.30) 0%, transparent 52%);
   --bg-surface:           rgba(255, 220, 235, 0.55);
   --bg-surface-strong:    rgba(255, 235, 245, 0.82);
   --bg-surface-subtle:    rgba(255, 220, 235, 0.38);
@@ -67,10 +71,16 @@
   --warning-bg-soft:      rgba(255, 235, 220, 0.70);
   --warning-bg:           rgba(245, 170, 60, 0.14);
   --warning-bg-strong:    rgba(245, 170, 60, 0.22);
+  --warning-border:       rgba(245, 170, 60, 0.45);
   --warning-fg:           #f5a23c;
+  --warning-fg-bold:      #b8741a;  /* тёмный янтарь — контраст на светло-розовом */
 
   --success-bg:           rgba(120, 220, 160, 0.45);
+  --success-bg-soft:      rgba(120, 220, 160, 0.18);
+  --success-border:       rgba(84, 201, 138, 0.45);
   --success-fg:           #54c98a;
+  --success-fg-bold:      #2e9c63;  /* тёмно-зелёный — контраст на светло-розовом */
+  --success-solid:        rgba(84, 201, 138, 0.90);
 
   --info-bg-soft:         rgba(220, 230, 255, 0.72);
   --info-border:          rgba(160, 180, 250, 0.55);

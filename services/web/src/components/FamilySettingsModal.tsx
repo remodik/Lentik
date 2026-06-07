@@ -4,15 +4,20 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   AlertTriangle,
+  CalendarDays,
+  Check,
   ChevronRight,
+  Copy,
   Crown,
   Download,
   Hash,
   History,
   Info,
+  Link2,
   LogOut,
   MessageCircle,
   Pencil,
+  RefreshCw,
   Shield,
   Sparkles,
   Trash2,
@@ -25,11 +30,15 @@ import {
   leaveFamily,
   renameFamily,
   transferOwnership,
+  getIntegrations,
+  enableCalendarFeed,
+  disableCalendarFeed,
   type Channel,
   type Chat,
   type Family,
   type Me,
 } from "@/lib/api";
+import { apiUrl } from "@/lib/api-base";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { useUserMode } from "@/lib/useUserMode";
 import { hasBit, PERM, usePermissions } from "@/lib/usePermissions";
@@ -71,7 +80,7 @@ const TABS: TabDef[] = [
   { id: "chats", label: "Чаты", icon: MessageCircle, category: "configure", ownerOnly: true, advancedOnly: true },
   { id: "moderation", label: "Модерация", icon: Wand2, category: "configure", manageOnly: true, advancedOnly: true },
   { id: "audit", label: "Журнал аудита", icon: History, category: "configure", ownerOnly: false, advancedOnly: true },
-  { id: "integrations", label: "Интеграции", icon: Sparkles, category: "configure", comingSoon: true, ownerOnly: true, advancedOnly: true },
+  { id: "integrations", label: "Интеграции", icon: Link2, category: "configure", ownerOnly: true, advancedOnly: true },
   { id: "danger", label: "Опасная зона", icon: AlertTriangle, category: "danger" },
 ];
 
@@ -238,10 +247,10 @@ export default function FamilySettingsModal({
                   className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-body border transition ${
                     isActive
                       ? isDanger
-                        ? "bg-red-500 text-white border-red-500"
+                        ? "bg-[var(--danger-solid)] text-white border-[color:var(--danger-solid)]"
                         : "bg-ink-900 text-[color:var(--text-on-dark)] border-ink-900"
                       : isDanger
-                        ? "text-red-600 border-red-200 bg-red-50/40"
+                        ? "text-[color:var(--danger-fg-bold)] border-[color:var(--danger-border-faint)] bg-[var(--danger-bg-soft)]"
                         : "text-ink-600 border-[color:var(--border-glass)] bg-[color:var(--bg-surface)]"
                   }`}
                 >
@@ -288,10 +297,10 @@ export default function FamilySettingsModal({
                         className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-body text-left transition ${
                           isActive
                             ? isDanger
-                              ? "bg-red-50 text-red-700"
+                              ? "bg-[var(--danger-bg-soft)] text-[color:var(--danger-fg-bold)]"
                               : "bg-[color:var(--bg-elevated)] text-ink-900 shadow-sm"
                             : isDanger
-                              ? "text-red-600 hover:bg-red-50/60"
+                              ? "text-[color:var(--danger-fg-bold)] hover:bg-[var(--danger-bg-soft)]"
                               : "text-ink-600 hover:bg-white/55 hover:text-ink-900"
                         }`}
                       >
@@ -401,13 +410,16 @@ export default function FamilySettingsModal({
               <ModerationEditor familyId={family.id} canManage={canManageFamily} />
             )}
 
+            {active === "integrations" && <IntegrationsTab familyId={family.id} />}
+
             {active !== "overview" &&
               active !== "danger" &&
               active !== "roles" &&
               active !== "channels" &&
               active !== "chats" &&
               active !== "audit" &&
-              active !== "moderation" && <ComingSoonTab tabId={active} />}
+              active !== "moderation" &&
+              active !== "integrations" && <ComingSoonTab tabId={active} />}
           </div>
         </div>
       </div>
@@ -498,7 +510,7 @@ function OverviewTab({
                 }
               }}
             />
-            {error && <p className="text-sm text-red-500 font-body">{error}</p>}
+            {error && <p className="text-sm text-[color:var(--danger-fg-strong)] font-body">{error}</p>}
             <div className="flex gap-2 justify-end">
               <button
                 type="button"
@@ -650,6 +662,151 @@ function ComingSoonTab({ tabId }: { tabId: TabId }) {
           </ul>
         </div>
       </div>
+    </div>
+  );
+}
+
+function IntegrationsTab({ familyId }: { familyId: string }) {
+  const [token, setToken] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    getIntegrations(familyId)
+      .then((r) => alive && setToken(r.calendar_feed_token))
+      .catch(() => {})
+      .finally(() => alive && setLoading(false));
+    return () => {
+      alive = false;
+    };
+  }, [familyId]);
+
+  const url = token ? apiUrl(`/calendar-feed/${token}.ics`) : null;
+
+  async function handleEnable() {
+    setBusy(true);
+    try {
+      const r = await enableCalendarFeed(familyId);
+      setToken(r.calendar_feed_token);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDisable() {
+    setBusy(true);
+    try {
+      await disableCalendarFeed(familyId);
+      setToken(null);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleCopy() {
+    if (!url) return;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <Section
+        title="Календарь (iCal-подписка)"
+        description="Подписка только для чтения: события семьи появятся в Google/Apple Calendar и будут обновляться автоматически."
+      >
+        <div className="rounded-2xl border border-[color:var(--border-glass)] bg-[color:var(--bg-surface-subtle)] p-5">
+          <div className="flex items-start gap-3">
+            <span className="w-10 h-10 rounded-2xl bg-warm-100 text-warm-700 grid place-items-center shrink-0">
+              <CalendarDays className="w-5 h-5" strokeWidth={2.1} />
+            </span>
+            <div className="min-w-0 flex-1">
+              {loading ? (
+                <p className="text-sm text-ink-400 font-body">Загрузка…</p>
+              ) : url ? (
+                <>
+                  <p className="text-sm text-ink-700 font-body mb-2">
+                    Скопируйте ссылку и добавьте её как подписку календаря
+                    («Другие календари → По URL»).
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <input
+                      readOnly
+                      value={url}
+                      onFocus={(e) => e.currentTarget.select()}
+                      className="flex-1 min-w-0 rounded-xl border border-[color:var(--border-glass)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-ink-600 font-mono"
+                    />
+                    <button
+                      type="button"
+                      className="ui-btn ui-btn-subtle inline-flex items-center gap-1.5 shrink-0"
+                      onClick={() => void handleCopy()}
+                    >
+                      {copied ? (
+                        <>
+                          <Check className="w-3.5 h-3.5" strokeWidth={2.4} />
+                          Скопировано
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3.5 h-3.5" strokeWidth={2.2} />
+                          Копировать
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2 mt-3">
+                    <button
+                      type="button"
+                      className="ui-btn ui-btn-subtle inline-flex items-center gap-1.5"
+                      onClick={() => void handleEnable()}
+                      disabled={busy}
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${busy ? "animate-spin" : ""}`} strokeWidth={2.2} />
+                      Перегенерировать
+                    </button>
+                    <button
+                      type="button"
+                      className="ui-btn ui-btn-danger inline-flex items-center gap-1.5"
+                      onClick={() => void handleDisable()}
+                      disabled={busy}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" strokeWidth={2.2} />
+                      Отключить
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-ink-400 font-body mt-3 leading-relaxed">
+                    Ссылка содержит секретный токен — не публикуйте её. Перегенерация
+                    мгновенно отключает старую подписку.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm text-ink-700 font-body mb-3">
+                    Подписка выключена. Сгенерируйте секретную ссылку, чтобы
+                    подписаться на семейный календарь во внешнем приложении.
+                  </p>
+                  <button
+                    type="button"
+                    className="ui-btn ui-btn-primary inline-flex items-center gap-1.5"
+                    onClick={() => void handleEnable()}
+                    disabled={busy}
+                  >
+                    <Link2 className="w-3.5 h-3.5" strokeWidth={2.2} />
+                    {busy ? "Создаём…" : "Сгенерировать ссылку"}
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      </Section>
     </div>
   );
 }
@@ -881,7 +1038,7 @@ function DangerTab({
           >
             <div className="flex items-start gap-3">
               <span
-                className="w-10 h-10 rounded-2xl grid place-items-center shrink-0 bg-red-50 text-red-600 border border-red-200"
+                className="w-10 h-10 rounded-2xl grid place-items-center shrink-0 bg-[var(--danger-bg-soft)] text-[color:var(--danger-fg-bold)] border border-[color:var(--danger-border-faint)]"
                 aria-hidden
               >
                 <AlertTriangle className="w-5 h-5" strokeWidth={2.1} />
@@ -918,7 +1075,7 @@ function DangerTab({
               }}
             />
             {deleteError && (
-              <p className="text-sm text-red-500 font-body mt-2">{deleteError}</p>
+              <p className="text-sm text-[color:var(--danger-fg-strong)] font-body mt-2">{deleteError}</p>
             )}
 
             <div className="flex justify-end gap-2 mt-6">
@@ -1008,12 +1165,12 @@ function DangerCard({
     <div
       className={`rounded-2xl border px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-3 ${
         danger
-          ? "border-red-200 bg-red-50/45"
+          ? "border-[color:var(--danger-border-faint)] bg-[var(--danger-bg-soft)]"
           : "border-[color:var(--border-glass)] bg-[color:var(--bg-surface-subtle)]"
       }`}
     >
       <div className="flex-1 min-w-0">
-        <p className={`text-sm font-semibold ${danger ? "text-red-700" : "text-ink-900"}`}>
+        <p className={`text-sm font-semibold ${danger ? "text-[color:var(--danger-fg-bold)]" : "text-ink-900"}`}>
           {title}
         </p>
         <p className="text-xs text-ink-500 font-body mt-1 leading-relaxed">

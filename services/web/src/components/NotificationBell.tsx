@@ -5,6 +5,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   Bell,
   CalendarDays,
+  Hourglass,
   Info,
   MessageCircle,
   UserMinus,
@@ -27,6 +28,7 @@ const ICONS: Record<Notification["type"], LucideIcon> = {
   member_joined: UserPlus,
   member_kicked: UserMinus,
   calendar_event: CalendarDays,
+  capsule_opened: Hourglass,
   info: Info,
 };
 
@@ -35,6 +37,7 @@ const ICON_COLORS: Record<Notification["type"], string> = {
   member_joined: "rgba(74,222,128,0.18)",
   member_kicked: "rgba(248,113,113,0.18)",
   calendar_event: "rgba(96,165,250,0.18)",
+  capsule_opened: "rgba(196,149,106,0.18)",
   info: "rgba(148,163,184,0.14)",
 };
 
@@ -43,6 +46,7 @@ const ACCENT: Record<Notification["type"], string> = {
   member_joined: "#4ade80",
   member_kicked: "#f87171",
   calendar_event: "#60a5fa",
+  capsule_opened: "#c4956a",
   info: "#94a3b8",
 };
 

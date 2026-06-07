@@ -136,7 +136,7 @@ export default function RegisterPage() {
                   value={username}
                   onChange={(e) => handleUsernameChange(e.target.value)}
                   placeholder="nikita_325"
-                  className={`glass-input pr-9 ${nameTaken ? "!border-red-300 focus:!border-red-400" : ""}`}
+                  className={`glass-input pr-9 ${nameTaken ? "!border-[color:var(--danger-border)] focus:!border-[color:var(--danger-fg)]" : ""}`}
                 />
                 {checking && (
                   <div className="absolute right-3 top-1/2 -translate-y-1/2">
@@ -144,7 +144,7 @@ export default function RegisterPage() {
                   </div>
                 )}
                 {!checking && username && !nameTaken && (
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2 text-green-500">
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 text-[color:var(--success-fg-bold)]">
                     <Check className="w-4 h-4" strokeWidth={2.8} />
                   </div>
                 )}
@@ -155,7 +155,7 @@ export default function RegisterPage() {
 
               {nameTaken && (
                 <div className="mt-2">
-                  <p className="text-sm text-red-500 mb-2 font-body">
+                  <p className="text-sm text-[color:var(--danger-fg-strong)] mb-2 font-body">
                     Логин занят. Попробуй:
                   </p>
                   <div className="flex flex-wrap gap-2">
@@ -194,7 +194,7 @@ export default function RegisterPage() {
             </div>
 
             {error && (
-              <p className="text-red-500 text-sm text-center animate-fade-in font-body">
+              <p className="text-[color:var(--danger-fg-strong)] text-sm text-center animate-fade-in font-body">
                 {error}
               </p>
             )}

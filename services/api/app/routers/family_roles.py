@@ -163,11 +163,13 @@ async def get_my_effective_permissions(
     )
 
     membership = await require_membership(family_id, user, db)
+    is_developer = bool(user.is_developer)
     is_owner = membership.role.value == "owner"
     base = await effective_permissions(db, membership.id)
 
-    if is_owner:
-        # Шорткат — owner получает все биты.
+    # Шорткат — owner и разработчик (god-mode) получают все биты.
+    god_mode = is_owner or is_developer
+    if god_mode:
         base = base | int(Perm.ADMINISTRATOR)
 
     chat_ids = (
@@ -184,12 +186,12 @@ async def get_my_effective_permissions(
     chat_perms: dict[str, int] = {}
     channel_perms: dict[str, int] = {}
     for cid in chat_ids:
-        if is_owner:
+        if god_mode:
             chat_perms[str(cid)] = base
         else:
             chat_perms[str(cid)] = await effective_chat_permissions(db, membership.id, cid)
     for cid in channel_ids:
-        if is_owner:
+        if god_mode:
             channel_perms[str(cid)] = base
         else:
             channel_perms[str(cid)] = await effective_channel_permissions(db, membership.id, cid)
@@ -197,6 +199,7 @@ async def get_my_effective_permissions(
     return {
         "base": base,
         "is_owner": is_owner,
+        "is_developer": is_developer,
         "is_administrator": bool(base & int(Perm.ADMINISTRATOR)),
         "chats": chat_perms,
         "channels": channel_perms,

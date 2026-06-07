@@ -774,7 +774,7 @@ export default function FamilyTreeView({ familyId, family, meId }: Props) {
 
       <div className="tree-body">
         {error && (
-          <div className="rounded-2xl border border-red-200 bg-red-50/70 p-3 text-sm text-red-600 font-body mb-3">
+          <div className="rounded-2xl border border-[color:var(--danger-border-faint)] bg-[var(--danger-bg-soft)] p-3 text-sm text-[color:var(--danger-fg-bold)] font-body mb-3">
             {error}
           </div>
         )}
@@ -1224,7 +1224,7 @@ function RelationFormModal({
             />
           </label>
 
-          {warn && <p className="text-xs text-red-500 font-body">{warn}</p>}
+          {warn && <p className="text-xs text-[color:var(--danger-fg-strong)] font-body">{warn}</p>}
 
           <div className="flex gap-2 justify-end pt-1">
             <button
@@ -1336,7 +1336,7 @@ function PersonDetailsCard({
                     type="button"
                     onClick={() => onDeleteRelation(relation.id)}
                     disabled={busy}
-                    className="w-7 h-7 rounded-lg grid place-items-center text-ink-400 hover:text-red-500 hover:bg-white/60 transition"
+                    className="w-7 h-7 rounded-lg grid place-items-center text-ink-400 hover:text-[color:var(--danger-fg-strong)] hover:bg-[var(--bg-surface)] transition"
                     title="Удалить связь"
                     aria-label="Удалить связь"
                   >

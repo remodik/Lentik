@@ -8,6 +8,7 @@ export type NotificationType =
   | "member_joined"
   | "member_kicked"
   | "calendar_event"
+  | "capsule_opened"
   | "info";
 
 export type Notification = {
@@ -193,6 +194,17 @@ function buildNotification(
     };
   }
 
+  if (t === "capsule_opened") {
+    return {
+      id: mkId(),
+      type: "capsule_opened",
+      title: "Капсула времени открылась!",
+      body: `«${str(d.title, "Капсула")}» теперь доступна для всей семьи`,
+      timestamp: now,
+      read: false,
+    };
+  }
+
   return null;
 }
 
@@ -298,6 +310,19 @@ export function useNotifications(
         const d = safeJsonParse(e.data);
         if (!d) return;
 
+        // Принудительный выход (например, после бана): чистим локальное
+        // состояние и уводим на страницу логина. Жёсткий редирект сносит все
+        // соединения и предотвращает reconnect-петлю.
+        if (str(d.type) === "force_logout") {
+          alive = false;
+          try { ws.close(); } catch {}
+          try { localStorage.removeItem("familyId"); } catch {}
+          if (typeof window !== "undefined") {
+            window.location.href = "/login?reason=banned";
+          }
+          return;
+        }
+
         const presenceUpdate = asPresenceUpdate(d);
         if (presenceUpdate) {
           onPresenceUpdateRef.current?.(presenceUpdate);
@@ -364,6 +389,7 @@ export function useNotifications(
       member_joined: 0,
       member_kicked: 0,
       calendar_event: 0,
+      capsule_opened: 0,
       info: 0,
     };
 

@@ -18,6 +18,7 @@ class MeResponse(BaseModel):
     last_seen_at: datetime | None
     created_at: datetime
     ui_mode: str = "simple"
+    is_developer: bool = False
 
 
 class UpdateProfileRequest(BaseModel):

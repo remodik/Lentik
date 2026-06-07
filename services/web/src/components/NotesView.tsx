@@ -62,7 +62,7 @@ function NoteCard({
             <button
               type="button"
               onClick={() => onDelete(note.id)}
-              className="w-7 h-7 rounded-lg grid place-items-center text-ink-400 hover:text-red-500 hover:bg-red-50 transition"
+              className="w-7 h-7 rounded-lg grid place-items-center text-ink-400 hover:text-[color:var(--danger-fg-strong)] hover:bg-[var(--danger-bg-soft)] transition"
               title="Удалить"
               data-testid={`note-delete-${note.id}`}
             >
@@ -343,7 +343,7 @@ export default function NotesView({
               </div>
 
               {formError && (
-                <p className="text-sm text-red-500 font-body">{formError}</p>
+                <p className="text-sm text-[color:var(--danger-fg-strong)] font-body">{formError}</p>
               )}
 
               <div className="flex gap-2 justify-end pt-1">

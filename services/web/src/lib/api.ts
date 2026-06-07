@@ -1,6 +1,8 @@
 import { apiFetch, normalizeApiPayload } from "@/lib/api-base";
 
-type ApiError = Error & { status?: number };
+// `detail` хранит сырой payload из поля detail ответа (может быть объектом —
+// например, структурированный бан {code, reason, expires_at}).
+export type ApiError = Error & { status?: number; detail?: unknown };
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await apiFetch(path, {
@@ -12,10 +14,17 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     const err = await res.json().catch(() => ({ detail: "Ошибка сервера" }));
     const apiError: ApiError = new Error("Ошибка сервера");
     apiError.status = res.status;
+    apiError.detail = err.detail;
 
     if (Array.isArray(err.detail)) {
       const msg = err.detail.map((e: { msg?: string }) => e.msg ?? "Ошибка").join(", ");
       apiError.message = msg;
+      throw apiError;
+    }
+    if (err.detail && typeof err.detail === "object") {
+      // Структурированный detail (объект) — message оставляем человекочитаемым,
+      // вызывающий код разбирает err.detail сам.
+      apiError.message = (err.detail as { reason?: string }).reason ?? "Ошибка сервера";
       throw apiError;
     }
     apiError.message = err.detail ?? "Ошибка сервера";
@@ -67,6 +76,7 @@ export type Me = {
   last_seen_at?: string | null;
   created_at: string;
   ui_mode?: UiMode;
+  is_developer?: boolean;
 };
 
 export function updateUiMode(mode: UiMode) {
@@ -288,10 +298,45 @@ export function deleteChatMemberOverride(
 export type MyEffectivePermissions = {
   base: number;
   is_owner: boolean;
+  is_developer?: boolean;
   is_administrator: boolean;
   chats: Record<string, number>;
   channels: Record<string, number>;
 };
+
+// ─── Бан: тип структурированного detail из 403 ──────────────────────────────
+
+export type BanDetail = {
+  code: "account_banned";
+  reason: string | null;
+  expires_at: string | null;
+};
+
+export function parseBanDetail(detail: unknown): BanDetail | null {
+  if (
+    detail &&
+    typeof detail === "object" &&
+    (detail as { code?: string }).code === "account_banned"
+  ) {
+    return detail as BanDetail;
+  }
+  return null;
+}
+
+/** Человекочитаемое сообщение о бане для UI. */
+export function formatBanMessage(ban: BanDetail): string {
+  const reason = ban.reason?.trim() || "Причина не указана";
+  let term: string;
+  if (ban.expires_at) {
+    const d = new Date(ban.expires_at);
+    term = Number.isNaN(d.getTime())
+      ? "до указанного срока"
+      : `до ${d.toLocaleString("ru-RU")}`;
+  } else {
+    term = "навсегда";
+  }
+  return `Аккаунт заблокирован (${term}). Причина: ${reason}`;
+}
 
 export function getMyEffectivePermissions(familyId: string) {
   return request<MyEffectivePermissions>(
@@ -368,6 +413,8 @@ export type FamilyMember = {
   is_online?: boolean;
   last_seen_at?: string | null;
   role: "owner" | "member";
+  is_developer?: boolean;
+  is_banned?: boolean;
   joined_at: string;
 };
 
@@ -1085,5 +1132,218 @@ export function sendVoiceMessage(familyId: string, chatId: string, blob: Blob) {
   return request<Message>(`/families/${familyId}/chats/${chatId}/messages/voice`, {
     method: "POST",
     body: form,
+  });
+}
+
+// ─── Админ-панель (только для разработчика) ─────────────────────────────────
+
+export type AdminUserRow = {
+  id: string;
+  username: string;
+  display_name: string;
+  is_developer: boolean;
+  is_banned: boolean;
+  ban_reason: string | null;
+  ban_expires_at: string | null;
+  is_online: boolean;
+  family_count: number;
+  created_at: string;
+};
+
+export type AdminFamilyRow = {
+  id: string;
+  name: string;
+  member_count: number;
+  created_at: string;
+};
+
+export type AdminStats = {
+  users: number;
+  families: number;
+  messages: number;
+  banned_users: number;
+  uploads_bytes: number;
+};
+
+export type AdminAuditRow = {
+  id: string;
+  actor_id: string | null;
+  actor_username: string | null;
+  actor_display_name: string | null;
+  action: string;
+  target_type: string | null;
+  target_id: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+};
+
+export type AdminUserFamily = {
+  family_id: string;
+  family_name: string;
+  role: string;
+};
+
+export type AdminUserDetail = AdminUserRow & {
+  last_seen_at: string | null;
+  banned_at: string | null;
+  families: AdminUserFamily[];
+};
+
+export type AdminFamilyMember = {
+  user_id: string;
+  username: string;
+  display_name: string;
+  role: string;
+  is_online: boolean;
+  is_banned: boolean;
+  is_developer: boolean;
+};
+
+export type AdminFamilyDetail = AdminFamilyRow & {
+  members: AdminFamilyMember[];
+};
+
+export function adminGetUsers(opts?: { q?: string; limit?: number; offset?: number }) {
+  const params = new URLSearchParams();
+  if (opts?.q) params.set("q", opts.q);
+  if (opts?.limit) params.set("limit", String(opts.limit));
+  if (opts?.offset) params.set("offset", String(opts.offset));
+  const qs = params.toString();
+  return request<AdminUserRow[]>(`/admin/users${qs ? `?${qs}` : ""}`);
+}
+
+export function adminGetUser(userId: string) {
+  return request<AdminUserDetail>(`/admin/users/${userId}`);
+}
+
+export function adminGetFamilies(opts?: { q?: string; limit?: number; offset?: number }) {
+  const params = new URLSearchParams();
+  if (opts?.q) params.set("q", opts.q);
+  if (opts?.limit) params.set("limit", String(opts.limit));
+  if (opts?.offset) params.set("offset", String(opts.offset));
+  const qs = params.toString();
+  return request<AdminFamilyRow[]>(`/admin/families${qs ? `?${qs}` : ""}`);
+}
+
+export function adminGetFamily(familyId: string) {
+  return request<AdminFamilyDetail>(`/admin/families/${familyId}`);
+}
+
+export function adminGetStats() {
+  return request<AdminStats>("/admin/stats");
+}
+
+export function adminGetAudit(opts?: { limit?: number; offset?: number }) {
+  const params = new URLSearchParams();
+  if (opts?.limit) params.set("limit", String(opts.limit));
+  if (opts?.offset) params.set("offset", String(opts.offset));
+  const qs = params.toString();
+  return request<AdminAuditRow[]>(`/admin/audit${qs ? `?${qs}` : ""}`);
+}
+
+export function adminBanUser(
+  userId: string,
+  data: { reason: string; expires_at?: string | null },
+) {
+  return request<void>(`/admin/users/${userId}/ban`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function adminUnbanUser(userId: string) {
+  return request<void>(`/admin/users/${userId}/unban`, { method: "POST" });
+}
+
+// ─── Капсулы времени ────────────────────────────────────────────────────────
+
+export type TimeCapsule = {
+  id: string;
+  title: string;
+  unlock_at: string;
+  opened: boolean;
+  created_by: string | null;
+  created_at: string;
+  total_entries: number;
+  contributors: number;
+  your_entries: number;
+};
+
+export type TimeCapsuleEntry = {
+  id: string;
+  author_id: string | null;
+  author_display_name: string | null;
+  text: string;
+  attachments: MessageAttachment[];
+  created_at: string;
+};
+
+export type TimeCapsuleDetail = TimeCapsule & {
+  entries: TimeCapsuleEntry[];
+};
+
+export function getCapsules(familyId: string) {
+  return request<TimeCapsule[]>(`/families/${familyId}/capsules`);
+}
+
+export function getCapsule(familyId: string, capsuleId: string) {
+  return request<TimeCapsuleDetail>(`/families/${familyId}/capsules/${capsuleId}`);
+}
+
+export function createCapsule(
+  familyId: string,
+  data: { title: string; unlock_at: string },
+) {
+  return request<TimeCapsule>(`/families/${familyId}/capsules`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function addCapsuleEntry(
+  familyId: string,
+  capsuleId: string,
+  data: { text?: string; files?: File[] },
+) {
+  const form = new FormData();
+  if (data.text && data.text.trim()) form.append("text", data.text.trim());
+  (data.files ?? []).forEach((f) => form.append("files", f));
+  return request<{ id: string }>(
+    `/families/${familyId}/capsules/${capsuleId}/entries`,
+    { method: "POST", body: form },
+  );
+}
+
+export function deleteCapsuleEntry(familyId: string, capsuleId: string, entryId: string) {
+  return request<void>(
+    `/families/${familyId}/capsules/${capsuleId}/entries/${entryId}`,
+    { method: "DELETE" },
+  );
+}
+
+export function deleteCapsule(familyId: string, capsuleId: string) {
+  return request<void>(`/families/${familyId}/capsules/${capsuleId}`, {
+    method: "DELETE",
+  });
+}
+
+// ─── Интеграции (iCal) ───────────────────────────────────────────────────────
+
+export function getIntegrations(familyId: string) {
+  return request<{ calendar_feed_token: string | null }>(
+    `/families/${familyId}/integrations`,
+  );
+}
+
+export function enableCalendarFeed(familyId: string) {
+  return request<{ calendar_feed_token: string }>(
+    `/families/${familyId}/integrations/calendar-feed`,
+    { method: "POST" },
+  );
+}
+
+export function disableCalendarFeed(familyId: string) {
+  return request<void>(`/families/${familyId}/integrations/calendar-feed`, {
+    method: "DELETE",
   });
 }

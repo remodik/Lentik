@@ -332,7 +332,7 @@ function PermChips({ added, removed }: { added?: string[]; removed?: string[] })
       {(added ?? []).map((p) => (
         <span
           key={`a-${p}`}
-          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[10.5px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200"
+          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[10.5px] font-medium bg-[var(--success-bg-soft)] text-[color:var(--success-fg-bold)] border border-[color:var(--success-border)]"
         >
           + {p}
         </span>
@@ -340,7 +340,7 @@ function PermChips({ added, removed }: { added?: string[]; removed?: string[] })
       {(removed ?? []).map((p) => (
         <span
           key={`r-${p}`}
-          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[10.5px] font-medium bg-red-50 text-red-600 border border-red-200"
+          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[10.5px] font-medium bg-[var(--danger-bg-soft)] text-[color:var(--danger-fg-bold)] border border-[color:var(--danger-border-faint)]"
         >
           − {p}
         </span>
@@ -579,7 +579,7 @@ export default function AuditLogView({ familyId }: Props) {
       </div>
 
       {error && (
-        <div className="rounded-xl border border-red-200 bg-red-50/60 px-4 py-3 text-sm text-red-700 mb-3">
+        <div className="rounded-xl border border-[color:var(--danger-border-faint)] bg-[var(--danger-bg-soft)] px-4 py-3 text-sm text-[color:var(--danger-fg-bold)] mb-3">
           {error}
         </div>
       )}
@@ -607,7 +607,7 @@ export default function AuditLogView({ familyId }: Props) {
                   const Icon = meta.icon;
                   const toneClass =
                     meta.tone === "danger"
-                      ? "bg-red-50 text-red-600 border-red-200"
+                      ? "bg-[var(--danger-bg-soft)] text-[color:var(--danger-fg-bold)] border-[color:var(--danger-border-faint)]"
                       : meta.tone === "warm"
                         ? "bg-warm-50 text-warm-700 border-warm-200"
                         : "bg-[color:var(--bg-surface-subtle)] text-ink-600 border-[color:var(--border-glass)]";

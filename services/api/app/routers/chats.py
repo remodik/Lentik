@@ -25,6 +25,7 @@ from app.core.jwt import COOKIE_NAME, decode_access_token
 from app.core.ws_tickets import ws_ticket_store
 from app.db.deps import get_db
 from app.services.audit import log_action
+from app.services.bans import is_banned_now
 from app.services.moderation import enforce_message_content, get_settings
 from app.services.roles import (
     effective_chat_permissions,
@@ -1262,6 +1263,12 @@ async def chat_ws(
 
     if token_iat is not None and token_iat + timedelta(seconds=1) < user.password_changed_at:
         await websocket.close(code=4001)
+        return
+
+    # Глобальный бан: закрываем и ticket-путь (revocation по password_changed_at
+    # не срабатывает при token_iat is None).
+    if is_banned_now(user):
+        await websocket.close(code=4003)
         return
 
     m = await db.scalar(

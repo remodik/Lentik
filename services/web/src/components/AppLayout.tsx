@@ -6,6 +6,7 @@ import {
   AlarmClock,
   CalendarDays,
   ChevronDown,
+  Hourglass,
   House,
   HousePlus,
   Images,
@@ -36,7 +37,7 @@ import {
   type PresenceUpdateEvent,
 } from "@/components/NotificationSystem";
 
-export type AppSection = "chat" | "gallery" | "files" | "calendar" | "members" | "channels" | "notes" | "budget" | "reminders" | "tree";
+export type AppSection = "chat" | "gallery" | "files" | "calendar" | "members" | "channels" | "notes" | "budget" | "reminders" | "tree" | "time-capsules";
 
 type NavCategory = "chat" | "plans" | "media" | "family";
 
@@ -80,6 +81,7 @@ const NAV_ITEMS: NavItem[] = [
   },
   { id: "budget", icon: Wallet, label: "Бюджет", desc: "Семейные расходы" },
   { id: "reminders", icon: AlarmClock, label: "Напоминания", desc: "Дела и события семьи" },
+  { id: "time-capsules", icon: Hourglass, label: "Капсулы времени", desc: "Послания в будущее" },
   { id: "notes", icon: StickyNote, label: "Заметки", desc: "Личные и семейные заметки" },
   { id: "channels", icon: Rss, label: "Каналы", desc: "Объявления семьи" },
   { id: "members", icon: Users, label: "Участники", desc: "Члены семьи" },
@@ -93,6 +95,7 @@ const SECTION_TO_CATEGORY: Record<AppSection, NavCategory> = {
   budget: "plans",
   notes: "plans",
   reminders: "plans",
+  "time-capsules": "plans",
   gallery: "media",
   files: "media",
   members: "family",
@@ -137,7 +140,7 @@ const SIDEBAR_CATEGORIES: SidebarCategory[] = [
           { id: "notes", label: "Заметки", section: "notes" },
           { id: "budget", label: "Бюджет", section: "budget" },
           { id: "reminders", label: "Напоминания", section: "reminders" },
-          { id: "time-capsules", label: "Капсулы времени", disabled: true, soon: true },
+          { id: "time-capsules", label: "Капсулы времени", section: "time-capsules" },
         ],
       },
     ],
@@ -207,6 +210,7 @@ const TOAST_ICONS: Record<Notification["type"], LucideIcon> = {
   member_joined: UserPlus,
   member_kicked: UserMinus,
   calendar_event: CalendarDays,
+  capsule_opened: Hourglass,
   info: Info,
 };
 

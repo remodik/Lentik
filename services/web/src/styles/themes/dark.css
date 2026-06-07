@@ -2,6 +2,8 @@
 
 [data-theme="dark"] {
   --bg-page:              #1a1410;
+  /* Чистый тёмный фон без тёплого wash (на тёмном он давал мутные пятна). */
+  --bg-page-gradient:     none;
   --bg-surface:           rgba(40, 32, 26, 0.80);
   --bg-surface-strong:    rgba(50, 40, 32, 0.92);
   --bg-surface-subtle:    rgba(40, 32, 26, 0.55);
@@ -60,10 +62,16 @@
   --warning-bg-soft:      rgba(120, 53, 15, 0.45);
   --warning-bg:           rgba(251, 191, 36, 0.10);
   --warning-bg-strong:    rgba(251, 191, 36, 0.18);
+  --warning-border:       rgba(251, 191, 36, 0.40);
   --warning-fg:           #fcd34d;
+  --warning-fg-bold:      #fcd34d;
 
   --success-bg:           rgba(22, 101, 52, 0.45);
+  --success-bg-soft:      rgba(22, 101, 52, 0.35);
+  --success-border:       rgba(74, 222, 128, 0.40);
   --success-fg:           #86efac;
+  --success-fg-bold:      #86efac;
+  --success-solid:        rgba(34, 197, 94, 0.85);
 
   --info-bg-soft:         rgba(30, 58, 138, 0.40);
   --info-border:          rgba(96, 165, 250, 0.40);

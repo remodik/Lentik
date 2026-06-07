@@ -223,7 +223,7 @@ export default function MemberRolesModal({
           )}
 
           {error && (
-            <p className="text-sm text-red-500 font-body mt-3 px-3">{error}</p>
+            <p className="text-sm text-[color:var(--danger-fg-strong)] font-body mt-3 px-3">{error}</p>
           )}
         </div>
 

@@ -327,7 +327,7 @@ export default function BudgetView({ familyId, meId, members }: Props) {
           {loading ? (
             <p className="text-sm text-ink-400 font-body text-center py-8">Загрузка…</p>
           ) : loadingError ? (
-            <p className="text-sm text-red-500 font-body text-center py-8">{loadingError}</p>
+            <p className="text-sm text-[color:var(--danger-fg-strong)] font-body text-center py-8">{loadingError}</p>
           ) : expenses.length === 0 ? (
             <div className="h-full grid place-items-center py-10 text-center">
               <div>
@@ -404,9 +404,9 @@ export default function BudgetView({ familyId, meId, members }: Props) {
                 const value = parseNumber(row.balance);
                 const colorClass =
                   value > 0
-                    ? "text-green-600"
+                    ? "text-[color:var(--success-fg-bold)]"
                     : value < 0
-                      ? "text-red-500"
+                      ? "text-[color:var(--danger-fg-strong)]"
                       : "text-ink-500";
 
                 return (
@@ -553,7 +553,7 @@ export default function BudgetView({ familyId, meId, members }: Props) {
               </div>
 
               {formError && (
-                <p className="text-sm text-red-500 font-body">{formError}</p>
+                <p className="text-sm text-[color:var(--danger-fg-strong)] font-body">{formError}</p>
               )}
 
               <div className="flex gap-2 justify-end">

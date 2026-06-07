@@ -28,6 +28,9 @@ import { apiFetch, normalizeApiPayload } from "@/lib/api-base";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { hasBit, PERM, usePermissions } from "@/lib/usePermissions";
 import Select from "@/components/Select";
+import { useContextMenu } from "@/lib/useContextMenu";
+import type { ContextMenuEntry } from "@/components/ContextMenu";
+import { Hash } from "lucide-react";
 
 type SortMode = "newest" | "oldest" | "name" | "size";
 
@@ -155,6 +158,7 @@ export default function FilesView({
 }) {
   const { confirm } = useConfirm();
   const { perms } = usePermissions();
+  const { openContextMenu } = useContextMenu();
   const canManageOthers =
     !!perms &&
     (perms.is_owner ||
@@ -254,6 +258,37 @@ export default function FilesView({
   async function deleteItem(id: string) {
     await apiFetch(`/families/${familyId}/gallery/${id}`, { method: "DELETE" });
     setItems((p) => p.filter((i) => i.id !== id));
+  }
+
+  function openItemMenu(item: GalleryItem, e: React.MouseEvent) {
+    const canDel = item.uploaded_by === meId || canManageOthers;
+    const entries: ContextMenuEntry[] = [
+      {
+        label: "Скачать",
+        icon: Download,
+        onClick: () => triggerDownload(item.url, item.file_name ?? "file"),
+      },
+    ];
+    if (perms?.is_developer) {
+      entries.push({
+        label: "Копировать ID",
+        icon: Hash,
+        onClick: () => void navigator.clipboard?.writeText(item.id),
+      });
+    }
+    if (canDel) {
+      entries.push({ type: "separator" });
+      entries.push({
+        label: "Удалить",
+        icon: Trash2,
+        danger: true,
+        onClick: async () => {
+          const ok = await confirm({ title: "Удалить файл?", confirmLabel: "Удалить", tone: "danger" });
+          if (ok) await deleteItem(item.id);
+        },
+      });
+    }
+    openContextMenu(e, entries);
   }
 
   async function deleteSelected() {
@@ -419,6 +454,7 @@ export default function FilesView({
               return (
                 <li
                   key={item.id}
+                  onContextMenu={(e) => openItemMenu(item, e)}
                   className={`files-row ${isSelected ? "selected" : ""}`}
                 >
                   <button

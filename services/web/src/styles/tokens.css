@@ -29,6 +29,14 @@
 
   /* ─── Background ─── */
   --bg-page:              #f2e8d9;
+  /* Декоративный фоновый «wash» страницы (body). Вынесен в токен, чтобы темы
+     могли его переопределить или отключить (`none`) — иначе тёплые радиалы
+     протекают на другие темы (на светлых читаются как белёсый градиент). */
+  --bg-page-gradient:
+      radial-gradient(ellipse at 12% 55%, var(--surface-warm-strong) 0%, transparent 58%),
+      radial-gradient(ellipse at 88% 12%, var(--surface-tan-soft) 0%, transparent 52%),
+      radial-gradient(ellipse at 62% 88%, rgb(var(--warm-100) / 0.45) 0%, transparent 50%),
+      radial-gradient(ellipse at 42% 28%, var(--accent-soft-light) 0%, transparent 38%);
   --bg-surface:           rgba(255, 255, 255, 0.58);
   --bg-surface-strong:    rgba(255, 255, 255, 0.78);
   --bg-surface-subtle:    rgba(255, 255, 255, 0.42);
@@ -138,10 +146,16 @@
   --warning-bg-soft:      rgba(255, 237, 213, 0.65);
   --warning-bg:           rgba(251, 191, 36, 0.15);
   --warning-bg-strong:    rgba(251, 191, 36, 0.22);
+  --warning-border:       rgba(251, 191, 36, 0.40);
   --warning-fg:           #fbbf24;
+  --warning-fg-bold:      #b45309;  /* тёмный янтарь — контраст на светлом */
 
   --success-bg:           rgba(74, 222, 128, 0.55);
+  --success-bg-soft:      rgba(74, 222, 128, 0.16);
+  --success-border:       rgba(34, 197, 94, 0.40);
   --success-fg:           #4ade80;
+  --success-fg-bold:      #16a34a;  /* тёмно-зелёный — контраст на светлом */
+  --success-solid:        rgba(34, 197, 94, 0.90);
 
   --info-bg-soft:         rgba(219, 234, 254, 0.75);
   --info-border:          rgba(147, 197, 253, 0.55);

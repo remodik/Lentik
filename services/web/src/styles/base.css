@@ -10,27 +10,8 @@ html {
 }
 body {
     background-color: var(--bg-page);
-    background-image:
-        radial-gradient(
-            ellipse at 12% 55%,
-            var(--surface-warm-strong) 0%,
-            transparent 58%
-        ),
-        radial-gradient(
-            ellipse at 88% 12%,
-            var(--surface-tan-soft) 0%,
-            transparent 52%
-        ),
-        radial-gradient(
-            ellipse at 62% 88%,
-            rgb(var(--warm-100) / 0.45) 0%,
-            transparent 50%
-        ),
-        radial-gradient(
-            ellipse at 42% 28%,
-            var(--accent-soft-light) 0%,
-            transparent 38%
-        );
+    /* Декоративный wash — из токена; темы переопределяют/гасят его. */
+    background-image: var(--bg-page-gradient, none);
     background-attachment: fixed;
     color: var(--text-primary);
     font-family: var(--font-body);

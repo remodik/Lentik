@@ -135,7 +135,7 @@ export default function ModerationEditor({ familyId, canManage }: Props) {
 
   if (loadError) {
     return (
-      <div className="rounded-2xl border border-red-200 bg-red-50/50 p-5 text-sm text-red-700 font-body">
+      <div className="rounded-2xl border border-[color:var(--danger-border-faint)] bg-[var(--danger-bg-soft)] p-5 text-sm text-[color:var(--danger-fg-bold)] font-body">
         {loadError}
       </div>
     );

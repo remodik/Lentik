@@ -2,6 +2,8 @@
 
 [data-theme="retro"] {
   --bg-page:              #0d0800;
+  /* Чистый тёмный фон без тёплого wash. */
+  --bg-page-gradient:     none;
   --bg-surface:           rgba(255, 140, 0, 0.07);
   --bg-surface-strong:    rgba(255, 140, 0, 0.14);
   --bg-surface-subtle:    rgba(255, 140, 0, 0.04);
@@ -73,10 +75,16 @@
   --warning-bg-soft:      rgba(255, 200, 0, 0.10);
   --warning-bg:           rgba(255, 200, 0, 0.14);
   --warning-bg-strong:    rgba(255, 200, 0, 0.22);
+  --warning-border:       rgba(255, 200, 0, 0.45);
   --warning-fg:           #ffcc00;
+  --warning-fg-bold:      #ffcc00;
 
   --success-bg:           rgba(0, 200, 80, 0.22);
+  --success-bg-soft:      rgba(0, 200, 80, 0.18);
+  --success-border:       rgba(0, 200, 80, 0.45);
   --success-fg:           #66ff66;
+  --success-fg-bold:      #66ff66;
+  --success-solid:        rgba(0, 200, 80, 0.85);
 
   --info-bg-soft:         rgba(255, 180, 100, 0.12);
   --info-border:          rgba(255, 200, 130, 0.40);

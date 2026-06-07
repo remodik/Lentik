@@ -1,6 +1,6 @@
 # Lentik — деплой и эксплуатация
 
-Runbook для прод-развёртывания. Связан с заметками `Lentik Prod-Readiness/` (P1–P6).
+Runbook для прод-развёртывания.
 
 ## 1. Конфигурация (env)
 
@@ -12,14 +12,14 @@ Runbook для прод-развёртывания. Связан с заметк
 | `CORS_ORIGINS` | только `https://`-origin фронта, без `*`/localhost | CORS |
 | `AUTO_MIGRATE` | `false` | миграции — отдельным шагом (см. §2) |
 | `SCHEDULER_ENABLED` | `true` на одном наборе инстансов | планировщик напоминаний |
-| `REDIS_URL` | задать при ≥2 инстансах | общий WS fan-out (P1) + rate-limit (P3) |
-| `STORAGE_BACKEND` | `s3` при ≥2 инстансах | хранилище загрузок (P4) |
+| `REDIS_URL` | задать при ≥2 инстансах | общий WS fan-out + rate-limit |
+| `STORAGE_BACKEND` | `s3` при ≥2 инстансах | хранилище загрузок |
 | `S3_BUCKET` / `S3_ENDPOINT_URL` / `S3_REGION` / `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | при `s3` | параметры бакета |
 
 > При `IS_PRODUCTION=true` приложение **падает на старте**, если `CORS_ORIGINS`
 > содержит `http://`/localhost (см. `main.py::_check_security_config`).
 
-## 2. Миграции (P2)
+## 2. Миграции
 Не полагайтесь на авто-миграцию в проде (`AUTO_MIGRATE=false`). Применяйте **один раз**
 перед запуском реплик, отдельным шагом деплоя / init-контейнером:
 
@@ -32,7 +32,7 @@ cd services/api && alembic upgrade heads
 
 ## 3. Запуск за reverse-proxy
 - Пример заголовков и проксирования: [`infra/nginx.example.conf`](infra/nginx.example.conf)
-  (TLS, CSP/`X-Frame-Options` для страниц фронта — P5, WebSocket upgrade).
+  (TLS, CSP/`X-Frame-Options` для страниц фронта, WebSocket upgrade).
 - **Важно (per-IP лимиты):** за прокси `request.client.host` = IP прокси, поэтому
   per-IP rate-limit/throttle станут глобальными. Запускайте uvicorn с доверием к
   forwarded-заголовкам:
@@ -43,16 +43,50 @@ cd services/api && alembic upgrade heads
 
 ## 4. Масштабирование (>1 инстанса)
 Обязательно перед горизонтальным масштабированием:
-- **`REDIS_URL`** — иначе WS-сообщения не пересекают границу инстанса (P1), а
-  rate-лимитеры считаются раздельно (P3).
-- **`STORAGE_BACKEND=s3`** — иначе загрузки видны только инстансу, куда залились (P4).
+- **`REDIS_URL`** — иначе WS-сообщения не пересекают границу инстанса, а
+  rate-лимитеры считаются раздельно.
+- **`STORAGE_BACKEND=s3`** — иначе загрузки видны только инстансу, куда залились.
 - **Планировщик** идемпотентен (`SELECT … FOR UPDATE SKIP LOCKED`), несколько
   включённых инстансов безопасны; можно вынести в отдельный worker и выключить
   `SCHEDULER_ENABLED` на web-инстансах.
 
-## 5. Бэкапы
-- Postgres: регулярный `pg_dump`/снапшоты + **проверка восстановления**.
-- Загрузки: бэкап/версионирование S3-бакета (или тома при local).
+## 5. Бэкапы (шифрованные)
+
+В `docker-compose` есть сайдкар-сервис **`backup`** ([`infra/backup/`](infra/backup/)):
+снимает дамп Postgres (`pg_dump -Fc`) + архив загрузок, упаковывает в один tar и
+**шифрует симметрично GPG AES-256** (с MDC-целостностью). Открытые бэкапы не пишутся
+никогда — без `BACKUP_ENCRYPTION_KEY` контейнер падает на старте (fail-fast).
+
+**Конфигурация (env):**
+
+| Переменная | Деф. | Назначение |
+|---|---|---|
+| `BACKUP_ENCRYPTION_KEY` | — (обязателен) | пароль AES-256. Генерация: `openssl rand -base64 48`. **Храните отдельно от бэкапов** — без него восстановление невозможно |
+| `BACKUP_INTERVAL_HOURS` | `24` | период между бэкапами |
+| `BACKUP_RETENTION_DAILY` | `7` | сколько ежедневных хранить |
+| `BACKUP_RETENTION_WEEKLY` | `4` | сколько воскресных (weekly) хранить |
+| `BACKUP_S3_BUCKET` / `BACKUP_S3_ENDPOINT` / `BACKUP_S3_ACCESS_KEY_ID` / `BACKUP_S3_SECRET_ACCESS_KEY` / `BACKUP_S3_REGION` | — | опциональный offsite в S3/MinIO/R2 (пусто = выключено) |
+
+Артефакты: `lentik-backup-<ts>-{daily,weekly}.tar.gpg` в томе `lentik_backups`
+(+ копия в S3, если настроен). Внутри — `db.dump`, `uploads.tar.gz`, `manifest.txt`.
+
+**Разовый прогон / восстановление:**
+```bash
+docker compose run --rm backup backup.sh once          # сделать бэкап сейчас
+docker compose run --rm backup ls /backups             # список архивов
+docker compose run --rm backup restore.sh lentik-backup-<ts>-daily.tar.gpg
+```
+`restore.sh` **деструктивен** (`pg_restore --clean`): расшифровывает архив,
+восстанавливает БД, распаковывает загрузки (если каталог доступен на запись — иначе
+кладёт в `/backups/restored-uploads` для ручного копирования). После — перезапустить
+API. Регулярно **проверяйте восстановление** на эфемерной БД.
+
+> **Приватность данных (важно):** контент (сообщения, заметки и т.д.) хранится в
+> Postgres **в открытом виде** — нет field-level и нет end-to-end шифрования.
+> Данные видны оператору инстанса, БД и аккаунту разработчика (god-mode). Защита в
+> покое обеспечивается **шифрованием бэкапов** (этот раздел) и, по желанию,
+> шифрованием диска/тома (LUKS и т.п.) на уровне хоста. Если нужна приватность от
+> самого сервера — требуется E2E (вне текущей архитектуры).
 
 ## 6. Наблюдаемость
 - Подключить error-tracking (Sentry) и структурные логи.
@@ -64,7 +98,7 @@ cd services/api && alembic upgrade heads
 - [ ] `alembic upgrade heads` выполнен; `AUTO_MIGRATE=false`
 - [ ] TLS + security-заголовки страниц фронта (`infra/nginx.example.conf`)
 - [ ] uvicorn с `--proxy-headers` (иначе per-IP лимиты не работают)
-- [ ] Бэкап Postgres + проверка восстановления
+- [ ] `BACKUP_ENCRYPTION_KEY` задан (из секрет-стора, хранится отдельно); сервис `backup` запущен; восстановление проверено
 - [ ] Error-tracking и алерты включены
 - [ ] `pytest` зелёный на живой/эфемерной БД
 - [ ] Если ≥2 инстансов: `REDIS_URL` и `STORAGE_BACKEND=s3` заданы

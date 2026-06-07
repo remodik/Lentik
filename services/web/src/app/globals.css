@@ -14,6 +14,7 @@
 @import "../styles/primitives/layout.css";
 @import "../styles/components/navigation.css";
 @import "../styles/components/chat.css";
+@import "../styles/components/emoji-picker.css";
 @import "../styles/components/members.css";
 @import "../styles/components/gallery.css";
 @import "../styles/components/calendar.css";

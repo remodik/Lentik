@@ -2,7 +2,7 @@ import logging
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import update, func
+from sqlalchemy import select, update, func
 
 from app.core.config import settings
 from app.core.redis_client import close_redis
@@ -19,6 +19,9 @@ from app.routers.expenses import router as expenses_router
 from app.routers.families import router as families_router
 from app.routers.families_join import router as families_join_router
 from app.routers.audit_log import router as audit_log_router
+from app.routers.admin import router as admin_router
+from app.routers.time_capsules import router as time_capsules_router
+from app.routers.calendar_feed import router as calendar_feed_router
 from app.routers.family_roles import router as family_roles_router
 from app.routers.permission_overrides import router as permission_overrides_router
 from app.routers.family_tree import (
@@ -42,6 +45,10 @@ from app.services.calendar_reminders import (
 from app.services.reminder_dispatcher import (
     start_reminder_scheduler,
     stop_reminder_scheduler,
+)
+from app.services.capsule_dispatcher import (
+    start_capsule_scheduler,
+    stop_capsule_scheduler,
 )
 
 logger = logging.getLogger(__name__)
@@ -85,6 +92,37 @@ async def _check_migrations() -> None:
         raise
     except Exception as exc:
         logger.warning("Migration check skipped: %s", exc)
+
+
+async def _seed_developer() -> None:
+    """Проставляет is_developer=True пользователю из DEVELOPER_USERNAME и снимает
+    флаг у всех остальных. Источник правды — env + флаг в БД (не сравнение
+    username в бизнес-логике, чтобы перехват логина не давал god-mode)."""
+    username = (settings.developer_username or "").strip()
+    async with AsyncSessionLocal() as db:
+        if not username:
+            # god-mode-аккаунт не задан — на всякий случай снимаем флаг у всех.
+            await db.execute(update(User).where(User.is_developer == True).values(is_developer=False))
+            await db.commit()
+            return
+
+        target = await db.scalar(select(User).where(User.username == username))
+        # Снимаем флаг у всех, кроме целевого.
+        await db.execute(
+            update(User)
+            .where(User.is_developer == True, User.username != username)
+            .values(is_developer=False)
+        )
+        if target is not None:
+            target.is_developer = True
+            logger.info("✅ Developer account: %r", username)
+        else:
+            logger.warning(
+                "DEVELOPER_USERNAME=%r не найден — флаг проставится после "
+                "регистрации этого пользователя и следующего старта.",
+                username,
+            )
+        await db.commit()
 
 
 async def _auto_migrate() -> None:
@@ -170,6 +208,9 @@ def create_app() -> FastAPI:
     app_.include_router(family_roles_router)
     app_.include_router(permission_overrides_router)
     app_.include_router(audit_log_router)
+    app_.include_router(admin_router)
+    app_.include_router(time_capsules_router)
+    app_.include_router(calendar_feed_router)
     app_.include_router(me_router)
     app_.include_router(chats_router)
     app_.include_router(channels_router)
@@ -193,6 +234,7 @@ def create_app() -> FastAPI:
         if settings.auto_migrate:
             await _auto_migrate()
         await _check_migrations()
+        await _seed_developer()
         async with AsyncSessionLocal() as db:
             await db.execute(
                 update(User)
@@ -206,11 +248,13 @@ def create_app() -> FastAPI:
         if settings.scheduler_enabled:
             await start_reminder_scheduler()
             await start_calendar_reminder_scheduler()
+            await start_capsule_scheduler()
 
     @app_.on_event("shutdown")
     async def on_shutdown() -> None:
         await stop_calendar_reminder_scheduler()
         await stop_reminder_scheduler()
+        await stop_capsule_scheduler()
         await ws_manager.stop()
         await close_redis()
 

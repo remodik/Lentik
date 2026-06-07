@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Cake,
   Check,
@@ -12,9 +13,11 @@ import {
   RefreshCw,
   Search,
   SearchX,
+  ShieldCheck,
   X,
 } from "lucide-react";
 import {
+  adminUnbanUser,
   buildFamilyInviteLink,
   createInvite,
   getAllMemberRoles,
@@ -34,6 +37,9 @@ import { useUserMode } from "@/lib/useUserMode";
 import MemberRolesModal from "@/components/MemberRolesModal";
 import { hasBit, PERM, usePermissions } from "@/lib/usePermissions";
 import CopyIdButton from "@/components/CopyIdButton";
+import BanUserModal from "@/components/BanUserModal";
+import { useContextMenu } from "@/lib/useContextMenu";
+import { buildUserMenuEntries } from "@/lib/userMenuItems";
 
 type Member = Family["members"][0];
 
@@ -91,6 +97,8 @@ function MemberCard({
   canKick: canKickProp,
   canManageRolesPerm,
   canTransferOwnership,
+  isDeveloperViewer,
+  onContextMenu,
 }: {
   member: Member & { bio?: string; birthday?: string };
   isMe: boolean;
@@ -113,6 +121,10 @@ function MemberCard({
   canManageRolesPerm?: boolean;
   /** Право на передачу владения (всегда только текущий владелец). */
   canTransferOwnership?: boolean;
+  /** Текущий зритель — платформенный разработчик (видит ID, ПКМ-действия). */
+  isDeveloperViewer?: boolean;
+  /** ПКМ по карточке участника. */
+  onContextMenu?: (member: Member, e: React.MouseEvent) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const { isExpert } = useUserMode();
@@ -122,7 +134,10 @@ function MemberCard({
   const presenceLabel = getPresenceLabel(member);
 
   return (
-    <div className={`member-card ${expanded ? "expanded" : ""}`}>
+    <div
+      className={`member-card ${expanded ? "expanded" : ""}`}
+      onContextMenu={onContextMenu ? (e) => onContextMenu(member, e) : undefined}
+    >
       <button
         className="member-card__top"
         onClick={() => setExpanded((v) => !v)}
@@ -173,6 +188,15 @@ function MemberCard({
             </p>
 
             {isMe && <span className="pill pill-muted">Это ты</span>}
+            {member.is_developer && (
+              <span
+                className="pill inline-flex items-center gap-1 bg-[var(--special-bg)] text-[color:var(--special-fg)]"
+                title="Разработчик"
+              >
+                <ShieldCheck className="w-3 h-3" strokeWidth={2.2} />
+                Разработчик
+              </span>
+            )}
             {birthdaySoon && (
               <span className="pill pill-warm inline-flex items-center gap-1">
                 <Cake className="w-3 h-3" strokeWidth={2.1} />
@@ -226,8 +250,8 @@ function MemberCard({
           </div>
         )}
 
-        {/* Expert: user_id участника с кнопкой копирования. */}
-        {isExpert && (
+        {/* Expert или разработчик: user_id участника с кнопкой копирования. */}
+        {(isExpert || isDeveloperViewer) && (
           <div className="mt-2 flex items-center gap-1.5 font-mono text-[10.5px] text-ink-400">
             <CopyIdButton value={member.user_id} label={member.display_name} />
             <span className="truncate">{member.user_id}</span>
@@ -309,7 +333,11 @@ export default function MembersList({
 }) {
   const { confirm, notify } = useConfirm();
   const { isAdvanced } = useUserMode();
+  const router = useRouter();
   const { perms: familyPerms } = usePermissions();
+  const isDeveloperViewer = !!familyPerms?.is_developer;
+  const { openContextMenu } = useContextMenu();
+  const [banTarget, setBanTarget] = useState<Member | null>(null);
   const baseBits = familyPerms?.base ?? 0;
   const isOwnerOrAdmin =
     !!familyPerms && (familyPerms.is_owner || familyPerms.is_administrator);
@@ -434,6 +462,48 @@ export default function MembersList({
       void notify({ title: e instanceof Error ? e.message : "Ошибка", tone: "danger" });
     } finally {
       setKicking(null);
+    }
+  }
+
+  function handleContextMenu(member: Member, e: React.MouseEvent) {
+    const anchor = e.currentTarget as HTMLElement;
+    const entries = buildUserMenuEntries({
+      target: {
+        user_id: member.user_id,
+        display_name: member.display_name,
+        username: member.username,
+        role: member.role,
+        is_developer: member.is_developer,
+        is_banned: member.is_banned,
+      },
+      meId: me.id,
+      perms: familyPerms,
+      actions: {
+        openProfile: () => openMemberPopover(member, anchor),
+        manageRoles: canManageRoles ? () => setRolesTarget(member) : undefined,
+        openInAdmin: () => router.push(`/admin?user=${member.user_id}`),
+        kick: () => void handleKick(member.user_id, member.display_name),
+        ban: () => setBanTarget(member),
+        unban: () => void handleUnban(member),
+      },
+    });
+    openContextMenu(e, entries);
+  }
+
+  async function handleUnban(member: Member) {
+    const ok = await confirm({
+      title: `Разбанить ${member.display_name}?`,
+      confirmLabel: "Разбанить",
+    });
+    if (!ok) return;
+    try {
+      await adminUnbanUser(member.user_id);
+      void notify({ title: "Пользователь разбанен" });
+    } catch (e) {
+      void notify({
+        title: e instanceof Error ? e.message : "Не удалось разбанить",
+        tone: "danger",
+      });
     }
   }
 
@@ -615,7 +685,7 @@ export default function MembersList({
               )}
 
               {inviteError && (
-                <p className="mt-2 text-xs text-red-500 font-body">{inviteError}</p>
+                <p className="mt-2 text-xs text-[color:var(--danger-fg-strong)] font-body">{inviteError}</p>
               )}
 
               {inviteLink && (
@@ -694,6 +764,8 @@ export default function MembersList({
                     canKick={canKick}
                     canManageRolesPerm={canManageRoles}
                     canTransferOwnership={isOwnerViewing}
+                    isDeveloperViewer={isDeveloperViewer}
+                    onContextMenu={handleContextMenu}
                   />
                 ))}
               </div>
@@ -724,6 +796,8 @@ export default function MembersList({
                     canKick={canKick}
                     canManageRolesPerm={canManageRoles}
                     canTransferOwnership={isOwnerViewing}
+                    isDeveloperViewer={isDeveloperViewer}
+                    onContextMenu={handleContextMenu}
                   />
                 ))}
               </div>
@@ -740,6 +814,15 @@ export default function MembersList({
           )}
         </div>
       </div>
+
+      {banTarget && (
+        <BanUserModal
+          userId={banTarget.user_id}
+          displayName={banTarget.display_name}
+          onClose={() => setBanTarget(null)}
+          onBanned={() => void notify({ title: "Пользователь забанен" })}
+        />
+      )}
 
       <UserMiniProfilePopover
         user={popoverUser}

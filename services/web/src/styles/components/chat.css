@@ -468,20 +468,3 @@
     color: var(--danger-fg-bold);
     background: var(--danger-bg-soft);
 }
-.msg-emoji-pop {
-    min-width: 22rem;
-    width: max-content;
-    max-height: min(56vh, 20rem);
-    overflow-y: auto;
-    overflow-x: hidden;
-}
-.msg-emoji-pop--above {
-    top: auto;
-    bottom: calc(100% + 0.45rem);
-    transform-origin: bottom right;
-}
-.msg-emoji-pop--below {
-    bottom: auto;
-    top: calc(100% + 0.45rem);
-    transform-origin: top right;
-}

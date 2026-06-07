@@ -13,6 +13,29 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.audit_log import AuditLogEntry
+from app.models.platform_audit_log import PlatformAuditLogEntry
+
+
+async def log_platform_action(
+    db: AsyncSession,
+    *,
+    actor_id: uuid.UUID | None,
+    action: str,
+    target_type: str | None = None,
+    target_id: uuid.UUID | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> None:
+    """Добавляет запись в глобальный журнал аудита (вне семьи).
+    Не вызывает commit самостоятельно."""
+    entry = PlatformAuditLogEntry(
+        actor_id=actor_id,
+        action=action,
+        target_type=target_type,
+        target_id=target_id,
+        metadata_json=metadata,
+    )
+    db.add(entry)
+    await db.flush()
 
 
 async def log_action(

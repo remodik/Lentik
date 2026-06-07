@@ -27,6 +27,10 @@ import { useConfirm } from "@/components/ConfirmDialog";
 import FamilySettingsModal from "@/components/FamilySettingsModal";
 import { UserModeProvider } from "@/lib/useUserMode";
 import { PermissionsProvider } from "@/lib/usePermissions";
+import { useContextMenu } from "@/lib/useContextMenu";
+import type { ContextMenuEntry } from "@/components/ContextMenu";
+import FamilyContextMenuRoot from "@/components/FamilyContextMenuRoot";
+import { Copy as CopyIcon, Settings as SettingsIcon, Hash as HashIcon, Trash2 as TrashIcon2 } from "lucide-react";
 import { ExpertIdRow } from "@/components/CopyIdButton";
 import { useCtrlResize } from "@/lib/useCtrlResize";
 import ChatView from "@/components/ChatView";
@@ -40,6 +44,7 @@ import NotesView from "@/components/NotesView";
 import BudgetView from "@/components/BudgetView";
 import RemindersView from "@/components/RemindersView";
 import FamilyTreeView from "@/components/FamilyTreeView";
+import TimeCapsulesView from "@/components/TimeCapsulesView";
 import SubscriptionModal from "@/components/SubscriptionModal";
 import { FREE_FAMILY_LIMIT, isFamilyLimitError } from "@/lib/families";
 import { apiFetch } from "@/lib/api-base";
@@ -48,6 +53,7 @@ import type { PresenceUpdateEvent } from "@/components/NotificationSystem";
 export default function AppPage() {
   const router = useRouter();
   const { confirm, notify } = useConfirm();
+  const { openContextMenu } = useContextMenu();
   const chatSidebarResize = useCtrlResize({
     storageKey: "lentik:chat-sidebar-w",
     initial: 288,
@@ -76,6 +82,7 @@ export default function AppPage() {
       "budget",
       "reminders",
       "tree",
+      "time-capsules",
     ];
     try {
       const saved = localStorage.getItem("lentik_section") as AppSection | null;
@@ -452,7 +459,7 @@ export default function AppPage() {
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
         <div className="glass-page-card glossy p-8 w-full max-w-md text-center">
-          <AlertTriangle className="w-10 h-10 text-red-400 mx-auto mb-3" strokeWidth={1.9} />
+          <AlertTriangle className="w-10 h-10 text-[color:var(--danger-fg)] mx-auto mb-3" strokeWidth={1.9} />
           <h2 className="font-display text-2xl text-ink-900">Не удалось открыть приложение</h2>
           <p className="text-sm text-ink-500 mt-2 font-body">{loadError}</p>
           <div className="mt-5 flex gap-2 justify-center">
@@ -488,6 +495,7 @@ export default function AppPage() {
   return (
     <UserModeProvider initialMode={initialMode}>
     <PermissionsProvider familyId={family?.id ?? null}>
+    <FamilyContextMenuRoot isDeveloper={!!me.is_developer}>
     <AppLayout
       me={me}
       family={family}
@@ -586,6 +594,35 @@ export default function AppPage() {
                           setActiveChatId(chat.id);
                         }
                       }}
+                      onContextMenu={(e) => {
+                        const entries: ContextMenuEntry[] = [
+                          { label: "Открыть", icon: MessageCircle, onClick: () => setActiveChatId(chat.id) },
+                        ];
+                        if (isOwner) {
+                          entries.push({
+                            label: "Настройки чата",
+                            icon: SettingsIcon,
+                            onClick: () => setChatSettingsTarget(chat),
+                          });
+                        }
+                        if (me.is_developer) {
+                          entries.push({
+                            label: "Копировать ID",
+                            icon: HashIcon,
+                            onClick: () => void navigator.clipboard?.writeText(chat.id),
+                          });
+                        }
+                        if (isOwner) {
+                          entries.push({ type: "separator" });
+                          entries.push({
+                            label: "Удалить чат",
+                            icon: TrashIcon2,
+                            danger: true,
+                            onClick: () => void handleDeleteChat(chat, false),
+                          });
+                        }
+                        openContextMenu(e, entries);
+                      }}
                       className={`group relative w-full text-left rounded-xl border px-3 py-2.5 transition cursor-pointer ${
                         isOwner ? "pr-16" : ""
                       } ${active ? "shadow-sm" : "hover:translate-y-[-1px]"}`}
@@ -598,7 +635,7 @@ export default function AppPage() {
                         <p className="text-sm font-semibold text-ink-800 truncate flex-1"># {chat.name}</p>
                         {chat.is_18plus && (
                           <span
-                            className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-bold border border-red-300 bg-red-50 text-red-600"
+                            className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-bold border border-[color:var(--danger-border)] bg-[var(--danger-bg-soft)] text-[color:var(--danger-fg-bold)]"
                             title="Только для 18+"
                           >
                             18+
@@ -606,7 +643,7 @@ export default function AppPage() {
                         )}
                         {!!chat.slow_mode_seconds && chat.slow_mode_seconds > 0 && (
                           <Timer
-                            className="w-3.5 h-3.5 text-amber-600 shrink-0"
+                            className="w-3.5 h-3.5 text-[color:var(--warning-fg-bold)] shrink-0"
                             strokeWidth={2.4}
                             aria-label="Включён медленный режим"
                           />
@@ -643,7 +680,7 @@ export default function AppPage() {
                               e.stopPropagation();
                               void handleDeleteChat(chat, e.shiftKey);
                             }}
-                            className="absolute top-2 right-2 w-7 h-7 rounded-lg grid place-items-center text-ink-400 hover:text-red-600 hover:bg-red-50 transition opacity-0 group-hover:opacity-100 focus:opacity-100"
+                            className="absolute top-2 right-2 w-7 h-7 rounded-lg grid place-items-center text-ink-400 hover:text-[color:var(--danger-fg-bold)] hover:bg-[var(--danger-bg-soft)] transition opacity-0 group-hover:opacity-100 focus:opacity-100"
                             title="Удалить чат"
                             aria-label="Удалить чат"
                             data-testid={`chat-delete-${chat.id}`}
@@ -735,6 +772,9 @@ export default function AppPage() {
       )}
       {section === "members" && (
         <MembersList family={family} me={me} onKick={handleKick} onRefresh={refreshFamily} />
+      )}
+      {section === "time-capsules" && (
+        <TimeCapsulesView familyId={familyId} meId={me.id} />
       )}
       {section === "tree" && (
         <FamilyTreeView familyId={familyId} family={family} meId={me.id} />
@@ -830,7 +870,7 @@ export default function AppPage() {
               />
 
               {createFamilyError && (
-                <p className="text-sm text-red-500 font-body">{createFamilyError}</p>
+                <p className="text-sm text-[color:var(--danger-fg-strong)] font-body">{createFamilyError}</p>
               )}
 
               <div className="flex gap-2 justify-end pt-1">
@@ -902,7 +942,7 @@ export default function AppPage() {
                 maxLength={120}
               />
               {renameError && (
-                <p className="text-sm text-red-500 font-body">{renameError}</p>
+                <p className="text-sm text-[color:var(--danger-fg-strong)] font-body">{renameError}</p>
               )}
               <div className="flex gap-2 justify-end pt-1">
                 <button
@@ -956,7 +996,7 @@ export default function AppPage() {
                 autoFocus
               />
               {joinError && (
-                <p className="text-sm text-red-500 font-body">{joinError}</p>
+                <p className="text-sm text-[color:var(--danger-fg-strong)] font-body">{joinError}</p>
               )}
               <div className="flex gap-2 justify-end pt-1">
                 <button
@@ -1008,6 +1048,7 @@ export default function AppPage() {
         }}
       />
     </AppLayout>
+    </FamilyContextMenuRoot>
     </PermissionsProvider>
     </UserModeProvider>
   );

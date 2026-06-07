@@ -322,7 +322,7 @@ export default function RolesEditor({ familyId, isOwner }: Props) {
 
   if (error) {
     return (
-      <div className="rounded-xl border border-red-200 bg-red-50/60 px-4 py-3 text-sm text-red-700">
+      <div className="rounded-xl border border-[color:var(--danger-border-faint)] bg-[var(--danger-bg-soft)] px-4 py-3 text-sm text-[color:var(--danger-fg-bold)]">
         {error}
       </div>
     );
@@ -553,7 +553,7 @@ function RoleDetail({
           <button
             type="button"
             onClick={() => void handleDelete()}
-            className="ui-btn ui-btn-subtle text-red-600 hover:text-red-700 inline-flex items-center gap-1.5"
+            className="ui-btn ui-btn-subtle text-[color:var(--danger-fg-bold)] hover:text-[color:var(--danger-fg-strong)] inline-flex items-center gap-1.5"
             data-tooltip="Удалить роль"
           >
             <Trash2 className="w-3.5 h-3.5" strokeWidth={2.2} />

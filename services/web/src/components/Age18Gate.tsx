@@ -94,7 +94,7 @@ export default function Age18Gate({
           className="max-w-md w-full text-center rounded-3xl border p-8"
           style={{ background: "var(--bg-surface)", borderColor: "var(--border-glass)" }}
         >
-          <div className="w-12 h-12 mx-auto rounded-full grid place-items-center mb-4 bg-red-50 text-red-600">
+          <div className="w-12 h-12 mx-auto rounded-full grid place-items-center mb-4 bg-[var(--danger-bg-soft)] text-[color:var(--danger-fg-bold)]">
             <ShieldX className="w-6 h-6" strokeWidth={2.2} />
           </div>
           <h2 className="font-display text-lg text-ink-900">{title}</h2>
@@ -116,7 +116,7 @@ export default function Age18Gate({
         className="max-w-md w-full text-center rounded-3xl border p-8"
         style={{ background: "var(--bg-surface)", borderColor: "var(--border-glass)" }}
       >
-        <div className="w-12 h-12 mx-auto rounded-full grid place-items-center mb-4 bg-amber-50 text-amber-600">
+        <div className="w-12 h-12 mx-auto rounded-full grid place-items-center mb-4 bg-[var(--warning-bg-soft)] text-[color:var(--warning-fg-bold)]">
           <ShieldAlert className="w-6 h-6" strokeWidth={2.2} />
         </div>
         <h2 className="font-display text-lg text-ink-900">

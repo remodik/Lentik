@@ -105,6 +105,8 @@ class ConnectionManager:
             await self._close_family_user(UUID(env["family_id"]), UUID(env["user_id"]))
         elif kind == "family_close":
             await self._close_family_all(UUID(env["id"]))
+        elif kind == "force_logout":
+            await self._force_logout_user(UUID(env["user_id"]))
 
     async def _publish(self, env: dict) -> bool:
         """Опубликовать событие в Redis. True — опубликовано (доставку сделает
@@ -295,6 +297,40 @@ class ConnectionManager:
         by_user.pop(user_id, None)
         if not by_user:
             self._family_user_sockets.pop(family_id, None)
+
+    async def force_logout_user(self, user_id: UUID) -> None:
+        """Разослать пользователю событие force_logout и закрыть его сокеты на
+        ВСЕХ инстансах (после глобального бана). Клиент по этому событию чистит
+        сессию и уходит на /login."""
+        if await self._publish({"kind": "force_logout", "user_id": str(user_id)}):
+            return
+        await self._force_logout_user(user_id)
+
+    async def _force_logout_user(self, user_id: UUID) -> None:
+        # Собираем все известные сокеты пользователя из всех локальных реестров.
+        sockets: set[WebSocket] = set()
+        for by_user in self._family_user_sockets.values():
+            sockets.update(by_user.get(user_id, set()))
+        for by_user in self._presence_connections.values():
+            sockets.update(by_user.get(user_id, set()))
+        sockets.update(self._user_connections.get(user_id, set()))
+
+        payload = json.dumps({"type": "force_logout"}, ensure_ascii=False)
+        for ws in sockets:
+            try:
+                await ws.send_text(payload)
+            except Exception:  # noqa: BLE001
+                pass
+            try:
+                await ws.close(code=4003)
+            except Exception:  # noqa: BLE001
+                pass
+            # Чистим из всех индексов.
+            for conns in self._chat_connections.values():
+                conns.discard(ws)
+            for conns in self._family_connections.values():
+                conns.discard(ws)
+            self._remove_from_family_user_index(ws)
 
     async def disconnect_family_all(self, family_id: UUID) -> None:
         """Закрыть ВСЕ соединения семьи на всех инстансах (удаление семьи)."""

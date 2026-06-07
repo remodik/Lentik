@@ -158,7 +158,7 @@ function ReminderCard({
           onClick={() => onToggle(reminder)}
           className={`shrink-0 w-7 h-7 rounded-full grid place-items-center border-2 transition ${
             reminder.is_done
-              ? "bg-green-500 border-green-500 text-white"
+              ? "bg-[var(--success-solid)] border-[color:var(--success-solid)] text-white"
               : "border-ink-300 hover:border-ink-500"
           }`}
           aria-label={reminder.is_done ? "Снять отметку" : "Отметить выполненным"}
@@ -196,7 +196,7 @@ function ReminderCard({
                 <button
                   type="button"
                   onClick={() => onDelete(reminder.id)}
-                  className="w-7 h-7 rounded-lg grid place-items-center text-ink-400 hover:text-red-500 hover:bg-red-50 transition"
+                  className="w-7 h-7 rounded-lg grid place-items-center text-ink-400 hover:text-[color:var(--danger-fg-strong)] hover:bg-[var(--danger-bg-soft)] transition"
                   title="Удалить"
                   data-testid={`reminder-delete-${reminder.id}`}
                 >
@@ -215,7 +215,7 @@ function ReminderCard({
           <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] font-body">
             <span
               className={`inline-flex items-center gap-1 ${
-                overdue ? "text-red-600 font-semibold" : "text-ink-500"
+                overdue ? "text-[color:var(--danger-fg-bold)] font-semibold" : "text-ink-500"
               }`}
             >
               <CalendarClock className="w-3.5 h-3.5" strokeWidth={2.2} />
@@ -579,7 +579,7 @@ export default function RemindersView({
               </div>
 
               {formError && (
-                <p className="text-sm text-red-500 font-body" data-testid="reminder-form-error">
+                <p className="text-sm text-[color:var(--danger-fg-strong)] font-body" data-testid="reminder-form-error">
                   {formError}
                 </p>
               )}

@@ -262,7 +262,7 @@ function OnboardingContent() {
               data-testid="family-name-input"
             />
             {error && (
-              <p className="text-red-500 text-base text-center font-body">{error}</p>
+              <p className="text-[color:var(--danger-fg-strong)] text-base text-center font-body">{error}</p>
             )}
             <button
               type="submit"
@@ -345,7 +345,7 @@ function OnboardingContent() {
           </div>
 
           {error && (
-            <p className="text-red-500 text-base text-center animate-fade-in font-body" data-testid="join-error">
+            <p className="text-[color:var(--danger-fg-strong)] text-base text-center animate-fade-in font-body" data-testid="join-error">
               {error}
             </p>
           )}

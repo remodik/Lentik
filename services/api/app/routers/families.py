@@ -1,3 +1,4 @@
+import secrets
 import shutil
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
@@ -28,12 +29,56 @@ from app.schemas.families import (
 from app.core.permissions import Perm
 from app.schemas.moderation import ModerationSettingsResponse, ModerationSettingsUpdate
 from app.services.audit import log_action
+from app.services.bans import is_banned_now
 from app.services.family import create_family, require_membership, require_owner
 from app.services.moderation import get_or_create_settings
 from app.services.roles import require_family_perm
 from app.ws.manager import ws_manager
 
 router = APIRouter(prefix="/families", tags=["families"])
+
+
+# ─── Интеграции: iCal-подписка календаря (owner) ────────────────────────────
+
+
+@router.get("/{family_id}/integrations")
+async def get_integrations(
+    family_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    await require_owner(family_id, user, db)
+    family = await db.get(Family, family_id)
+    return {"calendar_feed_token": family.calendar_feed_token if family else None}
+
+
+@router.post("/{family_id}/integrations/calendar-feed")
+async def enable_calendar_feed(
+    family_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """(Пере)генерирует токен iCal-подписки — старый URL сразу перестаёт работать."""
+    await require_owner(family_id, user, db)
+    family = await db.get(Family, family_id)
+    if family is None:
+        raise HTTPException(status_code=404, detail="Family not found")
+    family.calendar_feed_token = secrets.token_urlsafe(24)
+    await db.commit()
+    return {"calendar_feed_token": family.calendar_feed_token}
+
+
+@router.delete("/{family_id}/integrations/calendar-feed", status_code=status.HTTP_204_NO_CONTENT)
+async def disable_calendar_feed(
+    family_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    await require_owner(family_id, user, db)
+    family = await db.get(Family, family_id)
+    if family is not None:
+        family.calendar_feed_token = None
+        await db.commit()
 
 
 def _presence_payload(
@@ -63,6 +108,8 @@ def _family_to_detail_response(family: Family) -> FamilyDetailResponse:
             is_online=m.user.is_online,
             last_seen_at=m.user.last_seen_at,
             role=m.role,
+            is_developer=m.user.is_developer,
+            is_banned=m.user.is_banned,
             joined_at=m.created_at,
         )
         for m in family.memberships
@@ -512,6 +559,12 @@ async def family_ws(
 
     if token_iat is not None and token_iat + timedelta(seconds=1) < user.password_changed_at:
         await websocket.close(code=4001)
+        return
+
+    # Глобальный бан: закрываем даже валидный ticket-путь (где revocation по
+    # password_changed_at не срабатывает, т.к. token_iat is None).
+    if is_banned_now(user):
+        await websocket.close(code=4003)
         return
 
     m = await db.scalar(

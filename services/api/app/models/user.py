@@ -2,7 +2,7 @@ import uuid
 from datetime import date, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, Date, DateTime, String, Text, func, text
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, String, Text, func, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -43,6 +43,32 @@ class User(Base):
         nullable=False,
         server_default=text("'simple'"),
         default="simple",
+    )
+
+    # ── Платформенный статус ────────────────────────────────────────────────
+    # god-mode: полный доступ в любой семье + доступ в админ-панель. Источник
+    # правды — флаг в БД, проставляемый на старте из env DEVELOPER_USERNAME
+    # (см. app/main.py). НЕ сравниваем username строкой в бизнес-логике.
+    is_developer: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+
+    # ── Глобальный бан ──────────────────────────────────────────────────────
+    is_banned: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    ban_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # NULL = бан навсегда; иначе — момент автоснятия.
+    ban_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    banned_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    banned_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
     )
 
     memberships: Mapped[list["Membership"]] = relationship(

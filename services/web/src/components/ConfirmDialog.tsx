@@ -165,7 +165,7 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
             <span
               className={`w-10 h-10 rounded-2xl grid place-items-center shrink-0 ${
                 tone === "danger"
-                  ? "bg-red-50 text-red-600 border border-red-200"
+                  ? "bg-[var(--danger-bg-soft)] text-[color:var(--danger-fg-bold)] border border-[color:var(--danger-border-faint)]"
                   : "bg-[color:var(--bg-elevated)] text-ink-700 border border-[color:var(--border-glass-strong)]"
               }`}
               aria-hidden

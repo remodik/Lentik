@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import {
   Clock as ClockIcon,
   Download,
@@ -19,6 +18,7 @@ import {
   Play,
   Search,
   SendHorizontal,
+  Smile,
   Trash2,
   X,
 } from "lucide-react";
@@ -76,12 +76,21 @@ import UserMiniProfilePopover, {
   type UserMiniProfile,
 } from "@/components/UserMiniProfilePopover";
 import { useConfirm } from "@/components/ConfirmDialog";
+import { EmojiPickerPopover } from "@/components/EmojiPicker";
 import { useUserMode } from "@/lib/useUserMode";
 import {
   hasBit,
   PERM,
   useChatPermissions,
+  usePermissions,
 } from "@/lib/usePermissions";
+import { useContextMenu } from "@/lib/useContextMenu";
+import { buildUserMenuEntries } from "@/lib/userMenuItems";
+import type { ContextMenuEntry } from "@/components/ContextMenu";
+import BanUserModal from "@/components/BanUserModal";
+import { adminUnbanUser } from "@/lib/api";
+import { useRouter } from "next/navigation";
+import { CornerUpLeft as ReplyIcon, Copy as CopyIcon, Pin as PinIcon, Pencil as PencilIcon, Trash2 as TrashIcon, Hash as HashIcon } from "lucide-react";
 import MediaLightbox, {
   CustomVideoPlayer,
   type LightboxMedia,
@@ -96,7 +105,6 @@ const TOOLBAR_MIN_SPACE = 72;
 const TOOLBAR_HIDE_DELAY_MS = 120;
 const MIN_SEARCH_QUERY_LENGTH = 2;
 const SEARCH_DEBOUNCE_MS = 260;
-const QUICK_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🔥", "🎉", "👀", "✅", "💯", "🙏", "😍", "👏", "🤔", "😅", "💪"] as const;
 
 function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString("ru", {
@@ -214,12 +222,14 @@ function MessageAvatar({
   label,
   active,
   onClick,
+  onContextMenu,
 }: {
   avatarUrl: string | null;
   fallback: string;
   label: string;
   active?: boolean;
   onClick?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onContextMenu?: (event: React.MouseEvent<HTMLButtonElement>) => void;
 }) {
   const [imageFailed, setImageFailed] = useState(false);
 
@@ -233,6 +243,7 @@ function MessageAvatar({
     <button
       type="button"
       onClick={onClick}
+      onContextMenu={onContextMenu}
       className={`w-10 h-10 rounded-full overflow-hidden grid place-items-center font-semibold shrink-0 border border-[color:var(--border-glass-strong)] shadow-[0_8px_20px_var(--scrim-2)] bg-gradient-to-br from-warm-300 via-warm-400 to-warm-500 text-[color:var(--text-on-dark)] transition ${
         active ? "ring-2 ring-[color:var(--border-glass-strong)]" : "hover:scale-[1.03]"
       }`}
@@ -410,6 +421,10 @@ export default function ChatView({
   const canAddReactions = hasBit(chatPerms, PERM.ADD_REACTIONS);
   const canManageMessages = hasBit(chatPerms, PERM.MANAGE_MESSAGES);
   const canManageOwn = hasBit(chatPerms, PERM.MANAGE_OWN_MESSAGES);
+  const { perms: familyPerms } = usePermissions();
+  const { openContextMenu } = useContextMenu();
+  const router = useRouter();
+  const [banTarget, setBanTarget] = useState<{ user_id: string; display_name: string } | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -424,6 +439,9 @@ export default function ChatView({
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [emojiPickerForId, setEmojiPickerForId] = useState<string | null>(null);
   const [emojiPickerAnchorRect, setEmojiPickerAnchorRect] = useState<DOMRect | null>(null);
+  // Composer emoji picker (Discord-style) — inserts into the message text.
+  const [composerEmojiOpen, setComposerEmojiOpen] = useState(false);
+  const [composerEmojiAnchor, setComposerEmojiAnchor] = useState<DOMRect | null>(null);
   const [toolbarPlacement, setToolbarPlacement] = useState<Record<string, ToolbarPlacement>>({});
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [pinnedMessageId, setPinnedMessageId] = useState<string | null>(
@@ -479,7 +497,10 @@ export default function ChatView({
   const searchInputRef = useRef<HTMLInputElement>(null);
   const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toolbarHideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const emojiPickerRef = useRef<HTMLDivElement>(null);
+  // Trigger elements excluded from the emoji popover's outside-click so that
+  // clicking the trigger again toggles (rather than close-then-reopen).
+  const emojiBtnRef = useRef<HTMLButtonElement>(null);
+  const reactionTriggerRef = useRef<HTMLElement | null>(null);
   const rowRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const suppressAutoScrollRef = useRef(false);
   const lastMessageCountRef = useRef(0);
@@ -894,21 +915,11 @@ export default function ChatView({
     };
   }, [emojiPickerForId]);
 
+  // Close the composer emoji picker when switching chats.
   useEffect(() => {
-    if (!emojiPickerForId) return;
-
-    const onMouseDown = (e: MouseEvent) => {
-      if (!emojiPickerRef.current?.contains(e.target as Node)) {
-        setEmojiPickerForId(null);
-        setEmojiPickerAnchorRect(null);
-      }
-    };
-
-    document.addEventListener("mousedown", onMouseDown);
-    return () => {
-      document.removeEventListener("mousedown", onMouseDown);
-    };
-  }, [emojiPickerForId]);
+    setComposerEmojiOpen(false);
+    setComposerEmojiAnchor(null);
+  }, [chat.id]);
 
   useEffect(() => {
     let ws: WebSocket | null = null;
@@ -1104,6 +1115,25 @@ export default function ChatView({
     });
   }
 
+  function insertEmojiAtCursor(emoji: string) {
+    const el = textareaRef.current;
+    // Fall back to appending if the textarea isn't focused/available.
+    const start = el?.selectionStart ?? text.length;
+    const end = el?.selectionEnd ?? text.length;
+    const next = text.slice(0, start) + emoji + text.slice(end);
+    setText(next);
+    setMentionQuery(null);
+
+    requestAnimationFrame(() => {
+      const node = textareaRef.current;
+      if (!node) return;
+      node.focus();
+      const pos = start + emoji.length;
+      node.setSelectionRange(pos, pos);
+      adjustTextareaHeight(node);
+    });
+  }
+
   function handleFilePick(e: React.ChangeEvent<HTMLInputElement>) {
     const picked = Array.from(e.target.files ?? []);
     if (!picked.length) return;
@@ -1272,13 +1302,22 @@ export default function ChatView({
         textareaRef.current.style.height = "auto";
       }
     } catch (e) {
-      console.error("sendMessage failed", e);
       const message = e instanceof Error ? e.message : "Не удалось отправить сообщение";
-      // Ограничения модерации (стоп-слова, лимит длины) приходят как 422 —
-      // показываем серверный detail понятным уведомлением.
       const statusCode = (e as { status?: number })?.status;
+      // 4xx — это ожидаемые пользовательские ситуации (медленный режим 429,
+      // модерация 422 и т.п.). Их не логируем в console.error, иначе в dev
+      // всплывает оверлей ошибки на штатное поведение. Логируем только 5xx/сетевые.
+      if (statusCode === undefined || statusCode >= 500) {
+        console.error("sendMessage failed", e);
+      }
+      const title =
+        statusCode === 429
+          ? "Медленный режим"
+          : statusCode === 422
+            ? "Сообщение отклонено"
+            : "Не удалось отправить";
       void notify({
-        title: statusCode === 422 ? "Сообщение отклонено" : "Не удалось отправить",
+        title,
         description: message,
         tone: "danger",
       });
@@ -1584,7 +1623,7 @@ export default function ChatView({
               <span className="truncate"># {chat.name}</span>
               {chat.is_18plus && (
                 <span
-                  className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-bold border border-red-300 bg-red-50 text-red-600"
+                  className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-bold border border-[color:var(--danger-border)] bg-[var(--danger-bg-soft)] text-[color:var(--danger-fg-bold)]"
                   title="Только для 18+"
                 >
                   18+
@@ -1618,7 +1657,7 @@ export default function ChatView({
             <span className="truncate"># {chat.name}</span>
             {chat.is_18plus && (
               <span
-                className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-bold border border-red-300 bg-red-50 text-red-600"
+                className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-bold border border-[color:var(--danger-border)] bg-[var(--danger-bg-soft)] text-[color:var(--danger-fg-bold)]"
                 title="Только для 18+"
               >
                 18+
@@ -1626,7 +1665,7 @@ export default function ChatView({
             )}
             {!!chat.slow_mode_seconds && chat.slow_mode_seconds > 0 && (
               <span
-                className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold border border-amber-300 bg-amber-50 text-amber-700"
+                className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold border border-[color:var(--warning-border)] bg-[var(--warning-bg-soft)] text-[color:var(--warning-fg-bold)]"
                 title={`Медленный режим: ${formatChatSlowMode(chat.slow_mode_seconds)}`}
               >
                 <ClockIcon className="w-3 h-3" strokeWidth={2.4} />
@@ -1764,7 +1803,7 @@ export default function ChatView({
                   Поиск…
                 </div>
               ) : searchError ? (
-                <p className="px-1 text-[12px] text-red-500 font-body">{searchError}</p>
+                <p className="px-1 text-[12px] text-[color:var(--danger-fg-strong)] font-body">{searchError}</p>
               ) : searchResults.length === 0 ? (
                 <p className="px-1 text-[12px] text-ink-400 font-body">Ничего не найдено</p>
               ) : (
@@ -2000,6 +2039,41 @@ export default function ChatView({
                   }`}
                   onMouseEnter={() => showToolbar(message.id)}
                   onMouseLeave={() => scheduleToolbarHide(message.id)}
+                  onContextMenu={(e) => {
+                    const entries: ContextMenuEntry[] = [];
+                    if (canSendMessages)
+                      entries.push({ label: "Ответить", icon: ReplyIcon, onClick: () => setReplyTo(message) });
+                    if (message.text)
+                      entries.push({
+                        label: "Копировать текст",
+                        icon: CopyIcon,
+                        onClick: () => void navigator.clipboard?.writeText(message.text),
+                      });
+                    if (canPinMessages)
+                      entries.push({
+                        label: isPinned ? "Открепить" : "Закрепить",
+                        icon: PinIcon,
+                        onClick: () => void handlePinToggle(message),
+                      });
+                    if (canEdit)
+                      entries.push({ label: "Изменить", icon: PencilIcon, onClick: () => startEdit(message) });
+                    if (familyPerms?.is_developer)
+                      entries.push({
+                        label: "Копировать ID",
+                        icon: HashIcon,
+                        onClick: () => void navigator.clipboard?.writeText(message.id),
+                      });
+                    if (canDelete) {
+                      entries.push({ type: "separator" });
+                      entries.push({
+                        label: "Удалить",
+                        icon: TrashIcon,
+                        danger: true,
+                        onClick: () => void handleDelete(message.id),
+                      });
+                    }
+                    openContextMenu(e, entries);
+                  }}
                 >
                   {isGrouped ? (
                     <div className="w-10 h-10 shrink-0" aria-hidden />
@@ -2012,6 +2086,37 @@ export default function ChatView({
                       onClick={(event) => {
                         event.stopPropagation();
                         handleAuthorAvatarClick(message, event.currentTarget);
+                      }}
+                      onContextMenu={(event) => {
+                        if (!message.author_id) return;
+                        const member = memberById.get(message.author_id);
+                        const username = member?.username ?? message.author_username ?? "";
+                        const anchor = event.currentTarget;
+                        const authorId = message.author_id;
+                        openContextMenu(
+                          event,
+                          buildUserMenuEntries({
+                            target: {
+                              user_id: authorId,
+                              display_name: authorDisplayName,
+                              username,
+                              role: member?.role,
+                              is_developer: member?.is_developer,
+                              is_banned: member?.is_banned,
+                            },
+                            meId: me.id,
+                            perms: familyPerms,
+                            actions: {
+                              openProfile: () => handleAuthorAvatarClick(message, anchor),
+                              mention: username
+                                ? () => setText((t) => (t ? `${t} @${username} ` : `@${username} `))
+                                : undefined,
+                              openInAdmin: () => router.push(`/admin?user=${authorId}`),
+                              ban: () => setBanTarget({ user_id: authorId, display_name: authorDisplayName }),
+                              unban: () => void adminUnbanUser(authorId).catch(() => {}),
+                            },
+                          }),
+                        );
                       }}
                     />
                   )}
@@ -2054,6 +2159,7 @@ export default function ChatView({
                               setEmojiPickerForId(null);
                               setEmojiPickerAnchorRect(null);
                             } else {
+                              reactionTriggerRef.current = e.currentTarget;
                               setEmojiPickerAnchorRect(e.currentTarget.getBoundingClientRect());
                               setEmojiPickerForId(message.id);
                             }
@@ -2183,8 +2289,14 @@ export default function ChatView({
                               className="reaction-add-btn"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setEmojiPickerAnchorRect(e.currentTarget.getBoundingClientRect());
-                                setEmojiPickerForId(message.id);
+                                if (emojiPickerForId === message.id) {
+                                  setEmojiPickerForId(null);
+                                  setEmojiPickerAnchorRect(null);
+                                } else {
+                                  reactionTriggerRef.current = e.currentTarget;
+                                  setEmojiPickerAnchorRect(e.currentTarget.getBoundingClientRect());
+                                  setEmojiPickerForId(message.id);
+                                }
                               }}
                               aria-label="Добавить реакцию"
                               title="Добавить реакцию"
@@ -2317,8 +2429,8 @@ export default function ChatView({
         ) : (
         <div className="relative flex items-center gap-2 rounded-xl border border-white/65 bg-white/62 px-2.5 py-2 focus-within:outline-none [&_textarea]:focus:outline-none [&_textarea]:focus-visible:outline-none">
           {isRecording && (
-            <div className="absolute -top-8 left-0 right-0 flex items-center justify-center gap-2 text-[12px] text-red-500 font-semibold font-body">
-              <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+            <div className="absolute -top-8 left-0 right-0 flex items-center justify-center gap-2 text-[12px] text-[color:var(--danger-fg-strong)] font-semibold font-body">
+              <span className="w-2 h-2 rounded-full bg-[var(--danger-solid)] animate-pulse" />
               Запись {recordingSeconds}с — отпустите для отправки
             </div>
           )}
@@ -2383,6 +2495,30 @@ export default function ChatView({
           />
 
           <button
+            ref={emojiBtnRef}
+            type="button"
+            onClick={(e) => {
+              if (composerEmojiOpen) {
+                setComposerEmojiOpen(false);
+                setComposerEmojiAnchor(null);
+              } else {
+                setComposerEmojiAnchor(e.currentTarget.getBoundingClientRect());
+                setComposerEmojiOpen(true);
+              }
+            }}
+            className={`w-9 h-9 rounded-md grid place-items-center shrink-0 transition ${
+              composerEmojiOpen
+                ? "text-[var(--accent)] bg-[var(--accent-soft)]"
+                : "text-ink-500 hover:text-ink-900 hover:bg-white/75"
+            }`}
+            data-tooltip="Эмодзи"
+            aria-label="Эмодзи"
+            aria-expanded={composerEmojiOpen}
+          >
+            <Smile className="w-4 h-4" strokeWidth={2.2} />
+          </button>
+
+          <button
             type="button"
             onClick={handleSend}
             disabled={!canSend}
@@ -2407,7 +2543,7 @@ export default function ChatView({
               disabled={sendingVoice}
               className={`w-10 h-10 rounded-md grid place-items-center shrink-0 transition select-none ${
                 isRecording
-                  ? "bg-red-500 text-white animate-pulse"
+                  ? "bg-[var(--danger-solid)] text-white animate-pulse"
                   : "text-ink-500 hover:text-ink-900 hover:bg-white/75"
               }`}
               aria-label={isRecording ? `Запись ${recordingSeconds}с — отпустите` : "Записать голосовое"}
@@ -2425,42 +2561,31 @@ export default function ChatView({
         )}
       </div>
 
-      {emojiPickerMessage && emojiPickerAnchorRect && createPortal(
-        <div
-          ref={emojiPickerRef}
-          className="msg-emoji-pop p-2.5 rounded-2xl border backdrop-blur-md"
-          style={{
-            position: "fixed",
-            zIndex: 200,
-            right: Math.max(4, window.innerWidth - emojiPickerAnchorRect.right),
-            ...(window.innerHeight - emojiPickerAnchorRect.bottom >= 264
-              ? { top: emojiPickerAnchorRect.bottom + 6 }
-              : { bottom: window.innerHeight - emojiPickerAnchorRect.top + 6 }),
-            background: "var(--bg-elevated)",
-            borderColor: "var(--border-glass-strong)",
-            boxShadow: "var(--shadow-glass-float)",
+      {emojiPickerMessage && (
+        <EmojiPickerPopover
+          anchorRect={emojiPickerAnchorRect}
+          triggerRef={reactionTriggerRef}
+          closeOnPick
+          onPick={(emoji) => void handleReactionToggle(emojiPickerMessage, emoji)}
+          onClose={() => {
+            setEmojiPickerForId(null);
+            setEmojiPickerAnchorRect(null);
           }}
-        >
-          <div className="grid grid-cols-8 gap-1.5">
-            {QUICK_EMOJIS.map((emoji) => (
-              <button
-                key={emoji}
-                type="button"
-                onClick={() => {
-                  void handleReactionToggle(emojiPickerMessage, emoji);
-                  setEmojiPickerForId(null);
-                  setEmojiPickerAnchorRect(null);
-                }}
-                className="w-9 h-9 rounded-lg text-[20px] leading-none grid place-items-center hover:bg-white/70 hover:scale-110 active:scale-95 transition-all duration-100"
-                title={emoji}
-              >
-                {emoji}
-              </button>
-            ))}
-          </div>
-        </div>,
-        document.body,
+        />
       )}
+
+      {composerEmojiOpen && (
+        <EmojiPickerPopover
+          anchorRect={composerEmojiAnchor}
+          triggerRef={emojiBtnRef}
+          onPick={insertEmojiAtCursor}
+          onClose={() => {
+            setComposerEmojiOpen(false);
+            setComposerEmojiAnchor(null);
+          }}
+        />
+      )}
+
       <UserMiniProfilePopover
         user={popoverUser}
         anchorRect={popoverAnchorRect}
@@ -2468,6 +2593,15 @@ export default function ChatView({
       />
 
       <MediaLightbox media={lightboxMedia} onClose={() => setLightboxMedia(null)} />
+
+      {banTarget && (
+        <BanUserModal
+          userId={banTarget.user_id}
+          displayName={banTarget.display_name}
+          onClose={() => setBanTarget(null)}
+          onBanned={() => void notify({ title: "Пользователь забанен" })}
+        />
+      )}
 
       {isExpert && (
         <WsDebugPanel
@@ -2501,7 +2635,7 @@ function WsDebugPanel({
           className="w-full flex items-center justify-between gap-2 px-3 py-1.5 text-[11px] text-ink-600 hover:bg-white/40 transition"
         >
           <span className="inline-flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" aria-hidden />
+            <span className="w-1.5 h-1.5 rounded-full bg-[var(--success-fg)]" aria-hidden />
             WS debug · {entries.length}
           </span>
           <span className="text-ink-400">{open ? "▼" : "▲"}</span>

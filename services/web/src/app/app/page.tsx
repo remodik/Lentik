@@ -22,6 +22,8 @@ import {
   type MyFamily,
 } from "@/lib/api";
 
+import { initPushNotifications, disablePushNotifications } from "@/lib/push";
+
 import AppLayout, { type AppSection } from "@/components/AppLayout";
 import { useConfirm } from "@/components/ConfirmDialog";
 import FamilySettingsModal from "@/components/FamilySettingsModal";
@@ -131,6 +133,9 @@ export default function AppPage() {
       const meData = await getMe();
       setMe(meData);
 
+      // Подписка на push-уведомления (тихо, если выключено/не поддерживается).
+      void initPushNotifications();
+
       const families = await getMyFamilies();
       setMyFamilies(families);
 
@@ -226,6 +231,9 @@ export default function AppPage() {
   );
 
   async function handleLogout() {
+    try {
+      await disablePushNotifications();
+    } catch {}
     try {
       await logout();
     } catch {}

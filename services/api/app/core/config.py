@@ -39,6 +39,15 @@ class Settings(BaseSettings):
     # рекомендуется false + отдельный шаг деплоя, чтобы реплики не гонялись.
     auto_migrate: bool = True
 
+    # ── Web Push (VAPID) — доставка уведомлений вне приложения ───────────────
+    # Пусто → push выключен (как раньше): напоминания только по WS. Генерация:
+    #   pip install py-vapid && vapid --gen   (или `npx web-push generate-vapid-keys`)
+    # Публичный ключ отдаётся фронту, приватный — секрет.
+    vapid_public_key: str | None = None
+    vapid_private_key: str | None = None
+    # Контакт для push-сервисов (mailto: или https URL) — попадает в VAPID-claims.
+    vapid_subject: str = "mailto:admin@lentik.app"
+
     # ── Хранилище загрузок (P4): local | s3 ─────────────────────────────────
     storage_backend: str = "local"
     s3_bucket: str | None = None

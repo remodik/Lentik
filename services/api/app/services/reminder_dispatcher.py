@@ -19,6 +19,7 @@ from sqlalchemy.orm import selectinload
 
 from app.db.session import AsyncSessionLocal
 from app.models.reminder import Reminder, RepeatRule
+from app.services.push import recipients_for_family, send_push_to_users
 from app.ws.manager import ws_manager
 
 logger = logging.getLogger(__name__)
@@ -64,6 +65,29 @@ def _next_occurrence(remind_at: datetime, rule) -> datetime | None:
     return nxt
 
 
+async def _push_reminder(db, r: Reminder) -> None:
+    """Web Push по напоминанию. Личное (или без семьи) — только автору,
+    семейное — всем участникам. Ошибки не пробрасываем."""
+    if r.family_id is None or r.is_personal:
+        recipients = [r.author_id] if r.author_id else []
+    else:
+        recipients = await recipients_for_family(db, r.family_id)
+    if not recipients:
+        return
+    try:
+        await send_push_to_users(
+            recipients,
+            {
+                "title": "Напоминание",
+                "body": r.title,
+                "tag": f"reminder-{r.id}",
+                "url": "/",
+            },
+        )
+    except Exception:
+        logger.exception("reminder push failed")
+
+
 async def dispatch_due_reminders() -> int:
     async with _dispatch_lock:
         now = datetime.now(timezone.utc)
@@ -93,17 +117,9 @@ async def dispatch_due_reminders() -> int:
             sent_count = 0
 
             for r in reminders:
-                target_family_id = r.family_id
-                if target_family_id is None:
-                    # Личное напоминание без семьи — пока пропускаем
-                    # (нет канала для рассылки). Помечаем sent, чтобы не зацикливаться.
-                    r.reminder_sent_at = sent_at
-                    sent_count += 1
-                    continue
-
                 payload = {
                     "type": "reminder",
-                    "family_id": str(target_family_id),
+                    "family_id": str(r.family_id) if r.family_id else None,
                     "reminder_id": str(r.id),
                     "title": r.title,
                     "remind_at": r.remind_at.isoformat(),
@@ -113,7 +129,16 @@ async def dispatch_due_reminders() -> int:
                     "repeat_rule": _repeat_value(r.repeat_rule),
                 }
 
-                await ws_manager.broadcast_to_family(target_family_id, payload)
+                # Доставка в реальном времени (WS).
+                if r.family_id is not None:
+                    await ws_manager.broadcast_to_family(r.family_id, payload)
+                elif r.author_id is not None:
+                    # Личное напоминание без семьи — раньше молча терялось
+                    # (не было канала рассылки). Теперь шлём автору лично.
+                    await ws_manager.broadcast_to_user(r.author_id, payload)
+
+                # Доставка вне приложения (Web Push), best-effort.
+                await _push_reminder(db, r)
 
                 rule_value = _repeat_value(r.repeat_rule)
                 if rule_value == "none":

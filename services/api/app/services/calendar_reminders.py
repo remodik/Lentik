@@ -7,6 +7,7 @@ from sqlalchemy.orm import selectinload
 
 from app.db.session import AsyncSessionLocal
 from app.models.calendar_event import CalendarEvent
+from app.services.push import recipients_for_family, send_push_to_users
 from app.ws.manager import ws_manager
 
 logger = logging.getLogger(__name__)
@@ -64,6 +65,7 @@ async def dispatch_due_calendar_reminders() -> int:
                 if remind_at > now:
                     continue
 
+                offset_label = _format_reminder_offset(reminder_minutes)
                 await ws_manager.broadcast_to_family(
                     event.family_id,
                     {
@@ -73,9 +75,26 @@ async def dispatch_due_calendar_reminders() -> int:
                         "title": event.title,
                         "starts_at": event.starts_at.isoformat(),
                         "reminder_minutes": reminder_minutes,
-                        "offset_label": _format_reminder_offset(reminder_minutes),
+                        "offset_label": offset_label,
                     },
                 )
+
+                # Доставка вне приложения (Web Push), best-effort.
+                try:
+                    recipients = await recipients_for_family(db, event.family_id)
+                    if recipients:
+                        await send_push_to_users(
+                            recipients,
+                            {
+                                "title": "Событие в календаре",
+                                "body": f"{event.title} — {offset_label}",
+                                "tag": f"calendar-{event.id}",
+                                "url": "/",
+                            },
+                        )
+                except Exception:
+                    logger.exception("calendar reminder push failed")
+
                 event.reminder_sent_at = sent_at
                 sent_count += 1
 

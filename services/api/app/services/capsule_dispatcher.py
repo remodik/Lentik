@@ -14,6 +14,7 @@ from sqlalchemy import select
 
 from app.db.session import AsyncSessionLocal
 from app.models.time_capsule import TimeCapsule
+from app.services.push import recipients_for_family, send_push_to_users
 from app.ws.manager import ws_manager
 
 logger = logging.getLogger(__name__)
@@ -56,6 +57,22 @@ async def dispatch_opened_capsules() -> int:
                         "title": c.title,
                     },
                 )
+
+                # Доставка вне приложения (Web Push), best-effort.
+                try:
+                    recipients = await recipients_for_family(db, c.family_id)
+                    if recipients:
+                        await send_push_to_users(
+                            recipients,
+                            {
+                                "title": "Капсула времени открыта",
+                                "body": c.title,
+                                "tag": f"capsule-{c.id}",
+                                "url": "/",
+                            },
+                        )
+                except Exception:
+                    logger.exception("capsule push failed")
             await db.commit()
             return len(capsules)
 

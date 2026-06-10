@@ -47,3 +47,22 @@ class MyFamilyResponse(BaseModel):
     family_name: str
     role: str
     joined_at: datetime
+
+
+class PushKeys(BaseModel):
+    p256dh: str = Field(min_length=1, max_length=512)
+    auth: str = Field(min_length=1, max_length=512)
+
+
+class PushSubscribeRequest(BaseModel):
+    endpoint: str = Field(min_length=1, max_length=2048)
+    keys: PushKeys
+
+
+class PushUnsubscribeRequest(BaseModel):
+    endpoint: str = Field(min_length=1, max_length=2048)
+
+
+class PushPublicKeyResponse(BaseModel):
+    enabled: bool
+    public_key: str | None = None

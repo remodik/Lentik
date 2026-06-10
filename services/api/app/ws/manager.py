@@ -107,6 +107,8 @@ class ConnectionManager:
             await self._close_family_all(UUID(env["id"]))
         elif kind == "force_logout":
             await self._force_logout_user(UUID(env["user_id"]))
+        elif kind == "user":
+            await self._deliver_to_user(UUID(env["user_id"]), env["payload"])
 
     async def _publish(self, env: dict) -> bool:
         """Опубликовать событие в Redis. True — опубликовано (доставку сделает
@@ -264,6 +266,27 @@ class ConnectionManager:
                 dead.append(ws)
         for ws in dead:
             self.disconnect_family(family_id, ws)
+
+    async def broadcast_to_user(self, user_id: UUID, payload: dict) -> None:
+        """Доставить событие всем активным сокетам одного пользователя на всех
+        инстансах (например, личное напоминание без семьи)."""
+        if await self._publish(
+            {"kind": "user", "user_id": str(user_id), "payload": payload}
+        ):
+            return
+        await self._deliver_to_user(user_id, payload)
+
+    async def _deliver_to_user(self, user_id: UUID, payload: dict) -> None:
+        dead: list[WebSocket] = []
+        for ws in list(self._user_connections.get(user_id, set())):
+            try:
+                await ws.send_text(json.dumps(payload, ensure_ascii=False))
+            except Exception:  # noqa: BLE001
+                dead.append(ws)
+        for ws in dead:
+            conns = self._user_connections.get(user_id)
+            if conns is not None:
+                conns.discard(ws)
 
     # ── Принудительное закрытие соединений ──────────────────────────────────
 

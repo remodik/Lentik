@@ -199,6 +199,13 @@ def create_app() -> FastAPI:
         response.headers.setdefault(
             "Permissions-Policy", "geolocation=(), camera=(), microphone=()"
         )
+        # В проде (всегда HTTPS) включаем HSTS. Локально по HTTP не ставим,
+        # иначе браузер запомнит принудительный HTTPS для localhost.
+        if settings.is_production:
+            response.headers.setdefault(
+                "Strict-Transport-Security",
+                "max-age=63072000; includeSubDomains; preload",
+            )
         return response
 
     app_.include_router(uploads_router)

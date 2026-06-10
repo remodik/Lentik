@@ -19,6 +19,7 @@ from app.core.uploads import (
     get_upload_root,
     resolve_upload_path,
 )
+from app.core.file_signatures import enforce_safe_signature
 from app.core.storage import storage
 from app.core.ws_security import is_allowed_ws_origin
 from app.core.jwt import COOKIE_NAME, decode_access_token
@@ -636,7 +637,7 @@ async def delete_chat(
 async def get_messages(
     family_id: UUID,
     chat_id: UUID,
-    limit: int = 50,
+    limit: int = Query(default=50, ge=1, le=100),
     before_id: UUID | None = None,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
@@ -742,7 +743,7 @@ async def mark_messages_read(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    await _require_member(family_id, user, db)
+    m = await _require_member(family_id, user, db)
 
     if not body.message_ids:
         return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -750,6 +751,10 @@ async def mark_messages_read(
     chat = await db.scalar(select(Chat).where(Chat.id == chat_id, Chat.family_id == family_id))
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
+    # Отмечать прочитанным можно только в чате, который участнику виден и чья
+    # история ему доступна — иначе через этот эндпоинт можно зондировать
+    # существование message_id в скрытом чате и слать в него read-события.
+    await require_chat_perm(db, m, chat_id, Perm.VIEW_CHANNEL, Perm.READ_HISTORY)
 
     unique_ids = list(dict.fromkeys(body.message_ids))
     existing_ids = set(
@@ -904,6 +909,9 @@ async def send_message_with_attachments(
                 status_code=413,
                 detail=f"File '{upload.filename}' is too large (max 50 MB)",
             )
+        # Содержимое должно соответствовать расширению — отсекаем замаскированные
+        # файлы (например, HTML/скрипт с расширением картинки) до записи на диск.
+        enforce_safe_signature(ext, payload)
 
         stored_name = f"{uuid.uuid4()}{ext}"
         try:
@@ -983,6 +991,21 @@ async def send_voice_message(
     await require_chat_perm(db, membership, chat_id, Perm.VIEW_CHANNEL, Perm.SEND_VOICE)
     await _enforce_slow_mode(chat, user, membership, db)
 
+    # Голосовое всегда сохраняется как .webm и отдаётся как audio/webm + nosniff,
+    # так что XSS невозможен; но опасный заявленный тип всё равно отклоняем, а
+    # сам тип ограничиваем аудио — чтобы эндпоинт не превращался в обход allowlist.
+    declared = (file.content_type or "").split(";")[0].strip().lower()
+    if declared in DANGEROUS_CONTENT_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="Недопустимый тип содержимого голосового сообщения.",
+        )
+    if declared and not declared.startswith("audio/"):
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="Голосовое сообщение должно быть аудио.",
+        )
+
     payload = await file.read()
     if len(payload) > MAX_VOICE_SIZE:
         raise HTTPException(status_code=413, detail="Voice message too large (max 10 MB)")
@@ -1048,6 +1071,10 @@ async def edit_message(
         db, m, chat_id,
         Perm.MANAGE_OWN_MESSAGES if is_own else Perm.MANAGE_MESSAGES,
     )
+
+    # Модерация применяется и на редактирование — иначе стоп-слова/лимит длины
+    # обходятся: отправил безобидное, потом отредактировал в запрещённое.
+    enforce_message_content(await get_settings(db, family_id), body.text)
 
     if not is_own:
         await log_action(

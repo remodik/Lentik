@@ -15,7 +15,7 @@ from app.core.rate_limit import (
     pin_failure_limiter,
     register_ip_limiter,
 )
-from app.core.security import hash_pin, verify_pin
+from app.core.security import dummy_verify, hash_pin, verify_pin
 from app.core.ws_tickets import ws_ticket_store
 from app.db.deps import get_db
 from app.models.membership import Membership, Role
@@ -135,6 +135,10 @@ async def login_by_pin(
         )
 
     user = await db.scalar(select(User).where(User.username == body.username))
+    # verify_pin (pbkdf2) дорог; чтобы несуществующий логин не отвечал заметно
+    # быстрее существующего, при отсутствии пользователя гоняем фиктивную проверку.
+    if user is None:
+        dummy_verify()
     if not user or not verify_pin(body.pin, user.password_hash):
         await pin_failure_ip_limiter.record(ip_key)
         locked_now, retry_after = await login_throttle.record_failure(db, body.username)

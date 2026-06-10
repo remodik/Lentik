@@ -2,12 +2,13 @@ import uuid
 from pathlib import Path
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.auth.deps import get_current_user
+from app.core.file_signatures import enforce_safe_signature
 from app.core.permissions import Perm, has_perm
 from app.core.storage import storage
 from app.db.deps import get_db
@@ -68,8 +69,8 @@ def _item_to_response(item: GalleryItem) -> GalleryItemResponse:
 @router.get("", response_model=list[GalleryItemResponse])
 async def list_gallery(
     family_id: UUID,
-    limit: int = 50,
-    offset: int = 0,
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -110,6 +111,7 @@ async def upload_to_gallery(
     content = await file.read()
     if len(content) > MAX_FILE_SIZE:
         raise HTTPException(status_code=413, detail="Файл слишком большой (макс. 50 МБ)")
+    enforce_safe_signature(ext, content)
 
     filename = f"{uuid.uuid4()}{ext}"
     try:

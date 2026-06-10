@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.auth.deps import get_current_user
+from app.core.file_signatures import enforce_safe_signature
 from app.core.permissions import Perm, has_perm
 from app.core.storage import storage
 from app.core.uploads import ALLOWED_ATTACHMENT_EXT, DANGEROUS_CONTENT_TYPES
@@ -258,6 +259,8 @@ async def add_entry(
         payload = await upload.read()
         if len(payload) > _MAX_FILE_SIZE:
             raise HTTPException(status_code=413, detail=f"Файл «{original_name}» слишком большой (макс 50 МБ)")
+        # Содержимое обязано соответствовать расширению (анти-маскировка).
+        enforce_safe_signature(ext, payload)
         stored_name = f"{uuid.uuid4()}{ext}"
         # Кладём под {family_id}/ — отдаётся существующим membership-гейтед роутом.
         try:

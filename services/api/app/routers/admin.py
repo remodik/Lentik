@@ -9,7 +9,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -42,8 +42,8 @@ router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(requir
 async def list_users(
     db: AsyncSession = Depends(get_db),
     q: str | None = None,
-    limit: int = 200,
-    offset: int = 0,
+    limit: int = Query(default=200, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
 ):
     member_counts = dict(
         (
@@ -86,8 +86,8 @@ async def list_users(
 async def list_families(
     db: AsyncSession = Depends(get_db),
     q: str | None = None,
-    limit: int = 200,
-    offset: int = 0,
+    limit: int = Query(default=200, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
 ):
     member_counts = dict(
         (
@@ -147,8 +147,8 @@ async def get_stats(db: AsyncSession = Depends(get_db)):
 @router.get("/audit", response_model=list[AdminAuditRow])
 async def list_audit(
     db: AsyncSession = Depends(get_db),
-    limit: int = 100,
-    offset: int = 0,
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
 ):
     rows = (
         await db.execute(

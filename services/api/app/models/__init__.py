@@ -19,6 +19,7 @@ from .note import Note
 from .post import Post
 from .reaction import MessageReaction
 from .reminder import Reminder, RepeatRule
+from .push_subscription import PushSubscription
 from .role import FamilyRole, MemberRole
 from .permission_override import ChannelPermissionOverride, ChatPermissionOverride
 from .audit_log import AuditLogEntry
@@ -55,6 +56,7 @@ __all__ = [
     "Note",
     "Reminder",
     "RepeatRule",
+    "PushSubscription",
     "FamilyRole",
     "MemberRole",
     "ChannelPermissionOverride",

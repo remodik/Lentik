@@ -15,6 +15,8 @@ Runbook для прод-развёртывания.
 | `REDIS_URL` | задать при ≥2 инстансах | общий WS fan-out + rate-limit |
 | `STORAGE_BACKEND` | `s3` при ≥2 инстансах | хранилище загрузок |
 | `S3_BUCKET` / `S3_ENDPOINT_URL` / `S3_REGION` / `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | при `s3` | параметры бакета |
+| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | задать для web-push | уведомления вне приложения (напоминания/события/капсулы). Пусто → только WS |
+| `VAPID_SUBJECT` | `mailto:you@domain` | контакт в VAPID-claims |
 
 > При `IS_PRODUCTION=true` приложение **падает на старте**, если `CORS_ORIGINS`
 > содержит `http://`/localhost (см. `main.py::_check_security_config`).
@@ -88,6 +90,29 @@ API. Регулярно **проверяйте восстановление** н
 > шифрованием диска/тома (LUKS и т.п.) на уровне хоста. Если нужна приватность от
 > самого сервера — требуется E2E (вне текущей архитектуры).
 
+## 5a. Push-уведомления (Web Push / VAPID)
+
+Напоминания, события календаря и открытие капсул доставляются и **вне приложения**
+(когда вкладка закрыта) через Web Push. Включается заданием VAPID-ключей; без них
+поведение прежнее — доставка только по WebSocket открытым клиентам.
+
+```bash
+# 1. Сгенерировать ключи (один раз), положить в секрет-стор:
+pip install py-vapid && vapid --gen   # или: npx web-push generate-vapid-keys
+#    → VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY (base64url)
+# 2. Установить отправщик (он опционален, ленивый импорт):
+pip install pywebpush       # или раскомментировать строку в requirements.txt
+# 3. Задать env: VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT=mailto:you@domain
+```
+
+Фронт сам подписывает браузер после входа (`/me/push/public-key` → `/me/push/subscribe`),
+запрашивая разрешение на уведомления. Push требует HTTPS (`IS_PRODUCTION=true`).
+Просроченные подписки (404/410) удаляются автоматически при отправке.
+
+> Личные напоминания без семьи теперь доставляются автору (раньше молча терялись).
+> Mobile-push (Expo/FCM) можно добавить тем же бэкендом — таблица `push_subscriptions`
+> и сервис `app/services/push.py` каналонезависимы.
+
 ## 6. Наблюдаемость
 - Подключить error-tracking (Sentry) и структурные логи.
 - `/health` — liveness; убедиться, что отражает доступность БД.
@@ -100,6 +125,7 @@ API. Регулярно **проверяйте восстановление** н
 - [ ] uvicorn с `--proxy-headers` (иначе per-IP лимиты не работают)
 - [ ] `BACKUP_ENCRYPTION_KEY` задан (из секрет-стора, хранится отдельно); сервис `backup` запущен; восстановление проверено
 - [ ] Error-tracking и алерты включены
+- [ ] (Опц.) Web-push: `VAPID_*` заданы, `pywebpush` установлен, проверено уведомление
 - [ ] `pytest` зелёный на живой/эфемерной БД
 - [ ] Если ≥2 инстансов: `REDIS_URL` и `STORAGE_BACKEND=s3` заданы
 

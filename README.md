@@ -152,7 +152,3 @@ cp infra/.env.example infra/.env
 
 Полное руководство по развёртыванию в продакшене (reverse-proxy, security headers,
 WebSocket upgrade, масштабирование через Redis) — в [`DEPLOY.md`](DEPLOY.md).
-
-## 📄 Лицензия
-
-[MIT](LICENSE) © remodik

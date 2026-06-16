@@ -65,7 +65,9 @@ _TOKEN_HEADER = "X-Auth-Return-Token"
 
 
 def _wants_token_in_body(flag: str | None) -> bool:
-    return bool(flag) and flag.strip().lower() not in ("", "0", "false", "no")
+    # Явный opt-in (allow-list): токен в теле только при явном утвердительном
+    # значении. Любое прочее (опечатки, "off" и т.п.) — cookie-only, как веб.
+    return bool(flag) and flag.strip().lower() in ("1", "true", "yes", "on")
 
 
 @router.get("/check-username")

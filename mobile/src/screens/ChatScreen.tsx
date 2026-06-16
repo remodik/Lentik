@@ -37,6 +37,8 @@ export default function ChatScreen({ route, navigation }: Props) {
   const flatListRef = useRef<FlatList<Message>>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const pingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Экран размонтирован, пока летел async getWsTicket(): не открываем сокет.
+  const cancelledRef = useRef(false);
 
   const loadMessages = useCallback(async () => {
     try {
@@ -54,15 +56,26 @@ export default function ChatScreen({ route, navigation }: Props) {
   const connectWs = useCallback(async () => {
     try {
       const ticket = await getWsTicket();
-      if (!ticket) return;
+      // Экран мог размонтироваться, пока летел запрос тикета — не открываем сокет.
+      if (cancelledRef.current || !ticket) return;
       const wsBase = API_BASE_URL.replace(/^http/, "ws");
       const url = `${wsBase}/families/${familyId}/chats/${chatId}/ws?ticket=${encodeURIComponent(
         ticket,
       )}`;
       const ws = new WebSocket(url);
       wsRef.current = ws;
+      // Если cleanup успел отработать до присвоения wsRef — закрываем сами.
+      if (cancelledRef.current) {
+        ws.close();
+        wsRef.current = null;
+        return;
+      }
 
       ws.onopen = () => {
+        if (cancelledRef.current) {
+          ws.close();
+          return;
+        }
         setWsConnected(true);
         pingRef.current = setInterval(() => {
           if (ws.readyState === WebSocket.OPEN) ws.send("ping");
@@ -99,9 +112,11 @@ export default function ChatScreen({ route, navigation }: Props) {
   }, [familyId, chatId]);
 
   useEffect(() => {
+    cancelledRef.current = false;
     void loadMessages();
     void connectWs();
     return () => {
+      cancelledRef.current = true;
       if (pingRef.current) clearInterval(pingRef.current);
       if (wsRef.current) wsRef.current.close();
     };

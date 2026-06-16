@@ -1,40 +1,56 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
-  View, Text, FlatList, TouchableOpacity,
-  StyleSheet, ActivityIndicator, Modal, TextInput,
-  RefreshControl, Alert, ScrollView, Switch,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+  View,
+  Text,
+  FlatList,
+  TouchableOpacity,
+  StyleSheet,
+  ActivityIndicator,
+  Modal,
+  TextInput,
+  RefreshControl,
+  Alert,
+  ScrollView,
+  Switch,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
 import {
-  listReminders, createReminder, toggleReminderDone, deleteReminder,
-} from '../api/reminders';
-import { useFamily } from '../context/FamilyContext';
-import { useAuth } from '../context/AuthContext';
-import { colors, fontSize, spacing, radius, buttonH } from '../theme';
+  listReminders,
+  createReminder,
+  toggleReminderDone,
+  deleteReminder,
+} from "../api/reminders";
+import { apiErrorMessage } from "../api/errors";
+import { useFamily } from "../context/FamilyContext";
+import { useAuth } from "../context/AuthContext";
+import { colors, fontSize, spacing, radius, buttonH } from "../theme";
+import type { Reminder, RepeatRule } from "../api/types";
 
-const REPEAT_LABELS = {
-  none: 'Не повторять',
-  daily: 'Каждый день',
-  weekly: 'Каждую неделю',
-  monthly: 'Каждый месяц',
+type FilterKey = "upcoming" | "all" | "done";
+
+const REPEAT_LABELS: Record<RepeatRule, string> = {
+  none: "Не повторять",
+  daily: "Каждый день",
+  weekly: "Каждую неделю",
+  monthly: "Каждый месяц",
 };
 
-const REPEAT_SHORT = {
-  none: '',
-  daily: 'каждый день',
-  weekly: 'каждую неделю',
-  monthly: 'каждый месяц',
+const REPEAT_SHORT: Record<RepeatRule, string> = {
+  none: "",
+  daily: "каждый день",
+  weekly: "каждую неделю",
+  monthly: "каждый месяц",
 };
 
 // ---------- helpers ----------
 
-const pad2 = (n) => String(n).padStart(2, '0');
+const pad2 = (n: number) => String(n).padStart(2, "0");
 
-const toLocalIso = (date) => {
+const toLocalIso = (date: Date): string => {
   // ISO с местным временем + смещением, чтобы бэкенд получил TZ-aware datetime
   const tz = -date.getTimezoneOffset();
-  const sign = tz >= 0 ? '+' : '-';
+  const sign = tz >= 0 ? "+" : "-";
   const tzh = pad2(Math.floor(Math.abs(tz) / 60));
   const tzm = pad2(Math.abs(tz) % 60);
   return (
@@ -43,9 +59,9 @@ const toLocalIso = (date) => {
   );
 };
 
-const fromIsoLocal = (iso) => new Date(iso);
+const fromIsoLocal = (iso: string): Date => new Date(iso);
 
-const formatWhen = (iso) => {
+const formatWhen = (iso: string): string => {
   const d = fromIsoLocal(iso);
   const now = new Date();
   const sameDay =
@@ -64,12 +80,12 @@ const formatWhen = (iso) => {
   return `${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.${d.getFullYear()} в ${time}`;
 };
 
-const isOverdue = (iso, isDone) => {
+const isOverdue = (iso: string, isDone: boolean): boolean => {
   if (isDone) return false;
   return fromIsoLocal(iso).getTime() < Date.now();
 };
 
-const isToday = (iso) => {
+const isToday = (iso: string): boolean => {
   const d = fromIsoLocal(iso);
   const now = new Date();
   return (
@@ -79,7 +95,7 @@ const isToday = (iso) => {
   );
 };
 
-const initialRemindAt = () => {
+const initialRemindAt = (): Date => {
   const d = new Date();
   d.setMinutes(0, 0, 0);
   d.setHours(d.getHours() + 1);
@@ -91,20 +107,21 @@ const initialRemindAt = () => {
 export default function RemindersScreen() {
   const { currentFamily } = useFamily();
   const { user } = useAuth();
-  const [items, setItems] = useState([]);
-  const [filter, setFilter] = useState('upcoming'); // upcoming | all | done
+  const [items, setItems] = useState<Reminder[]>([]);
+  const [filter, setFilter] = useState<FilterKey>("upcoming");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const [showAdd, setShowAdd] = useState(false);
-  const [formTitle, setFormTitle] = useState('');
-  const [formNotes, setFormNotes] = useState('');
-  const [formDate, setFormDate] = useState(initialRemindAt());
-  const [formRepeat, setFormRepeat] = useState('none');
+  const [formTitle, setFormTitle] = useState("");
+  const [formNotes, setFormNotes] = useState("");
+  const [formDate, setFormDate] = useState<Date>(initialRemindAt());
+  const [formRepeat, setFormRepeat] = useState<RepeatRule>("none");
   const [formPersonal, setFormPersonal] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const loadAll = useCallback(async () => {
+    if (!currentFamily) return;
     try {
       const { data } = await listReminders(currentFamily.family_id);
       setItems(data);
@@ -118,47 +135,47 @@ export default function RemindersScreen() {
 
   useEffect(() => {
     setLoading(true);
-    loadAll();
+    void loadAll();
   }, [loadAll]);
 
-  const onRefresh = () => { setRefreshing(true); loadAll(); };
+  const onRefresh = () => {
+    setRefreshing(true);
+    void loadAll();
+  };
 
   const filteredItems = useMemo(() => {
-    if (filter === 'all') return items;
-    if (filter === 'done') return items.filter((r) => r.is_done);
+    if (filter === "all") return items;
+    if (filter === "done") return items.filter((r) => r.is_done);
     return items.filter((r) => !r.is_done);
   }, [items, filter]);
 
   const openAdd = () => {
-    setFormTitle('');
-    setFormNotes('');
+    setFormTitle("");
+    setFormNotes("");
     setFormDate(initialRemindAt());
-    setFormRepeat('none');
+    setFormRepeat("none");
     setFormPersonal(false);
     setShowAdd(true);
   };
 
-  const handleSave = async () => {
+  const handleSave = () => {
     const title = formTitle.trim();
     if (!title) {
-      Alert.alert('Ошибка', 'Введите название напоминания');
+      Alert.alert("Ошибка", "Введите название напоминания");
       return;
     }
-    if (formDate.getTime() < Date.now() - 60 * 1000 && formRepeat === 'none') {
-      Alert.alert(
-        'Время в прошлом',
-        'Указанное время уже прошло. Сохранить всё равно?',
-        [
-          { text: 'Отмена', style: 'cancel' },
-          { text: 'Сохранить', onPress: () => doSave(title) },
-        ],
-      );
+    if (formDate.getTime() < Date.now() - 60 * 1000 && formRepeat === "none") {
+      Alert.alert("Время в прошлом", "Указанное время уже прошло. Сохранить всё равно?", [
+        { text: "Отмена", style: "cancel" },
+        { text: "Сохранить", onPress: () => void doSave(title) },
+      ]);
       return;
     }
-    doSave(title);
+    void doSave(title);
   };
 
-  const doSave = async (title) => {
+  const doSave = async (title: string) => {
+    if (!currentFamily) return;
     setSaving(true);
     try {
       await createReminder(currentFamily.family_id, {
@@ -171,53 +188,46 @@ export default function RemindersScreen() {
       setShowAdd(false);
       await loadAll();
     } catch (err) {
-      const msg = err?.response?.data?.detail || 'Не удалось сохранить';
-      Alert.alert('Ошибка', String(msg));
+      Alert.alert("Ошибка", apiErrorMessage(err, "Не удалось сохранить"));
     } finally {
       setSaving(false);
     }
   };
 
-  const handleToggle = async (r) => {
+  const handleToggle = async (r: Reminder) => {
     try {
       await toggleReminderDone(r.id);
       await loadAll();
     } catch (err) {
-      const msg = err?.response?.data?.detail || 'Не удалось обновить';
-      Alert.alert('Ошибка', String(msg));
+      Alert.alert("Ошибка", apiErrorMessage(err, "Не удалось обновить"));
     }
   };
 
-  const handleDelete = (r) => {
+  const handleDelete = (r: Reminder) => {
     if (r.author_id !== user?.id) {
-      Alert.alert('Нельзя удалить', 'Удалять может только автор напоминания');
+      Alert.alert("Нельзя удалить", "Удалять может только автор напоминания");
       return;
     }
-    Alert.alert(
-      'Удалить?',
-      `Удалить «${r.title}»?`,
-      [
-        { text: 'Отмена', style: 'cancel' },
-        {
-          text: 'Удалить',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await deleteReminder(r.id);
-              await loadAll();
-            } catch (err) {
-              const msg = err?.response?.data?.detail || 'Не удалось удалить';
-              Alert.alert('Ошибка', String(msg));
-            }
-          },
+    Alert.alert("Удалить?", `Удалить «${r.title}»?`, [
+      { text: "Отмена", style: "cancel" },
+      {
+        text: "Удалить",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await deleteReminder(r.id);
+            await loadAll();
+          } catch (err) {
+            Alert.alert("Ошибка", apiErrorMessage(err, "Не удалось удалить"));
+          }
         },
-      ],
-    );
+      },
+    ]);
   };
 
   // ---------- date/time stepper helpers ----------
 
-  const shiftDate = (delta) => {
+  const shiftDate = (delta: number) => {
     const d = new Date(formDate);
     d.setDate(d.getDate() + delta);
     setFormDate(d);
@@ -227,19 +237,18 @@ export default function RemindersScreen() {
     const d = new Date();
     d.setHours(formDate.getHours(), formDate.getMinutes(), 0, 0);
     if (d.getTime() < Date.now()) {
-      // если сегодня уже прошло — на час вперёд
       d.setHours(new Date().getHours() + 1, 0, 0, 0);
     }
     setFormDate(d);
   };
 
-  const shiftHours = (delta) => {
+  const shiftHours = (delta: number) => {
     const d = new Date(formDate);
     d.setHours(d.getHours() + delta);
     setFormDate(d);
   };
 
-  const shiftMinutes = (delta) => {
+  const shiftMinutes = (delta: number) => {
     const d = new Date(formDate);
     d.setMinutes(d.getMinutes() + delta);
     setFormDate(d);
@@ -247,7 +256,7 @@ export default function RemindersScreen() {
 
   // ---------- render ----------
 
-  const renderItem = ({ item }) => {
+  const renderItem = ({ item }: { item: Reminder }) => {
     const overdue = isOverdue(item.remind_at, item.is_done);
     const today = isToday(item.remind_at);
     const repeatShort = REPEAT_SHORT[item.repeat_rule];
@@ -276,22 +285,24 @@ export default function RemindersScreen() {
           <Text
             style={[
               styles.rowTitle,
-              item.is_done && { textDecorationLine: 'line-through', color: colors.textMuted },
+              item.is_done && { textDecorationLine: "line-through", color: colors.textMuted },
             ]}
             numberOfLines={2}
           >
             {item.title}
           </Text>
           {item.notes ? (
-            <Text style={styles.rowNotes} numberOfLines={2}>{item.notes}</Text>
+            <Text style={styles.rowNotes} numberOfLines={2}>
+              {item.notes}
+            </Text>
           ) : null}
           <View style={styles.metaRow}>
             <Ionicons
-              name={overdue ? 'alert-circle' : 'time-outline'}
+              name={overdue ? "alert-circle" : "time-outline"}
               size={14}
               color={overdue ? colors.error : colors.textSecondary}
             />
-            <Text style={[styles.rowMeta, overdue && { color: colors.error, fontWeight: '700' }]}>
+            <Text style={[styles.rowMeta, overdue && { color: colors.error, fontWeight: "700" }]}>
               {formatWhen(item.remind_at)}
             </Text>
             {repeatShort ? (
@@ -314,12 +325,22 @@ export default function RemindersScreen() {
           ) : null}
         </View>
 
-        <TouchableOpacity onPress={() => handleDelete(item)} style={styles.deleteBtn} activeOpacity={0.6}>
+        <TouchableOpacity
+          onPress={() => handleDelete(item)}
+          style={styles.deleteBtn}
+          activeOpacity={0.6}
+        >
           <Ionicons name="trash-outline" size={22} color={colors.textMuted} />
         </TouchableOpacity>
       </View>
     );
   };
+
+  const FILTERS: { key: FilterKey; label: string }[] = [
+    { key: "upcoming", label: "Активные" },
+    { key: "all", label: "Все" },
+    { key: "done", label: "Готовые" },
+  ];
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -331,11 +352,7 @@ export default function RemindersScreen() {
       </View>
 
       <View style={styles.filterRow}>
-        {[
-          { key: 'upcoming', label: 'Активные' },
-          { key: 'all', label: 'Все' },
-          { key: 'done', label: 'Готовые' },
-        ].map((f) => (
+        {FILTERS.map((f) => (
           <TouchableOpacity
             key={f.key}
             style={[styles.filterChip, filter === f.key && styles.filterChipActive]}
@@ -350,7 +367,7 @@ export default function RemindersScreen() {
       </View>
 
       {loading ? (
-        <View style={{ flex: 1, justifyContent: 'center' }}>
+        <View style={{ flex: 1, justifyContent: "center" }}>
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
       ) : (
@@ -359,20 +376,24 @@ export default function RemindersScreen() {
           keyExtractor={(i) => i.id}
           contentContainerStyle={{ paddingTop: spacing.sm, paddingBottom: spacing.xl }}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[colors.primary]}
+            />
           }
           ListEmptyComponent={
             <View style={styles.empty}>
               <Ionicons name="alarm-outline" size={64} color={colors.primaryLight} />
               <Text style={styles.emptyTitle}>
-                {filter === 'done' ? 'Нет выполненных' : 'Нет напоминаний'}
+                {filter === "done" ? "Нет выполненных" : "Нет напоминаний"}
               </Text>
               <Text style={styles.emptyText}>
-                {filter === 'done'
-                  ? 'Здесь появятся выполненные пункты'
-                  : 'Нажмите «+», чтобы добавить первое'}
+                {filter === "done"
+                  ? "Здесь появятся выполненные пункты"
+                  : "Нажмите «+», чтобы добавить первое"}
               </Text>
-              {filter !== 'done' && (
+              {filter !== "done" && (
                 <TouchableOpacity style={styles.emptyBtn} onPress={openAdd} activeOpacity={0.85}>
                   <Ionicons name="add" size={24} color={colors.white} />
                   <Text style={styles.emptyBtnText}>Добавить напоминание</Text>
@@ -384,7 +405,6 @@ export default function RemindersScreen() {
         />
       )}
 
-      {/* Модалка создания */}
       <Modal visible={showAdd} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
@@ -412,16 +432,24 @@ export default function RemindersScreen() {
                 multiline
               />
 
-              {/* Дата */}
               <Text style={styles.fieldLabel}>Дата</Text>
               <View style={styles.stepperRow}>
-                <TouchableOpacity style={styles.stepperBtn} onPress={() => shiftDate(-1)} activeOpacity={0.7}>
+                <TouchableOpacity
+                  style={styles.stepperBtn}
+                  onPress={() => shiftDate(-1)}
+                  activeOpacity={0.7}
+                >
                   <Ionicons name="chevron-back" size={26} color={colors.primary} />
                 </TouchableOpacity>
                 <Text style={styles.stepperValue}>
-                  {pad2(formDate.getDate())}.{pad2(formDate.getMonth() + 1)}.{formDate.getFullYear()}
+                  {pad2(formDate.getDate())}.{pad2(formDate.getMonth() + 1)}.
+                  {formDate.getFullYear()}
                 </Text>
-                <TouchableOpacity style={styles.stepperBtn} onPress={() => shiftDate(1)} activeOpacity={0.7}>
+                <TouchableOpacity
+                  style={styles.stepperBtn}
+                  onPress={() => shiftDate(1)}
+                  activeOpacity={0.7}
+                >
                   <Ionicons name="chevron-forward" size={26} color={colors.primary} />
                 </TouchableOpacity>
               </View>
@@ -429,50 +457,67 @@ export default function RemindersScreen() {
                 <Text style={styles.todayLink}>Сегодня</Text>
               </TouchableOpacity>
 
-              {/* Время: часы + минуты */}
               <Text style={styles.fieldLabel}>Время</Text>
               <View style={styles.timeRow}>
                 <View style={styles.timeBlock}>
-                  <TouchableOpacity style={styles.timeBtn} onPress={() => shiftHours(1)} activeOpacity={0.7}>
+                  <TouchableOpacity
+                    style={styles.timeBtn}
+                    onPress={() => shiftHours(1)}
+                    activeOpacity={0.7}
+                  >
                     <Ionicons name="chevron-up" size={24} color={colors.primary} />
                   </TouchableOpacity>
                   <Text style={styles.timeValue}>{pad2(formDate.getHours())}</Text>
-                  <TouchableOpacity style={styles.timeBtn} onPress={() => shiftHours(-1)} activeOpacity={0.7}>
+                  <TouchableOpacity
+                    style={styles.timeBtn}
+                    onPress={() => shiftHours(-1)}
+                    activeOpacity={0.7}
+                  >
                     <Ionicons name="chevron-down" size={24} color={colors.primary} />
                   </TouchableOpacity>
                   <Text style={styles.timeUnit}>часы</Text>
                 </View>
                 <Text style={styles.timeColon}>:</Text>
                 <View style={styles.timeBlock}>
-                  <TouchableOpacity style={styles.timeBtn} onPress={() => shiftMinutes(5)} activeOpacity={0.7}>
+                  <TouchableOpacity
+                    style={styles.timeBtn}
+                    onPress={() => shiftMinutes(5)}
+                    activeOpacity={0.7}
+                  >
                     <Ionicons name="chevron-up" size={24} color={colors.primary} />
                   </TouchableOpacity>
                   <Text style={styles.timeValue}>{pad2(formDate.getMinutes())}</Text>
-                  <TouchableOpacity style={styles.timeBtn} onPress={() => shiftMinutes(-5)} activeOpacity={0.7}>
+                  <TouchableOpacity
+                    style={styles.timeBtn}
+                    onPress={() => shiftMinutes(-5)}
+                    activeOpacity={0.7}
+                  >
                     <Ionicons name="chevron-down" size={24} color={colors.primary} />
                   </TouchableOpacity>
                   <Text style={styles.timeUnit}>минуты</Text>
                 </View>
               </View>
 
-              {/* Повторение */}
               <Text style={styles.fieldLabel}>Повторение</Text>
               <View style={styles.repeatGrid}>
-                {Object.entries(REPEAT_LABELS).map(([key, label]) => (
-                  <TouchableOpacity
-                    key={key}
-                    style={[styles.repeatChip, formRepeat === key && styles.repeatChipActive]}
-                    onPress={() => setFormRepeat(key)}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={[styles.repeatText, formRepeat === key && { color: colors.white }]}>
-                      {label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+                {(Object.entries(REPEAT_LABELS) as [RepeatRule, string][]).map(
+                  ([key, label]) => (
+                    <TouchableOpacity
+                      key={key}
+                      style={[styles.repeatChip, formRepeat === key && styles.repeatChipActive]}
+                      onPress={() => setFormRepeat(key)}
+                      activeOpacity={0.8}
+                    >
+                      <Text
+                        style={[styles.repeatText, formRepeat === key && { color: colors.white }]}
+                      >
+                        {label}
+                      </Text>
+                    </TouchableOpacity>
+                  ),
+                )}
               </View>
 
-              {/* Личное */}
               <View style={styles.personalRow}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.fieldLabel}>Только для меня</Text>
@@ -520,66 +565,104 @@ export default function RemindersScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   titleBar: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.md,
-    borderBottomWidth: 1, borderBottomColor: colors.border,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
     backgroundColor: colors.surface,
   },
-  title: { fontSize: fontSize.xl, fontWeight: '800', color: colors.text },
+  title: { fontSize: fontSize.xl, fontWeight: "800", color: colors.text },
   addBtnInline: { padding: 4 },
 
   filterRow: {
-    flexDirection: 'row', gap: spacing.sm,
-    paddingHorizontal: spacing.md, paddingVertical: spacing.md,
+    flexDirection: "row",
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
   },
   filterChip: {
-    flex: 1, height: 42, alignItems: 'center', justifyContent: 'center',
-    borderRadius: radius.md, backgroundColor: colors.surfaceWarm,
+    flex: 1,
+    height: 42,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceWarm,
   },
   filterChipActive: { backgroundColor: colors.primary },
-  filterText: { fontSize: fontSize.sm, fontWeight: '600', color: colors.textSecondary },
+  filterText: { fontSize: fontSize.sm, fontWeight: "600", color: colors.textSecondary },
   filterTextActive: { color: colors.white },
 
   row: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
     backgroundColor: colors.surface,
-    marginHorizontal: spacing.md, marginTop: spacing.sm,
-    padding: spacing.md, borderRadius: radius.md,
-    elevation: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 2,
-    borderLeftWidth: 4, borderLeftColor: colors.border,
+    marginHorizontal: spacing.md,
+    marginTop: spacing.sm,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    elevation: 1,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 2,
+    borderLeftWidth: 4,
+    borderLeftColor: colors.border,
   },
   rowDone: { opacity: 0.6 },
   rowOverdue: { borderLeftColor: colors.error },
   rowToday: { borderLeftColor: colors.primary },
   checkBox: { padding: 4 },
   rowInfo: { flex: 1 },
-  rowTitle: { fontSize: fontSize.base, fontWeight: '700', color: colors.text },
+  rowTitle: { fontSize: fontSize.base, fontWeight: "700", color: colors.text },
   rowNotes: { fontSize: fontSize.sm, color: colors.textSecondary, marginTop: 2 },
-  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 6, flexWrap: 'wrap' },
+  metaRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 6, flexWrap: "wrap" },
   rowMeta: { fontSize: fontSize.xs, color: colors.textSecondary },
   rowAuthor: { fontSize: fontSize.xs, color: colors.textMuted, marginTop: 2 },
   deleteBtn: { padding: spacing.xs },
 
-  empty: { alignItems: 'center', padding: spacing.xl, marginTop: spacing.xl },
-  emptyTitle: { fontSize: fontSize.lg, fontWeight: '700', color: colors.text, marginTop: spacing.md },
-  emptyText: { fontSize: fontSize.base, color: colors.textSecondary, marginTop: spacing.sm, textAlign: 'center' },
-  emptyBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
-    backgroundColor: colors.primary, paddingHorizontal: spacing.xl, height: buttonH,
-    borderRadius: radius.md, marginTop: spacing.xl,
+  empty: { alignItems: "center", padding: spacing.xl, marginTop: spacing.xl },
+  emptyTitle: { fontSize: fontSize.lg, fontWeight: "700", color: colors.text, marginTop: spacing.md },
+  emptyText: {
+    fontSize: fontSize.base,
+    color: colors.textSecondary,
+    marginTop: spacing.sm,
+    textAlign: "center",
   },
-  emptyBtnText: { fontSize: fontSize.base, fontWeight: '700', color: colors.white },
+  emptyBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.xl,
+    height: buttonH,
+    borderRadius: radius.md,
+    marginTop: spacing.xl,
+  },
+  emptyBtnText: { fontSize: fontSize.base, fontWeight: "700", color: colors.white },
 
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" },
   modalBox: {
     backgroundColor: colors.surface,
-    borderTopLeftRadius: 24, borderTopRightRadius: 24,
-    padding: spacing.xl, paddingBottom: 40,
-    maxHeight: '92%',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: spacing.xl,
+    paddingBottom: 40,
+    maxHeight: "92%",
   },
-  modalTitle: { fontSize: fontSize.xl, fontWeight: '800', color: colors.text, marginBottom: spacing.lg },
+  modalTitle: { fontSize: fontSize.xl, fontWeight: "800", color: colors.text, marginBottom: spacing.lg },
 
-  fieldLabel: { fontSize: fontSize.sm, fontWeight: '700', color: colors.textSecondary, marginBottom: spacing.xs, marginTop: spacing.sm },
+  fieldLabel: {
+    fontSize: fontSize.sm,
+    fontWeight: "700",
+    color: colors.textSecondary,
+    marginBottom: spacing.xs,
+    marginTop: spacing.sm,
+  },
   input: {
     minHeight: buttonH,
     backgroundColor: colors.inputBg,
@@ -587,62 +670,90 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     fontSize: fontSize.base,
     color: colors.text,
-    borderWidth: 1, borderColor: colors.border,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
 
   stepperRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: colors.inputBg, borderRadius: radius.md,
-    borderWidth: 1, borderColor: colors.border,
-    height: buttonH, paddingHorizontal: spacing.sm,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: colors.inputBg,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    height: buttonH,
+    paddingHorizontal: spacing.sm,
   },
   stepperBtn: { padding: spacing.sm },
-  stepperValue: { fontSize: fontSize.lg, fontWeight: '700', color: colors.text },
+  stepperValue: { fontSize: fontSize.lg, fontWeight: "700", color: colors.text },
   todayLink: {
-    fontSize: fontSize.sm, color: colors.primary, fontWeight: '600',
-    marginTop: spacing.xs, alignSelf: 'flex-end',
+    fontSize: fontSize.sm,
+    color: colors.primary,
+    fontWeight: "600",
+    marginTop: spacing.xs,
+    alignSelf: "flex-end",
   },
 
   timeRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     gap: spacing.md,
-    backgroundColor: colors.inputBg, borderRadius: radius.md,
-    borderWidth: 1, borderColor: colors.border,
+    backgroundColor: colors.inputBg,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
     paddingVertical: spacing.sm,
   },
-  timeBlock: { alignItems: 'center', minWidth: 80 },
+  timeBlock: { alignItems: "center", minWidth: 80 },
   timeBtn: { padding: 4 },
-  timeValue: { fontSize: fontSize['2xl'], fontWeight: '800', color: colors.text, paddingVertical: 2 },
+  timeValue: { fontSize: fontSize["2xl"], fontWeight: "800", color: colors.text, paddingVertical: 2 },
   timeUnit: { fontSize: fontSize.xs, color: colors.textMuted, marginTop: 2 },
-  timeColon: { fontSize: fontSize['2xl'], fontWeight: '800', color: colors.text },
+  timeColon: { fontSize: fontSize["2xl"], fontWeight: "800", color: colors.text },
 
-  repeatGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  repeatGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   repeatChip: {
-    paddingHorizontal: spacing.md, height: 44, borderRadius: radius.md,
-    alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: spacing.md,
+    height: 44,
+    borderRadius: radius.md,
+    alignItems: "center",
+    justifyContent: "center",
     backgroundColor: colors.surfaceWarm,
-    borderWidth: 1, borderColor: colors.border,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   repeatChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-  repeatText: { fontSize: fontSize.sm, fontWeight: '600', color: colors.text },
+  repeatText: { fontSize: fontSize.sm, fontWeight: "600", color: colors.text },
 
   personalRow: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
-    marginTop: spacing.md, paddingTop: spacing.md,
-    borderTopWidth: 1, borderTopColor: colors.border,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
   },
   personalHint: { fontSize: fontSize.xs, color: colors.textSecondary, marginTop: 2 },
 
   saveBtn: {
-    height: buttonH, backgroundColor: colors.primary,
-    borderRadius: radius.md, alignItems: 'center', justifyContent: 'center',
+    height: buttonH,
+    backgroundColor: colors.primary,
+    borderRadius: radius.md,
+    alignItems: "center",
+    justifyContent: "center",
     marginTop: spacing.sm,
   },
-  saveText: { fontSize: fontSize.base, fontWeight: '700', color: colors.white },
+  saveText: { fontSize: fontSize.base, fontWeight: "700", color: colors.white },
   cancelBtn: {
-    height: buttonH, alignItems: 'center', justifyContent: 'center',
-    borderWidth: 2, borderColor: colors.border, borderRadius: radius.md,
+    height: buttonH,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: colors.border,
+    borderRadius: radius.md,
     marginTop: spacing.sm,
   },
-  cancelText: { fontSize: fontSize.base, fontWeight: '600', color: colors.textSecondary },
+  cancelText: { fontSize: fontSize.base, fontWeight: "600", color: colors.textSecondary },
 });

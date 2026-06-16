@@ -4,19 +4,19 @@ Runbook для прод-развёртывания.
 
 ## 1. Конфигурация (env)
 
-| Переменная | Прод | Назначение |
-|---|---|---|
-| `IS_PRODUCTION` | `true` | Secure-cookie; небезопасный CORS валит старт |
-| `JWT_SECRET` | ≥32 симв. из секрет-стора | подпись JWT |
-| `DATABASE_URL` | управляемый Postgres | БД |
-| `CORS_ORIGINS` | только `https://`-origin фронта, без `*`/localhost | CORS |
-| `AUTO_MIGRATE` | `false` | миграции — отдельным шагом (см. §2) |
-| `SCHEDULER_ENABLED` | `true` на одном наборе инстансов | планировщик напоминаний |
-| `REDIS_URL` | задать при ≥2 инстансах | общий WS fan-out + rate-limit |
-| `STORAGE_BACKEND` | `s3` при ≥2 инстансах | хранилище загрузок |
-| `S3_BUCKET` / `S3_ENDPOINT_URL` / `S3_REGION` / `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | при `s3` | параметры бакета |
-| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | задать для web-push | уведомления вне приложения (напоминания/события/капсулы). Пусто → только WS |
-| `VAPID_SUBJECT` | `mailto:you@domain` | контакт в VAPID-claims |
+| Переменная                                                                                  | Прод                                               | Назначение                                                                  |
+|---------------------------------------------------------------------------------------------|----------------------------------------------------|-----------------------------------------------------------------------------|
+| `IS_PRODUCTION`                                                                             | `true`                                             | Secure-cookie; небезопасный CORS валит старт                                |
+| `JWT_SECRET`                                                                                | ≥32 симв. из секрет-стора                          | подпись JWT                                                                 |
+| `DATABASE_URL`                                                                              | управляемый Postgres                               | БД                                                                          |
+| `CORS_ORIGINS`                                                                              | только `https://`-origin фронта, без `*`/localhost | CORS                                                                        |
+| `AUTO_MIGRATE`                                                                              | `false`                                            | миграции — отдельным шагом (см. §2)                                         |
+| `SCHEDULER_ENABLED`                                                                         | `true` на одном наборе инстансов                   | планировщик напоминаний                                                     |
+| `REDIS_URL`                                                                                 | задать при ≥2 инстансах                            | общий WS fan-out + rate-limit                                               |
+| `STORAGE_BACKEND`                                                                           | `s3` при ≥2 инстансах                              | хранилище загрузок                                                          |
+| `S3_BUCKET` / `S3_ENDPOINT_URL` / `S3_REGION` / `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | при `s3`                                           | параметры бакета                                                            |
+| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY`                                                    | задать для web-push                                | уведомления вне приложения (напоминания/события/капсулы). Пусто → только WS |
+| `VAPID_SUBJECT`                                                                             | `mailto:you@domain`                                | контакт в VAPID-claims                                                      |
 
 > При `IS_PRODUCTION=true` приложение **падает на старте**, если `CORS_ORIGINS`
 > содержит `http://`/localhost (см. `main.py::_check_security_config`).

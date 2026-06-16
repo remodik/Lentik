@@ -2,27 +2,79 @@
 /* Elderly-friendly: large text, big touch targets, clear labels          */
 
 /* ── Bottom navigation bar ──────────────────────────────────────────── */
-.mobile-bottom-nav {
+.mobile-nav-wrap {
   display: none;
 }
 
 @media (max-width: 767px) {
-  /* Show bottom nav */
-  .mobile-bottom-nav {
-    display: flex;
+  /* Fixed wrapper holds the sub-section pill row + the category tab bar. */
+  .mobile-nav-wrap {
+    display: block;
     position: fixed;
     bottom: 0;
     left: 0;
     right: 0;
     z-index: 200;
-    height: 72px;
     padding-bottom: env(safe-area-inset-bottom, 0px);
-    padding-top: 6px;
     background: rgba(253, 250, 245, 0.97);
     backdrop-filter: blur(24px);
     -webkit-backdrop-filter: blur(24px);
     border-top: 1px solid rgba(255, 255, 255, 0.7);
     box-shadow: 0 -4px 24px rgba(28, 23, 20, 0.10);
+  }
+
+  /* Sub-section pills (horizontal-scroll) for the active category.
+     Scroll-shadow trick (Lea Verou): edge shadows appear only when there is
+     more to scroll and hide at the ends. Cover layers (local) match the wrap
+     background; shadow layers (scroll) sit under them at the edges. */
+  .mobile-subnav {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    padding: 7px 12px;
+    border-bottom: 1px solid rgba(28, 23, 20, 0.06);
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    background:
+      linear-gradient(to right, #fdfaf5 30%, rgba(253, 250, 245, 0)) left center,
+      linear-gradient(to left, #fdfaf5 30%, rgba(253, 250, 245, 0)) right center,
+      linear-gradient(to right, rgba(28, 23, 20, 0.16), rgba(28, 23, 20, 0)) left center,
+      linear-gradient(to left, rgba(28, 23, 20, 0.16), rgba(28, 23, 20, 0)) right center;
+    background-repeat: no-repeat;
+    background-size: 44px 100%, 44px 100%, 16px 100%, 16px 100%;
+    background-attachment: local, local, scroll, scroll;
+  }
+
+  .mobile-subnav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .mobile-subnav-pill {
+    flex: 0 0 auto;
+    border: none;
+    background: rgba(28, 23, 20, 0.05);
+    color: #6b5a4e;
+    font-size: 13px;
+    font-weight: 600;
+    font-family: 'DM Sans', sans-serif;
+    padding: 7px 14px;
+    border-radius: 999px;
+    cursor: pointer;
+    white-space: nowrap;
+    -webkit-tap-highlight-color: transparent;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+
+  .mobile-subnav-pill.active {
+    background: var(--accent, #c4956a);
+    color: #fff;
+  }
+
+  /* Category tab bar. */
+  .mobile-bottom-nav {
+    display: flex;
+    height: 64px;
+    padding-top: 6px;
     align-items: flex-start;
     justify-content: space-around;
   }
@@ -85,9 +137,9 @@
     grid-template-columns: unset !important;
   }
 
-  /* ── Padding to avoid content behind bottom nav ──────────────────── */
+  /* ── Padding to avoid content behind bottom nav (subnav 46 + tabs 64) ─ */
   .app-main {
-    padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px)) !important;
+    padding-bottom: calc(110px + env(safe-area-inset-bottom, 0px)) !important;
   }
 
   /* ── Simplified topbar ───────────────────────────────────────────── */

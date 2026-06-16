@@ -1,18 +1,24 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { colors, fontSize, radius, spacing } from '../theme';
+import React from "react";
+import { View, Text, StyleSheet } from "react-native";
+import { colors, fontSize, radius, spacing } from "../theme";
+import type { Message } from "../api/types";
 
-const formatTime = (dateStr) => {
-  if (!dateStr) return '';
+const formatTime = (dateStr: string | null | undefined): string => {
+  if (!dateStr) return "";
   const d = new Date(dateStr);
-  return d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
 };
 
-export default function MessageBubble({ message, isOwn }) {
+interface Props {
+  message: Message;
+  isOwn: boolean;
+}
+
+export default function MessageBubble({ message, isOwn }: Props) {
   return (
     <View style={[styles.wrapper, isOwn ? styles.wrapperRight : styles.wrapperLeft]}>
       {!isOwn && (
-        <Text style={styles.author}>{message.author_display_name || 'Участник'}</Text>
+        <Text style={styles.author}>{message.author_display_name || "Участник"}</Text>
       )}
       <View style={[styles.bubble, isOwn ? styles.bubbleMine : styles.bubbleTheirs]}>
         <Text style={[styles.text, isOwn ? styles.textOwn : styles.textTheirs]}>
@@ -20,7 +26,7 @@ export default function MessageBubble({ message, isOwn }) {
         </Text>
         <Text style={[styles.time, isOwn ? styles.timeOwn : styles.timeTheirs]}>
           {formatTime(message.created_at)}
-          {message.edited ? '  (изм.)' : ''}
+          {message.edited ? "  (изм.)" : ""}
         </Text>
       </View>
     </View>
@@ -31,14 +37,14 @@ const styles = StyleSheet.create({
   wrapper: {
     marginVertical: spacing.xs,
     marginHorizontal: spacing.md,
-    maxWidth: '80%',
+    maxWidth: "80%",
   },
-  wrapperRight: { alignSelf: 'flex-end', alignItems: 'flex-end' },
-  wrapperLeft: { alignSelf: 'flex-start', alignItems: 'flex-start' },
+  wrapperRight: { alignSelf: "flex-end", alignItems: "flex-end" },
+  wrapperLeft: { alignSelf: "flex-start", alignItems: "flex-start" },
   author: {
     fontSize: fontSize.xs,
     color: colors.primary,
-    fontWeight: '600',
+    fontWeight: "600",
     marginBottom: 2,
     marginLeft: spacing.sm,
   },
@@ -47,7 +53,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     borderRadius: radius.lg,
     elevation: 1,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,
     shadowRadius: 2,
@@ -63,7 +69,7 @@ const styles = StyleSheet.create({
   text: { fontSize: fontSize.base, lineHeight: 26 },
   textOwn: { color: colors.text },
   textTheirs: { color: colors.text },
-  time: { fontSize: fontSize.xs, marginTop: 4, alignSelf: 'flex-end' },
+  time: { fontSize: fontSize.xs, marginTop: 4, alignSelf: "flex-end" },
   timeOwn: { color: colors.textSecondary },
   timeTheirs: { color: colors.textMuted },
 });

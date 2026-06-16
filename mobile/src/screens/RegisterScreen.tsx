@@ -1,36 +1,48 @@
-import React, { useState } from 'react';
+import React, { useState } from "react";
 import {
-  View, Text, TextInput, TouchableOpacity,
-  StyleSheet, ScrollView, Alert, KeyboardAvoidingView, Platform,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
-import { useAuth } from '../context/AuthContext';
-import { colors, fontSize, spacing, radius, buttonH } from '../theme';
-import PinKeypad from '../components/PinKeypad';
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  ScrollView,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
+import type { NativeStackScreenProps } from "@react-navigation/native-stack";
+import { useAuth } from "../context/AuthContext";
+import { apiErrorMessage } from "../api/errors";
+import { colors, fontSize, spacing, radius, buttonH } from "../theme";
+import PinKeypad from "../components/PinKeypad";
+import type { RootStackParamList } from "../navigation/types";
 
-export default function RegisterScreen({ navigation }) {
+type Props = NativeStackScreenProps<RootStackParamList, "Register">;
+
+export default function RegisterScreen({ navigation }: Props) {
   const { register } = useAuth();
-  const [displayName, setDisplayName] = useState('');
-  const [username, setUsername] = useState('');
-  const [pin, setPin] = useState('');
-  const [pinConfirm, setPinConfirm] = useState('');
+  const [displayName, setDisplayName] = useState("");
+  const [username, setUsername] = useState("");
+  const [pin, setPin] = useState("");
+  const [pinConfirm, setPinConfirm] = useState("");
   const [step, setStep] = useState(1); // 1=данные, 2=PIN, 3=подтверждение PIN
   const [loading, setLoading] = useState(false);
 
   const handleNext = () => {
     if (!displayName.trim()) {
-      Alert.alert('Ошибка', 'Введите ваше имя');
+      Alert.alert("Ошибка", "Введите ваше имя");
       return;
     }
     if (!username.trim() || username.trim().length < 2) {
-      Alert.alert('Ошибка', 'Логин должен быть не менее 2 символов');
+      Alert.alert("Ошибка", "Логин должен быть не менее 2 символов");
       return;
     }
     setStep(2);
   };
 
-  const handlePinPress = (digit) => {
+  const handlePinPress = (digit: string) => {
     if (step === 2 && pin.length < 4) {
       const next = pin + digit;
       setPin(next);
@@ -38,7 +50,7 @@ export default function RegisterScreen({ navigation }) {
     } else if (step === 3 && pinConfirm.length < 4) {
       const next = pinConfirm + digit;
       setPinConfirm(next);
-      if (next.length === 4) handleRegister(next);
+      if (next.length === 4) void handleRegister(next);
     }
   };
 
@@ -47,11 +59,11 @@ export default function RegisterScreen({ navigation }) {
     else if (step === 3) setPinConfirm((p) => p.slice(0, -1));
   };
 
-  const handleRegister = async (confirmPin) => {
+  const handleRegister = async (confirmPin: string) => {
     if (pin !== confirmPin) {
-      Alert.alert('Ошибка', 'PIN-коды не совпадают. Попробуйте снова.');
-      setPin('');
-      setPinConfirm('');
+      Alert.alert("Ошибка", "PIN-коды не совпадают. Попробуйте снова.");
+      setPin("");
+      setPinConfirm("");
       setStep(2);
       return;
     }
@@ -59,10 +71,9 @@ export default function RegisterScreen({ navigation }) {
     try {
       await register(username.trim().toLowerCase(), displayName.trim(), pin);
     } catch (err) {
-      const msg = err?.response?.data?.detail || 'Ошибка регистрации';
-      Alert.alert('Ошибка', String(msg));
-      setPin('');
-      setPinConfirm('');
+      Alert.alert("Ошибка", apiErrorMessage(err, "Ошибка регистрации"));
+      setPin("");
+      setPinConfirm("");
       setStep(2);
     } finally {
       setLoading(false);
@@ -73,11 +84,19 @@ export default function RegisterScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-
-          {/* Кнопка назад */}
-          <TouchableOpacity style={styles.back} onPress={() => step > 1 ? setStep(step - 1) : navigation.goBack()}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <TouchableOpacity
+            style={styles.back}
+            onPress={() => (step > 1 ? setStep(step - 1) : navigation.goBack())}
+          >
             <Ionicons name="arrow-back" size={28} color={colors.primary} />
             <Text style={styles.backText}>Назад</Text>
           </TouchableOpacity>
@@ -117,16 +136,19 @@ export default function RegisterScreen({ navigation }) {
           {(step === 2 || step === 3) && (
             <View>
               <Text style={styles.pinTitle}>
-                {step === 2 ? 'Придумайте PIN-код' : 'Повторите PIN-код'}
+                {step === 2 ? "Придумайте PIN-код" : "Повторите PIN-код"}
               </Text>
               <Text style={styles.pinHint}>
                 {step === 2
-                  ? 'PIN из 4 цифр нужен для входа'
-                  : 'Введите тот же PIN ещё раз'}
+                  ? "PIN из 4 цифр нужен для входа"
+                  : "Введите тот же PIN ещё раз"}
               </Text>
               <View style={styles.pinDots}>
                 {[0, 1, 2, 3].map((i) => (
-                  <View key={i} style={[styles.dot, currentPin.length > i && styles.dotFilled]} />
+                  <View
+                    key={i}
+                    style={[styles.dot, currentPin.length > i && styles.dotFilled]}
+                  />
                 ))}
               </View>
               <PinKeypad onPress={handlePinPress} onDelete={handlePinDelete} />
@@ -148,10 +170,22 @@ export default function RegisterScreen({ navigation }) {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   scroll: { flexGrow: 1, paddingHorizontal: spacing.lg, paddingBottom: spacing.xl },
-  back: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.md, marginBottom: spacing.lg, gap: spacing.xs },
+  back: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: spacing.md,
+    marginBottom: spacing.lg,
+    gap: spacing.xs,
+  },
   backText: { fontSize: fontSize.base, color: colors.primary },
-  title: { fontSize: fontSize['2xl'], fontWeight: '800', color: colors.text, marginBottom: spacing.lg },
-  label: { fontSize: fontSize.base, fontWeight: '600', color: colors.text, marginBottom: spacing.sm, marginTop: spacing.md },
+  title: { fontSize: fontSize["2xl"], fontWeight: "800", color: colors.text, marginBottom: spacing.lg },
+  label: {
+    fontSize: fontSize.base,
+    fontWeight: "600",
+    color: colors.text,
+    marginBottom: spacing.sm,
+    marginTop: spacing.md,
+  },
   input: {
     backgroundColor: colors.inputBg,
     borderWidth: 2,
@@ -166,8 +200,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     height: buttonH,
     borderRadius: radius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     marginTop: spacing.xl,
     elevation: 3,
     shadowColor: colors.primaryDark,
@@ -175,13 +209,32 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 4,
   },
-  btnText: { fontSize: fontSize.lg, fontWeight: '700', color: colors.white },
-  pinTitle: { fontSize: fontSize.xl, fontWeight: '700', color: colors.text, textAlign: 'center', marginTop: spacing.lg },
-  pinHint: { fontSize: fontSize.sm, color: colors.textSecondary, textAlign: 'center', marginTop: spacing.xs, marginBottom: spacing.md },
-  pinDots: { flexDirection: 'row', justifyContent: 'center', gap: spacing.xl, marginVertical: spacing.md },
-  dot: { width: 22, height: 22, borderRadius: 11, borderWidth: 2.5, borderColor: colors.primary, backgroundColor: 'transparent' },
+  btnText: { fontSize: fontSize.lg, fontWeight: "700", color: colors.white },
+  pinTitle: {
+    fontSize: fontSize.xl,
+    fontWeight: "700",
+    color: colors.text,
+    textAlign: "center",
+    marginTop: spacing.lg,
+  },
+  pinHint: {
+    fontSize: fontSize.sm,
+    color: colors.textSecondary,
+    textAlign: "center",
+    marginTop: spacing.xs,
+    marginBottom: spacing.md,
+  },
+  pinDots: { flexDirection: "row", justifyContent: "center", gap: spacing.xl, marginVertical: spacing.md },
+  dot: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2.5,
+    borderColor: colors.primary,
+    backgroundColor: "transparent",
+  },
   dotFilled: { backgroundColor: colors.primary },
-  loading: { textAlign: 'center', fontSize: fontSize.base, color: colors.textSecondary, marginTop: spacing.md },
-  loginLink: { marginTop: spacing.xl, alignItems: 'center', paddingVertical: spacing.md },
-  loginText: { fontSize: fontSize.base, color: colors.primary, fontWeight: '500' },
+  loading: { textAlign: "center", fontSize: fontSize.base, color: colors.textSecondary, marginTop: spacing.md },
+  loginLink: { marginTop: spacing.xl, alignItems: "center", paddingVertical: spacing.md },
+  loginText: { fontSize: fontSize.base, color: colors.primary, fontWeight: "500" },
 });

@@ -1,23 +1,28 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { colors, fontSize, radius, spacing } from '../theme';
+import React from "react";
+import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { colors, fontSize, radius, spacing } from "../theme";
 
-const ROWS = [
-  ['1', '2', '3'],
-  ['4', '5', '6'],
-  ['7', '8', '9'],
-  ['', '0', 'del'],
+const ROWS: string[][] = [
+  ["1", "2", "3"],
+  ["4", "5", "6"],
+  ["7", "8", "9"],
+  ["", "0", "del"],
 ];
 
-export default function PinKeypad({ onPress, onDelete }) {
+interface Props {
+  onPress: (digit: string) => void;
+  onDelete: () => void;
+}
+
+export default function PinKeypad({ onPress, onDelete }: Props) {
   return (
     <View style={styles.container}>
       {ROWS.map((row, ri) => (
         <View key={ri} style={styles.row}>
           {row.map((key, ci) => {
-            if (key === '') return <View key={ci} style={styles.empty} />;
-            if (key === 'del') {
+            if (key === "") return <View key={ci} style={styles.empty} />;
+            if (key === "del") {
               return (
                 <TouchableOpacity
                   key={ci}
@@ -51,8 +56,8 @@ const KEY_SIZE = 82;
 const styles = StyleSheet.create({
   container: { marginTop: spacing.sm, marginBottom: spacing.md },
   row: {
-    flexDirection: 'row',
-    justifyContent: 'center',
+    flexDirection: "row",
+    justifyContent: "center",
     marginBottom: spacing.sm,
     gap: spacing.lg,
   },
@@ -63,17 +68,17 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderWidth: 2,
     borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     elevation: 2,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.12,
     shadowRadius: 3,
   },
   keyText: {
     fontSize: fontSize.xl,
-    fontWeight: '700',
+    fontWeight: "700",
     color: colors.text,
   },
   empty: { width: KEY_SIZE, height: KEY_SIZE },

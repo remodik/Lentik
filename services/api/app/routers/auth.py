@@ -2,7 +2,7 @@ import random
 import string
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -45,12 +45,29 @@ async def _generate_suggestions(base: str, db: AsyncSession, count: int = 3) -> 
     return suggestions
 
 
-def _set_jwt_cookie(response: Response, user: User) -> None:
-    """Ставит JWT исключительно в httpOnly-cookie (параметры — в core/cookies).
-    В тело ответа токен не возвращаем — иначе фронт сохранит его в localStorage
-    и любой XSS его украдёт (CWE-522)."""
+def _set_jwt_cookie(response: Response, user: User) -> str:
+    """Ставит JWT в httpOnly-cookie (параметры — в core/cookies) и возвращает его.
+
+    Веб токен из тела НЕ берёт и хранит только cookie — иначе любой XSS украл бы
+    его из localStorage (CWE-522). Нативный мобильный клиент cookie между
+    рестартами не держит, а SecureStore (Keychain/Keystore) аппаратно защищён —
+    ему токен отдаём в теле по явному opt-in заголовку (см. `_wants_token_in_body`).
+    """
     token = create_access_token(user.id, not_before=user.password_changed_at)
     set_auth_cookie(response, token)
+    return token
+
+
+# Заголовок-флаг: клиент (мобильный) явно просит вернуть JWT в теле ответа для
+# хранения в защищённом сторе и отправки как Bearer. Браузерный фронт его НЕ
+# шлёт, поэтому для веба поведение неизменно (cookie-only).
+_TOKEN_HEADER = "X-Auth-Return-Token"
+
+
+def _wants_token_in_body(flag: str | None) -> bool:
+    # Явный opt-in (allow-list): токен в теле только при явном утвердительном
+    # значении. Любое прочее (опечатки, "off" и т.п.) — cookie-only, как веб.
+    return bool(flag) and flag.strip().lower() in ("1", "true", "yes", "on")
 
 
 @router.get("/check-username")
@@ -77,6 +94,7 @@ async def register(
     request: Request,
     response: Response,
     db: AsyncSession = Depends(get_db),
+    x_auth_return_token: str | None = Header(default=None, alias=_TOKEN_HEADER),
 ):
     # Per-IP rate-limit против массового создания аккаунтов (CWE-770).
     # TODO (точка расширения): при необходимости добавить CAPTCHA на этом шаге.
@@ -100,8 +118,11 @@ async def register(
     await db.commit()
     await db.refresh(user)
 
-    _set_jwt_cookie(response, user)
-    return AuthResponse(user_id=str(user.id))
+    token = _set_jwt_cookie(response, user)
+    return AuthResponse(
+        user_id=str(user.id),
+        access_token=token if _wants_token_in_body(x_auth_return_token) else None,
+    )
 
 
 @router.post("/pin", response_model=AuthResponse)
@@ -110,6 +131,7 @@ async def login_by_pin(
     body: AuthPinRequest,
     response: Response,
     db: AsyncSession = Depends(get_db),
+    x_auth_return_token: str | None = Header(default=None, alias=_TOKEN_HEADER),
 ):
     user_key = f"user:{body.username.lower()}"
     ip_key = f"ip:{_client_ip(request)}"
@@ -161,8 +183,11 @@ async def login_by_pin(
     # второй фактор, вход завершать отдельным шагом — см. core/two_factor.py.)
     await login_throttle.reset(db, body.username)
     await pin_failure_limiter.reset(user_key)
-    _set_jwt_cookie(response, user)
-    return AuthResponse(user_id=str(user.id))
+    token = _set_jwt_cookie(response, user)
+    return AuthResponse(
+        user_id=str(user.id),
+        access_token=token if _wants_token_in_body(x_auth_return_token) else None,
+    )
 
 
 @router.post("/ws-ticket")
@@ -194,6 +219,7 @@ async def join_by_invite(
     body: JoinByInviteRequest,
     response: Response,
     db: AsyncSession = Depends(get_db),
+    x_auth_return_token: str | None = Header(default=None, alias=_TOKEN_HEADER),
 ):
     invite = await lock_active_invite(db, body.token)
 
@@ -232,8 +258,9 @@ async def join_by_invite(
         },
     )
 
-    _set_jwt_cookie(response, user)
+    token = _set_jwt_cookie(response, user)
     return JoinByInviteResponse(
         user_id=user.id,
         family_id=invite.family_id,
+        access_token=token if _wants_token_in_body(x_auth_return_token) else None,
     )

@@ -30,7 +30,7 @@ import { type Chat, type Channel, type Family, type Me, type MyFamily } from "@/
 import ProfileMenu from "@/components/ProfileMenu";
 import NotificationBell from "@/components/NotificationBell";
 import NotificationCenter from "@/components/NotificationCenter";
-import MobileBottomNav from "@/components/MobileBottomNav";
+import MobileBottomNav, { type MobileNavCategory } from "@/components/MobileBottomNav";
 import {
   useNotifications,
   type Notification,
@@ -109,6 +109,14 @@ const CATEGORY_DEFAULT_SECTION: Record<NavCategory, AppSection> = {
   family: "members",
 };
 
+// Короткие подписи категорий для мобильного нижнего меню.
+const MOBILE_CATEGORY_LABELS: Record<NavCategory, string> = {
+  chat: "Чат",
+  plans: "Планы",
+  media: "Медиа",
+  family: "Семья",
+};
+
 const SIDEBAR_CATEGORIES: SidebarCategory[] = [
   {
     id: "chat",
@@ -177,6 +185,20 @@ const SIDEBAR_CATEGORIES: SidebarCategory[] = [
     ],
   },
 ];
+
+// Модель навигации для мобильного нижнего меню: 4 категории, в каждой — её
+// разделы (выкидываем нереализованные пункты без section, напр. «Достижения»).
+const MOBILE_NAV: MobileNavCategory[] = SIDEBAR_CATEGORIES.map((cat) => ({
+  id: cat.id,
+  label: MOBILE_CATEGORY_LABELS[cat.id],
+  icon: cat.icon,
+  sections: cat.groups
+    .flatMap((g) => g.items)
+    .filter((it): it is NavCategoryItem & { section: AppSection } =>
+      Boolean(it.section) && !it.disabled,
+    )
+    .map((it) => ({ id: it.section, label: it.label })),
+}));
 
 type Props = {
   me: Me;
@@ -580,7 +602,7 @@ export default function AppLayout({
         onChatOpen={onChatOpen}
       />
 
-      <MobileBottomNav section={section} onSection={onSection} />
+      <MobileBottomNav section={section} onSection={onSection} categories={MOBILE_NAV} />
 
       {toasts.length > 0 && (
         <div

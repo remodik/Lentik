@@ -1,22 +1,33 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from "react";
 import {
-  View, Text, FlatList, TouchableOpacity,
-  StyleSheet, ActivityIndicator, RefreshControl,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
-import { listChats } from '../api/chats';
-import { useFamily } from '../context/FamilyContext';
-import ChatListItem from '../components/ChatListItem';
-import { colors, fontSize, spacing, radius } from '../theme';
+  View,
+  Text,
+  FlatList,
+  TouchableOpacity,
+  StyleSheet,
+  ActivityIndicator,
+  RefreshControl,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
+import type { NativeStackScreenProps } from "@react-navigation/native-stack";
+import { listChats } from "../api/chats";
+import { useFamily } from "../context/FamilyContext";
+import ChatListItem from "../components/ChatListItem";
+import { colors, fontSize, spacing } from "../theme";
+import type { Chat } from "../api/types";
+import type { ChatStackParamList } from "../navigation/types";
 
-export default function ChatsListScreen({ navigation }) {
+type Props = NativeStackScreenProps<ChatStackParamList, "ChatsList">;
+
+export default function ChatsListScreen({ navigation }: Props) {
   const { currentFamily, clearFamily } = useFamily();
-  const [chats, setChats] = useState([]);
+  const [chats, setChats] = useState<Chat[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const loadChats = useCallback(async () => {
+    if (!currentFamily) return;
     try {
       const { data } = await listChats(currentFamily.family_id);
       setChats(data);
@@ -28,22 +39,23 @@ export default function ChatsListScreen({ navigation }) {
     }
   }, [currentFamily]);
 
-  useEffect(() => { loadChats(); }, []);
+  useEffect(() => {
+    void loadChats();
+  }, []);
 
   const onRefresh = () => {
     setRefreshing(true);
-    loadChats();
+    void loadChats();
   };
 
   return (
     <SafeAreaView style={styles.safe}>
-      {/* Шапка */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.title}>{currentFamily.family_name}</Text>
+          <Text style={styles.title}>{currentFamily?.family_name ?? ""}</Text>
           <Text style={styles.subtitle}>Чаты</Text>
         </View>
-        <TouchableOpacity style={styles.switchBtn} onPress={clearFamily}>
+        <TouchableOpacity style={styles.switchBtn} onPress={() => void clearFamily()}>
           <Ionicons name="swap-horizontal-outline" size={26} color={colors.primary} />
           <Text style={styles.switchText}>Семья</Text>
         </TouchableOpacity>
@@ -65,16 +77,20 @@ export default function ChatsListScreen({ navigation }) {
             <ChatListItem
               chat={item}
               onPress={() =>
-                navigation.navigate('Chat', {
+                navigation.navigate("Chat", {
                   chatId: item.id,
                   chatName: item.name,
-                  familyId: currentFamily.family_id,
+                  familyId: currentFamily?.family_id ?? "",
                 })
               }
             />
           )}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[colors.primary]}
+            />
           }
           contentContainerStyle={{ paddingBottom: spacing.xl }}
         />
@@ -86,16 +102,26 @@ export default function ChatsListScreen({ navigation }) {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   header: {
-    flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.md,
-    borderBottomWidth: 1, borderBottomColor: colors.border,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
     backgroundColor: colors.surface,
   },
-  title: { fontSize: fontSize.xl, fontWeight: '800', color: colors.text },
+  title: { fontSize: fontSize.xl, fontWeight: "800", color: colors.text },
   subtitle: { fontSize: fontSize.sm, color: colors.textSecondary, marginTop: 2 },
-  switchBtn: { alignItems: 'center', paddingTop: spacing.xs },
+  switchBtn: { alignItems: "center", paddingTop: spacing.xs },
   switchText: { fontSize: 12, color: colors.primary, marginTop: 2 },
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xl },
-  emptyTitle: { fontSize: fontSize.xl, fontWeight: '700', color: colors.text, marginTop: spacing.lg },
-  emptyText: { fontSize: fontSize.base, color: colors.textSecondary, textAlign: 'center', marginTop: spacing.sm },
+  empty: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: spacing.xl },
+  emptyTitle: { fontSize: fontSize.xl, fontWeight: "700", color: colors.text, marginTop: spacing.lg },
+  emptyText: {
+    fontSize: fontSize.base,
+    color: colors.textSecondary,
+    textAlign: "center",
+    marginTop: spacing.sm,
+  },
 });

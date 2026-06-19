@@ -52,11 +52,11 @@ export default function Modal({
       aria-label={ariaLabel ?? title}
     >
       <div
-        className={`w-full ${SIZES[size]} rounded-3xl border border-[color:var(--border-glass-strong)] bg-[color:var(--bg-elevated)] backdrop-blur-2xl p-6 shadow-[0_30px_90px_var(--scrim-4)]`}
+        className={`w-full ${SIZES[size]} flex flex-col max-h-[calc(100dvh-2rem)] rounded-3xl border border-[color:var(--border-glass-strong)] bg-[color:var(--bg-elevated)] backdrop-blur-2xl p-6 shadow-[0_30px_90px_var(--scrim-4)]`}
         onClick={(e) => e.stopPropagation()}
       >
         {title && (
-          <div className="flex items-start justify-between gap-3 mb-4">
+          <div className="flex items-start justify-between gap-3 mb-4 shrink-0">
             <div>
               {eyebrow && (
                 <p className="text-xs uppercase tracking-[0.14em] text-ink-400 font-body">
@@ -75,7 +75,9 @@ export default function Modal({
             </button>
           </div>
         )}
-        {children}
+        <div className="overflow-y-auto sidebar-scroll min-h-0 -mr-2 pr-2">
+          {children}
+        </div>
       </div>
     </div>
   );

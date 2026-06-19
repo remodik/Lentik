@@ -63,7 +63,6 @@ backend на FastAPI.
 | Realtime    | WebSocket + Redis pub/sub (fan-out, кросс-инстанс)        |
 | Инфра       | Docker Compose, reverse-proxy                             |
 
-<<<<<<< HEAD
 <!--
 <div align="center">
   <img src="docs/screenshots/chat.png" width="45%" />

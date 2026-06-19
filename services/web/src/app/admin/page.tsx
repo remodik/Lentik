@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -13,6 +13,7 @@ import {
   ArrowLeft,
   Search,
   ChevronDown,
+  RefreshCw,
 } from "lucide-react";
 import {
   adminGetUsers,
@@ -31,8 +32,10 @@ import {
   type ApiError,
 } from "@/lib/api";
 import BanUserModal from "@/components/BanUserModal";
+import { useConfirm } from "@/components/ConfirmDialog";
 
 type Tab = "stats" | "users" | "families" | "audit";
+type FamilyDeepLink = { id: string; name: string };
 const PAGE = 50;
 
 const TABS: { id: Tab; label: string; icon: typeof Users }[] = [
@@ -68,6 +71,12 @@ export default function AdminPage() {
 
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [banTarget, setBanTarget] = useState<{ id: string; name: string } | null>(null);
+  const [familyDeepLink, setFamilyDeepLink] = useState<FamilyDeepLink | null>(null);
+
+  const openFamily = useCallback((id: string, name: string) => {
+    setFamilyDeepLink({ id, name });
+    setTab("families");
+  }, []);
 
   // Гард: stats → 403 ⇒ не разработчик ⇒ в /app.
   useEffect(() => {
@@ -139,8 +148,18 @@ export default function AdminPage() {
       </div>
 
       {tab === "stats" && <StatsTab stats={stats} />}
-      {tab === "users" && <UsersTab onBan={(id, name) => setBanTarget({ id, name })} />}
-      {tab === "families" && <FamiliesTab onBan={(id, name) => setBanTarget({ id, name })} />}
+      {tab === "users" && (
+        <UsersTab
+          onBan={(id, name) => setBanTarget({ id, name })}
+          onOpenFamily={openFamily}
+        />
+      )}
+      {tab === "families" && (
+        <FamiliesTab
+          onBan={(id, name) => setBanTarget({ id, name })}
+          deepLink={familyDeepLink}
+        />
+      )}
       {tab === "audit" && <AuditTab />}
 
       {banTarget && (
@@ -158,10 +177,10 @@ export default function AdminPage() {
 
 function StatsTab({ stats }: { stats: AdminStats | null }) {
   if (!stats) return <p className="text-sm text-ink-400 font-body">Загрузка…</p>;
-  const cards = [
-    { label: "Пользователи", value: stats.users },
-    { label: "Семьи", value: stats.families },
-    { label: "Сообщения", value: stats.messages },
+  const cards: { label: string; value: number | string; delta?: number }[] = [
+    { label: "Пользователи", value: stats.users, delta: stats.users_delta_7d },
+    { label: "Семьи", value: stats.families, delta: stats.families_delta_7d },
+    { label: "Сообщения", value: stats.messages, delta: stats.messages_delta_7d },
     { label: "Забанено", value: stats.banned_users },
     { label: "Загрузки", value: fmtBytes(stats.uploads_bytes) },
   ];
@@ -171,6 +190,14 @@ function StatsTab({ stats }: { stats: AdminStats | null }) {
         <div key={c.label} className="rounded-2xl border border-[color:var(--border-glass)] bg-[var(--bg-surface)] p-4 backdrop-blur">
           <p className="text-xs uppercase tracking-wider text-ink-400 font-body">{c.label}</p>
           <p className="font-display text-2xl text-ink-900 mt-1">{c.value}</p>
+          {c.delta !== undefined &&
+            (c.delta > 0 ? (
+              <p className="text-xs font-body text-[color:var(--success-fg-bold)] mt-1">
+                +{c.delta} за неделю
+              </p>
+            ) : (
+              <p className="text-xs font-body text-ink-400 mt-1">без изменений</p>
+            ))}
         </div>
       ))}
     </div>
@@ -204,7 +231,14 @@ function SearchBox({ value, onChange, placeholder }: { value: string; onChange: 
 
 /* ─── Пользователи ───────────────────────────────────────────────────────── */
 
-function UsersTab({ onBan }: { onBan: (id: string, name: string) => void }) {
+function UsersTab({
+  onBan,
+  onOpenFamily,
+}: {
+  onBan: (id: string, name: string) => void;
+  onOpenFamily: (id: string, name: string) => void;
+}) {
+  const { confirm } = useConfirm();
   const [search, setSearch] = useState("");
   const q = useDebounced(search);
   const [rows, setRows] = useState<AdminUserRow[]>([]);
@@ -277,6 +311,11 @@ function UsersTab({ onBan }: { onBan: (id: string, name: string) => void }) {
     <div>
       <SearchBox value={search} onChange={setSearch} placeholder="Поиск по логину или имени…" />
       <div className="rounded-2xl border border-[color:var(--border-glass)] bg-[var(--bg-surface-subtle)] divide-y divide-[color:var(--border-glass)]">
+        {rows.length === 0 && !loading && (
+          <div className="px-4 py-8 text-center text-sm text-ink-400 font-body">
+            {q ? `Ничего не найдено по запросу «${q}»` : "Пользователей нет"}
+          </div>
+        )}
         {rows.map((u) => (
           <div key={u.id}>
             <div className="flex items-center gap-3 px-4 py-3 text-sm font-body">
@@ -301,7 +340,14 @@ function UsersTab({ onBan }: { onBan: (id: string, name: string) => void }) {
               {u.is_banned ? (
                 <button
                   type="button"
-                  onClick={() => void handleUnban(u.id)}
+                  onClick={async () => {
+                    const ok = await confirm({
+                      title: `Снять бан с ${u.display_name}?`,
+                      description: "Пользователь сразу получит доступ к приложению.",
+                      confirmLabel: "Разбанить",
+                    });
+                    if (ok) void handleUnban(u.id);
+                  }}
                   className="inline-flex items-center gap-1.5 text-ink-600 hover:text-ink-900 shrink-0"
                 >
                   <ShieldOff className="w-4 h-4" strokeWidth={2.1} />
@@ -339,9 +385,16 @@ function UsersTab({ onBan }: { onBan: (id: string, name: string) => void }) {
                   <ul className="space-y-1">
                     {detail.families.map((f) => (
                       <li key={f.family_id} className="text-sm text-ink-700 flex items-center gap-2">
-                        <span>{f.family_name}</span>
-                        <span className="text-xs text-ink-400">{f.role}</span>
-                        <span className="text-[10px] font-mono text-ink-300">{f.family_id}</span>
+                        <span className="truncate">{f.family_name}</span>
+                        <span className="text-xs text-ink-400 shrink-0">{f.role}</span>
+                        <span className="text-[10px] font-mono text-ink-300 truncate hidden sm:block">{f.family_id}</span>
+                        <button
+                          type="button"
+                          onClick={() => onOpenFamily(f.family_id, f.family_name)}
+                          className="ml-auto text-xs text-ink-400 hover:text-ink-700 shrink-0 transition"
+                        >
+                          → открыть
+                        </button>
                       </li>
                     ))}
                   </ul>
@@ -359,7 +412,13 @@ function UsersTab({ onBan }: { onBan: (id: string, name: string) => void }) {
 
 /* ─── Семьи ──────────────────────────────────────────────────────────────── */
 
-function FamiliesTab({ onBan }: { onBan: (id: string, name: string) => void }) {
+function FamiliesTab({
+  onBan,
+  deepLink,
+}: {
+  onBan: (id: string, name: string) => void;
+  deepLink: FamilyDeepLink | null;
+}) {
   const [search, setSearch] = useState("");
   const q = useDebounced(search);
   const [rows, setRows] = useState<AdminFamilyRow[]>([]);
@@ -390,6 +449,22 @@ function FamiliesTab({ onBan }: { onBan: (id: string, name: string) => void }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q]);
 
+  // Deep-link из вкладки «Пользователи»: подставляем название семьи в поиск
+  // (чтобы её строка точно загрузилась) и сразу раскрываем карточку.
+  const handledDeepLink = useRef<string | null>(null);
+  useEffect(() => {
+    if (!deepLink || handledDeepLink.current === deepLink.id) return;
+    handledDeepLink.current = deepLink.id;
+    setSearch(deepLink.name);
+    setExpanded(deepLink.id);
+    setDetail(null);
+    adminGetFamily(deepLink.id)
+      .then(setDetail)
+      .catch(() => {
+        /* ignore */
+      });
+  }, [deepLink]);
+
   async function toggleExpand(familyId: string) {
     if (expanded === familyId) {
       setExpanded(null);
@@ -409,6 +484,11 @@ function FamiliesTab({ onBan }: { onBan: (id: string, name: string) => void }) {
     <div>
       <SearchBox value={search} onChange={setSearch} placeholder="Поиск по названию семьи…" />
       <div className="rounded-2xl border border-[color:var(--border-glass)] bg-[var(--bg-surface-subtle)] divide-y divide-[color:var(--border-glass)]">
+        {rows.length === 0 && !loading && (
+          <div className="px-4 py-8 text-center text-sm text-ink-400 font-body">
+            {q ? `Ничего не найдено по запросу «${q}»` : "Семей нет"}
+          </div>
+        )}
         {rows.map((f) => (
           <div key={f.id}>
             <button
@@ -471,11 +551,67 @@ function FamiliesTab({ onBan }: { onBan: (id: string, name: string) => void }) {
 
 /* ─── Аудит ──────────────────────────────────────────────────────────────── */
 
+// Категории = первый сегмент action (user.banned → "user"). Человекочитаемые
+// подписи; неизвестные ключи показываем как есть.
+const AUDIT_CATEGORY_LABELS: Record<string, string> = {
+  user: "Пользователи",
+  family: "Семьи",
+  chat: "Чаты",
+  channel: "Каналы",
+  message: "Сообщения",
+  role: "Роли",
+  override: "Разрешения",
+  moderation: "Модерация",
+  note: "Заметки",
+  reminder: "Напоминания",
+  tree: "Древо",
+};
+
+// Подписи для частых ключей metadata — вместо сырого JSON.
+const AUDIT_META_LABELS: Record<string, string> = {
+  reason: "Причина",
+  expires_at: "До",
+  name: "Название",
+  from: "Было",
+  to: "Стало",
+  display_name: "Имя",
+  title: "Заголовок",
+  author_name: "Автор",
+  chat_name: "Чат",
+  max_uses: "Лимит",
+  new_owner_name: "Новый владелец",
+};
+
+function auditCategory(action: string): string {
+  return action.split(".")[0] ?? "";
+}
+
+function fmtRelative(iso: string): string {
+  const d = new Date(iso);
+  const diff = (Date.now() - d.getTime()) / 1000;
+  if (Number.isNaN(diff)) return iso;
+  if (diff < 60) return "только что";
+  if (diff < 3600) return `${Math.floor(diff / 60)} мин назад`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)} ч назад`;
+  return d.toLocaleString("ru-RU");
+}
+
+function fmtMetaValue(v: unknown): string {
+  if (v === null || v === undefined || v === "") return "—";
+  if (typeof v === "boolean") return v ? "да" : "нет";
+  if (Array.isArray(v)) return v.map((x) => fmtMetaValue(x)).join(", ");
+  if (typeof v === "object") return JSON.stringify(v);
+  return String(v);
+}
+
 function AuditTab() {
   const [rows, setRows] = useState<AdminAuditRow[]>([]);
   const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState("");
+  const q = useDebounced(search);
+  const [category, setCategory] = useState<string>("all");
 
   const load = useCallback(
     async (reset: boolean) => {
@@ -498,30 +634,117 @@ function AuditTab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const categories = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of rows) {
+      const c = auditCategory(r.action);
+      if (c) set.add(c);
+    }
+    return Array.from(set).sort();
+  }, [rows]);
+
+  // Фильтрация клиентская — по загруженным страницам (как в семейном журнале).
+  const filtered = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    return rows.filter((a) => {
+      if (category !== "all" && auditCategory(a.action) !== category) return false;
+      if (needle) {
+        const hay = [a.action, a.actor_display_name, a.actor_username, a.target_type, a.target_id]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        if (!hay.includes(needle)) return false;
+      }
+      return true;
+    });
+  }, [rows, category, q]);
+
   return (
-    <div className="space-y-2">
-      {rows.map((a) => (
-        <div key={a.id} className="rounded-xl border border-[color:var(--border-glass)] bg-[var(--bg-surface-subtle)] px-4 py-3 text-sm font-body">
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-ink-800 font-medium">{a.action}</span>
-            <span className="text-ink-400 text-xs">{fmtDate(a.created_at)}</span>
-          </div>
-          <p className="text-ink-500 text-xs mt-1">
-            {a.actor_display_name ? (
-              <>
-                <span className="text-ink-600">{a.actor_display_name}</span>
-                {a.actor_username ? ` (@${a.actor_username})` : ""} ·{" "}
-              </>
-            ) : null}
-            <span className="font-mono break-all">
-              {a.target_type}:{a.target_id}
-              {a.metadata ? ` · ${JSON.stringify(a.metadata)}` : ""}
-            </span>
-          </p>
+    <div>
+      <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-3">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-400" strokeWidth={2.1} />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Поиск по действию, автору…"
+            className="w-full pl-9 pr-3 py-2 rounded-xl border border-[color:var(--border-glass)] bg-[var(--bg-surface)] text-sm text-ink-700 font-body focus:outline-none focus:ring-2 focus:ring-warm-200"
+          />
         </div>
-      ))}
-      {rows.length === 0 && !loading && <p className="text-ink-400 text-sm font-body">Записей пока нет</p>}
-      <LoadMore loading={loading} hasMore={hasMore} onClick={() => void load(false)} />
+        <button
+          type="button"
+          onClick={() => void load(true)}
+          disabled={loading}
+          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-body border border-[color:var(--border-glass)] bg-[var(--bg-surface)] text-ink-600 hover:bg-[var(--bg-surface)] transition shrink-0 sm:ml-auto disabled:opacity-50"
+        >
+          <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} strokeWidth={2.1} />
+          <span className="hidden sm:inline">Обновить</span>
+        </button>
+      </div>
+
+      {categories.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mb-3">
+          {["all", ...categories].map((c) => (
+            <button
+              key={c}
+              type="button"
+              onClick={() => setCategory(c)}
+              className={`px-2.5 py-1 rounded-full text-xs font-body border transition ${
+                category === c
+                  ? "bg-ink-900 text-cream-50 border-ink-900"
+                  : "bg-[var(--bg-surface-subtle)] text-ink-600 border-[color:var(--border-glass)] hover:border-[color:var(--border-glass-strong)]"
+              }`}
+            >
+              {c === "all" ? "Все" : AUDIT_CATEGORY_LABELS[c] ?? c}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="space-y-2">
+        {filtered.map((a) => {
+          const metaEntries = a.metadata ? Object.entries(a.metadata) : [];
+          return (
+            <div key={a.id} className="rounded-xl border border-[color:var(--border-glass)] bg-[var(--bg-surface-subtle)] px-4 py-3 text-sm font-body">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-ink-800 font-medium">{a.action}</span>
+                <span className="text-ink-400 text-xs shrink-0" title={fmtDate(a.created_at)}>
+                  {fmtRelative(a.created_at)}
+                </span>
+              </div>
+              <p className="text-ink-500 text-xs mt-1">
+                {a.actor_display_name ? (
+                  <>
+                    <span className="text-ink-600">{a.actor_display_name}</span>
+                    {a.actor_username ? ` (@${a.actor_username})` : ""} ·{" "}
+                  </>
+                ) : null}
+                <span className="font-mono break-all">
+                  {a.target_type}
+                  {a.target_id ? `:${a.target_id}` : ""}
+                </span>
+              </p>
+              {metaEntries.length > 0 && (
+                <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5">
+                  {metaEntries.map(([k, v]) => (
+                    <span key={k} className="text-xs text-ink-500">
+                      <span className="text-ink-400">{AUDIT_META_LABELS[k] ?? k}:</span>{" "}
+                      <span className="text-ink-700">{fmtMetaValue(v)}</span>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        {filtered.length === 0 && !loading && (
+          <p className="text-ink-400 text-sm font-body px-1 py-6 text-center">
+            {rows.length === 0 ? "Записей пока нет" : "Ничего не найдено по фильтру"}
+          </p>
+        )}
+        <LoadMore loading={loading} hasMore={hasMore} onClick={() => void load(false)} />
+      </div>
     </div>
   );
 }

@@ -67,9 +67,9 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 4,
   },
   text: { fontSize: fontSize.base, lineHeight: 26 },
-  textOwn: { color: colors.text },
+  textOwn: { color: "#fff" }, // белый текст на тёмном терракоте
   textTheirs: { color: colors.text },
   time: { fontSize: fontSize.xs, marginTop: 4, alignSelf: "flex-end" },
-  timeOwn: { color: colors.textSecondary },
+  timeOwn: { color: "rgba(255,255,255,0.85)" },
   timeTheirs: { color: colors.textMuted },
 });

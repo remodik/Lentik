@@ -1170,7 +1170,7 @@ function RelationFormModal({
       aria-label="Создать связь"
     >
       <div
-        className="w-full max-w-md rounded-3xl border border-[color:var(--border-glass-strong)] bg-[color:var(--bg-elevated)] backdrop-blur-2xl p-6 shadow-[0_30px_90px_var(--scrim-4)]"
+        className="w-full max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto sidebar-scroll rounded-3xl border border-[color:var(--border-glass-strong)] bg-[color:var(--bg-elevated)] backdrop-blur-2xl p-6 shadow-[0_30px_90px_var(--scrim-4)]"
         onClick={(e) => e.stopPropagation()}
       >
         <p className="text-xs uppercase tracking-[0.16em] text-ink-400 font-body">

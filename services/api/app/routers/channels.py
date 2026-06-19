@@ -231,6 +231,35 @@ async def update_channel(
     return channel
 
 
+@router.delete("/{channel_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_channel(
+    family_id: UUID,
+    channel_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    m = await _require_member(family_id, user, db)
+    await require_channel_perm(db, m, channel_id, Perm.MANAGE_CHANNELS)
+
+    channel = await db.get(Channel, channel_id)
+    if not channel or channel.family_id != family_id:
+        raise HTTPException(status_code=404, detail="Channel not found")
+
+    await log_action(
+        db,
+        family_id=family_id,
+        actor_id=user.id,
+        action="channel.deleted",
+        target_type="channel",
+        target_id=channel.id,
+        metadata={"name": channel.name},
+    )
+    # Посты и permission-оверрайды канала удаляются каскадом (FK ondelete=CASCADE
+    # + relationship cascade на Channel.posts).
+    await db.delete(channel)
+    await db.commit()
+
+
 @router.get("/{channel_id}/posts", response_model=list[PostResponse])
 async def list_posts(
     family_id: UUID,

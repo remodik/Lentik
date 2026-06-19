@@ -1,12 +1,13 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Eye, Hash, Loader2, Pencil, Plus, SendHorizontal, Settings as SettingsIcon, Timer } from "lucide-react";
+import { Eye, Hash, Loader2, Pencil, Plus, SendHorizontal, Settings as SettingsIcon, Timer, Trash2 } from "lucide-react";
 import { useContextMenu } from "@/lib/useContextMenu";
 import type { ContextMenuEntry } from "@/components/ContextMenu";
 import {
   createChannel,
   createPost,
+  deleteChannel,
   getChannels,
   getFamily,
   getPosts,
@@ -15,6 +16,7 @@ import {
   type Post,
 } from "@/lib/api";
 import ChatSettingsModal from "@/components/ChatSettingsModal";
+import { useConfirm } from "@/components/ConfirmDialog";
 import { ExpertIdRow } from "@/components/CopyIdButton";
 import Age18Gate, { useAge18Gate } from "@/components/Age18Gate";
 import { useCtrlResize } from "@/lib/useCtrlResize";
@@ -72,10 +74,10 @@ function PostSkeleton() {
         borderColor: "var(--border-glass)",
       }}
     >
-      <div className="h-3 w-32 rounded" style={{ background: "var(--border-glass-strong)" }} />
-      <div className="mt-3 h-3 w-full rounded" style={{ background: "var(--border-glass-strong)" }} />
-      <div className="mt-2 h-3 w-4/5 rounded" style={{ background: "var(--border-glass-strong)" }} />
-      <div className="mt-2 h-3 w-2/3 rounded" style={{ background: "var(--border-glass-strong)" }} />
+      <div className="h-3 w-32 rounded" style={{ background: "rgb(var(--ink-100))" }} />
+      <div className="mt-3 h-3 w-full rounded" style={{ background: "rgb(var(--ink-100))" }} />
+      <div className="mt-2 h-3 w-4/5 rounded" style={{ background: "rgb(var(--ink-100))" }} />
+      <div className="mt-2 h-3 w-2/3 rounded" style={{ background: "rgb(var(--ink-100))" }} />
     </div>
   );
 }
@@ -117,6 +119,10 @@ export default function ChannelsView({
   const [posts, setPosts] = useState<Post[]>([]);
   const [postsOffset, setPostsOffset] = useState(0);
   const [postsLoading, setPostsLoading] = useState(false);
+  // Скелетоны показываем только если загрузка затянулась — иначе при быстром
+  // ответе они «промелькивали» белыми полосами при каждом открытии канала.
+  const [showSkeleton, setShowSkeleton] = useState(false);
+  const skeletonTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [postsLoadingMore, setPostsLoadingMore] = useState(false);
   const [postsHasMore, setPostsHasMore] = useState(true);
 
@@ -138,6 +144,7 @@ export default function ChannelsView({
   const canPostToChannel = hasBit(channelPerms, PERM.SEND_MESSAGES);
   const { perms: familyPerms } = usePermissions();
   const { openContextMenu } = useContextMenu();
+  const { confirm } = useConfirm();
   const canManageChannels =
     !!familyPerms &&
     (familyPerms.is_owner ||
@@ -200,6 +207,13 @@ export default function ChannelsView({
       setPostsOffset(0);
       setPostsHasMore(true);
 
+      // Скелетон — только если загрузка длится дольше порога.
+      if (skeletonTimerRef.current) clearTimeout(skeletonTimerRef.current);
+      setShowSkeleton(false);
+      skeletonTimerRef.current = setTimeout(() => {
+        if (postsRequestIdRef.current === requestId) setShowSkeleton(true);
+      }, 180);
+
       try {
         const chunk = await getPosts(familyId, channelId, POSTS_PAGE_SIZE, 0);
         if (postsRequestIdRef.current !== requestId) return;
@@ -215,11 +229,23 @@ export default function ChannelsView({
         setPostsHasMore(false);
       } finally {
         if (postsRequestIdRef.current === requestId) {
+          if (skeletonTimerRef.current) {
+            clearTimeout(skeletonTimerRef.current);
+            skeletonTimerRef.current = null;
+          }
+          setShowSkeleton(false);
           setPostsLoading(false);
         }
       }
     },
     [familyId],
+  );
+
+  useEffect(
+    () => () => {
+      if (skeletonTimerRef.current) clearTimeout(skeletonTimerRef.current);
+    },
+    [],
   );
 
   useEffect(() => {
@@ -334,6 +360,29 @@ export default function ChannelsView({
       console.error("createChannel failed", e);
     } finally {
       setCreatingChannel(false);
+    }
+  }
+
+  async function handleDeleteChannel(channel: Channel, skipConfirm: boolean) {
+    if (!skipConfirm) {
+      const ok = await confirm({
+        title: "Удалить канал",
+        description: `Вы уверены, что хотите удалить #${channel.name}? Все посты канала будут удалены.`,
+        confirmLabel: "Удалить",
+        tone: "danger",
+      });
+      if (!ok) return;
+    }
+    try {
+      await deleteChannel(familyId, channel.id);
+      setChannels((prev) => prev.filter((c) => c.id !== channel.id));
+      setSelectedChannelId((current) => {
+        if (current !== channel.id) return current;
+        const remaining = channels.filter((c) => c.id !== channel.id);
+        return remaining[0]?.id ?? null;
+      });
+    } catch (e) {
+      console.error("deleteChannel failed", e);
     }
   }
 
@@ -481,10 +530,19 @@ export default function ChannelsView({
                         onClick: () => void navigator.clipboard?.writeText(channel.id),
                       });
                     }
+                    if (isOwner) {
+                      entries.push({ type: "separator" });
+                      entries.push({
+                        label: "Удалить канал",
+                        icon: Trash2,
+                        danger: true,
+                        onClick: () => void handleDeleteChannel(channel, false),
+                      });
+                    }
                     openContextMenu(e, entries);
                   }}
                   className={`group relative w-full text-left rounded-xl border px-3 py-2.5 transition cursor-pointer ${
-                    isOwner ? "pr-9" : ""
+                    isOwner ? "pr-16" : ""
                   } ${active ? "shadow-sm" : "hover:translate-y-[-1px]"}`}
                   style={{
                     borderColor: active ? "var(--accent-border)" : "var(--border-glass)",
@@ -522,19 +580,34 @@ export default function ChannelsView({
                   />
 
                   {isOwner && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setChannelSettingsTarget(channel);
-                      }}
-                      className="absolute top-2 right-2 w-7 h-7 rounded-lg grid place-items-center text-ink-400 hover:text-ink-700 hover:bg-white/70 transition opacity-0 group-hover:opacity-100 focus:opacity-100"
-                      title="Настройки канала"
-                      aria-label="Настройки канала"
-                      data-testid={`channel-settings-${channel.id}`}
-                    >
-                      <Pencil className="w-3.5 h-3.5" strokeWidth={2.2} />
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setChannelSettingsTarget(channel);
+                        }}
+                        className="absolute top-2 right-9 w-7 h-7 rounded-lg grid place-items-center text-ink-400 hover:text-ink-700 hover:bg-white/70 transition opacity-0 group-hover:opacity-100 focus:opacity-100"
+                        title="Настройки канала"
+                        aria-label="Настройки канала"
+                        data-testid={`channel-settings-${channel.id}`}
+                      >
+                        <Pencil className="w-3.5 h-3.5" strokeWidth={2.2} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void handleDeleteChannel(channel, e.shiftKey);
+                        }}
+                        className="absolute top-2 right-2 w-7 h-7 rounded-lg grid place-items-center text-ink-400 hover:text-[color:var(--danger-fg-bold)] hover:bg-[var(--danger-bg-soft)] transition opacity-0 group-hover:opacity-100 focus:opacity-100"
+                        title="Удалить канал"
+                        aria-label="Удалить канал"
+                        data-testid={`channel-delete-${channel.id}`}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" strokeWidth={2.2} />
+                      </button>
+                    </>
                   )}
                 </div>
               );
@@ -617,11 +690,13 @@ export default function ChannelsView({
               )}
 
               {postsLoading ? (
-                <div className="space-y-3">
-                  <PostSkeleton />
-                  <PostSkeleton />
-                  <PostSkeleton />
-                </div>
+                showSkeleton ? (
+                  <div className="space-y-3">
+                    <PostSkeleton />
+                    <PostSkeleton />
+                    <PostSkeleton />
+                  </div>
+                ) : null
               ) : posts.length === 0 ? (
                 <div className="text-sm text-ink-400 font-body px-1">Постов пока нет</div>
               ) : (

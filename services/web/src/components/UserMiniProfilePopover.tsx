@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type RefObject } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { Crown } from "lucide-react";
 import { toAbsoluteApiUrl } from "@/lib/api-base";
@@ -85,91 +85,136 @@ export default function UserMiniProfilePopover({
   popoverRef: RefObject<HTMLDivElement | null>;
 }) {
   const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
+  // Снимок последних данных, чтобы успеть проиграть анимацию закрытия после
+  // того, как родитель обнулит user/anchorRect.
+  const [snapshot, setSnapshot] = useState<{
+    user: UserMiniProfile;
+    anchorRect: DOMRect;
+  } | null>(null);
+  const [closing, setClosing] = useState(false);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const shownRef = useRef(false);
 
   useEffect(() => {
     setPortalRoot(document.body);
   }, []);
 
-  if (!portalRoot || !user || !anchorRect) return null;
+  useEffect(() => {
+    if (user && anchorRect) {
+      if (closeTimer.current) {
+        clearTimeout(closeTimer.current);
+        closeTimer.current = null;
+      }
+      shownRef.current = true;
+      setClosing(false);
+      setSnapshot({ user, anchorRect });
+      return;
+    }
+
+    // Закрытие: запускаем обратную анимацию и снимаем с дерева после неё.
+    if (!shownRef.current || closeTimer.current) return;
+    setClosing(true);
+    closeTimer.current = setTimeout(() => {
+      shownRef.current = false;
+      setClosing(false);
+      setSnapshot(null);
+      closeTimer.current = null;
+    }, 150);
+  }, [user, anchorRect]);
+
+  useEffect(
+    () => () => {
+      if (closeTimer.current) clearTimeout(closeTimer.current);
+    },
+    [],
+  );
+
+  if (!portalRoot || !snapshot) return null;
+
+  const { user: shownUser, anchorRect: shownRect } = snapshot;
 
   const viewportWidth = window.innerWidth;
   const viewportHeight = window.innerHeight;
   const margin = 12;
   const maxWidth = 320;
   const width = Math.max(252, Math.min(maxWidth, viewportWidth - margin * 2));
-  const spaceBelow = viewportHeight - anchorRect.bottom;
-  const spaceAbove = anchorRect.top;
+  const spaceBelow = viewportHeight - shownRect.bottom;
+  const spaceAbove = shownRect.top;
   const placement = spaceBelow < 210 && spaceAbove > spaceBelow ? "top" : "bottom";
-  const centeredLeft = anchorRect.left + anchorRect.width / 2 - width / 2;
+  const centeredLeft = shownRect.left + shownRect.width / 2 - width / 2;
   const left = Math.max(margin, Math.min(centeredLeft, viewportWidth - width - margin));
-  const top = placement === "bottom" ? anchorRect.bottom + 10 : anchorRect.top - 10;
-  const role = user.role === "owner" ? "owner" : "member";
+  const top = placement === "bottom" ? shownRect.bottom + 10 : shownRect.top - 10;
+  const role = shownUser.role === "owner" ? "owner" : "member";
   const roleLabel = role === "owner" ? "Создатель" : "Участник";
-  const isOnline = user.is_online === true;
-  const presenceLabel = getPresenceLabel(user, {
+  const isOnline = shownUser.is_online === true;
+  const presenceLabel = getPresenceLabel(shownUser, {
     onlineLabel: "Сейчас в сети",
     offlineLabel: "Не в сети",
   });
-  const birthdayLabel = formatBirthday(user.birthday);
-  const joinedLabel = formatJoinedAt(user.joined_at);
+  const birthdayLabel = formatBirthday(shownUser.birthday);
+  const joinedLabel = formatJoinedAt(shownUser.joined_at);
 
   return createPortal(
     <div className="user-mini-popover-layer">
       <div
-        ref={popoverRef}
-        className={`user-mini-popover glass-dropdown glossy ${placement === "top" ? "is-top" : "is-bottom"}`}
+        className="user-mini-popover-positioner"
         style={{
           width: `${width}px`,
           left: `${left}px`,
           top: `${top}px`,
           transform: placement === "top" ? "translateY(-100%)" : undefined,
         }}
-        role="dialog"
-        aria-label={`Мини-профиль ${user.display_name}`}
       >
-        <div className="user-mini-popover__head">
-          <ProfileAvatar avatarUrl={user.avatar_url} displayName={user.display_name} />
+        <div
+          ref={popoverRef}
+          className={`user-mini-popover glass-dropdown glossy ${placement === "top" ? "is-top" : "is-bottom"} ${closing ? "is-closing" : ""}`}
+          role="dialog"
+          aria-label={`Мини-профиль ${shownUser.display_name}`}
+        >
+          <div className="user-mini-popover__head">
+            <ProfileAvatar avatarUrl={shownUser.avatar_url} displayName={shownUser.display_name} />
 
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <p className="user-mini-popover__name">{user.display_name}</p>
-              <span className={`user-mini-role ${role}`}>
-                {role === "owner" && <Crown className="w-3 h-3" strokeWidth={2.4} />}
-                {roleLabel}
-              </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <p className="user-mini-popover__name">{shownUser.display_name}</p>
+                <span className={`user-mini-role ${role}`}>
+                  {role === "owner" && <Crown className="w-3 h-3" strokeWidth={2.4} />}
+                  {roleLabel}
+                </span>
+              </div>
+
+              <p className="user-mini-popover__username">
+                @{shownUser.username || "unknown"}
+              </p>
+
+              <p className={`profile-presence ${isOnline ? "online" : ""}`} title={presenceLabel}>
+                <span className={`profile-presence-dot ${isOnline ? "online" : "offline"}`} aria-hidden />
+                <span className="truncate">{presenceLabel}</span>
+              </p>
             </div>
-
-            <p className="user-mini-popover__username">
-              @{user.username || "unknown"}
-            </p>
-
-            <p className={`profile-presence ${isOnline ? "online" : ""}`} title={presenceLabel}>
-              <span className={`profile-presence-dot ${isOnline ? "online" : "offline"}`} aria-hidden />
-              <span className="truncate">{presenceLabel}</span>
-            </p>
           </div>
+
+          {shownUser.bio && (
+            <p className="user-mini-popover__bio">{shownUser.bio}</p>
+          )}
+
+          {(birthdayLabel || joinedLabel) && (
+            <div className="user-mini-popover__meta">
+              {birthdayLabel && (
+                <p className="user-mini-meta-row">
+                  <span className="user-mini-meta-row__label">День рождения</span>
+                  <span className="user-mini-meta-row__value">{birthdayLabel}</span>
+                </p>
+              )}
+              {joinedLabel && (
+                <p className="user-mini-meta-row compact">
+                  <span className="user-mini-meta-row__label">В семье с</span>
+                  <span className="user-mini-meta-row__value">{joinedLabel}</span>
+                </p>
+              )}
+            </div>
+          )}
         </div>
-
-        {user.bio && (
-          <p className="user-mini-popover__bio">{user.bio}</p>
-        )}
-
-        {(birthdayLabel || joinedLabel) && (
-          <div className="user-mini-popover__meta">
-            {birthdayLabel && (
-              <p className="user-mini-meta-row">
-                <span className="user-mini-meta-row__label">День рождения</span>
-                <span className="user-mini-meta-row__value">{birthdayLabel}</span>
-              </p>
-            )}
-            {joinedLabel && (
-              <p className="user-mini-meta-row compact">
-                <span className="user-mini-meta-row__label">В семье с</span>
-                <span className="user-mini-meta-row__value">{joinedLabel}</span>
-              </p>
-            )}
-          </div>
-        )}
       </div>
     </div>,
     portalRoot,

@@ -57,13 +57,16 @@
   --border-warm:          rgba(240, 228, 204, 0.50);
   --border-warm-dim:      rgba(240, 228, 204, 0.35);
 
-  /* ─── Accent ─── */
-  --accent:               #c4956a;
-  --accent-hover:         #b07d52;
-  --accent-soft:          rgba(196, 149, 106, 0.18);
-  --accent-medium:        rgba(196, 149, 106, 0.22);
-  --accent-border:        rgba(196, 149, 106, 0.45);
-  --accent-focus-ring:    rgba(196, 149, 106, 0.26);
+  /* ─── Accent ───
+   * Единый акцент Web ↔ Mobile: #b07d52 (= warm-500). Раньше был #c4956a
+   * (warm-400) на вебе и #C8693A на мобильном — два разных «продукта».
+   * Производные альфа-токены ниже тоже переведены на rgb(176,125,82). */
+  --accent:               #b07d52;
+  --accent-hover:         #8f6040;
+  --accent-soft:          rgba(176, 125, 82, 0.18);
+  --accent-medium:        rgba(176, 125, 82, 0.22);
+  --accent-border:        rgba(176, 125, 82, 0.45);
+  --accent-focus-ring:    rgba(176, 125, 82, 0.26);
 
   /* ─── Text ─── */
   --text-primary:         #1c1714;
@@ -117,7 +120,7 @@
   --dur-enter:  480ms;
 
   /* ─── Focus ─── */
-  --focus-ring: 0 0 0 3px rgba(196, 149, 106, 0.26), 0 0 0 1px rgba(196, 149, 106, 0.12);
+  --focus-ring: 0 0 0 3px rgba(176, 125, 82, 0.26), 0 0 0 1px rgba(176, 125, 82, 0.12);
 
   /* ─── Compatibility Aliases ─── */
   --r-sm: var(--radius-sm);

@@ -3,6 +3,7 @@ from __future__ import annotations
 from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config, pool
+from sqlalchemy.engine import make_url
 from alembic import context
 
 from app.core.config import settings
@@ -18,7 +19,19 @@ target_metadata = Base.metadata
 
 
 def _sync_database_url() -> str:
-    return settings.database_url.replace("+asyncpg", "")
+    url = make_url(settings.database_url)
+    query = dict(url.query)
+
+    # Runtime uses asyncpg (`ssl=require`), but Alembic runs through psycopg2
+    # here, which expects libpq-style SSL parameters.
+    if query.get("ssl") == "require":
+        query.pop("ssl")
+        query.setdefault("sslmode", "require")
+
+    return url.set(
+        drivername=url.drivername.replace("+asyncpg", ""),
+        query=query,
+    ).render_as_string(hide_password=False)
 
 
 def run_migrations_offline() -> None:

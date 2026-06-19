@@ -7,8 +7,16 @@
   pointer-events: none;
 }
 
-.user-mini-popover {
+/* Позиционирование вынесено в обёртку, чтобы её transform (translateY(-100%)
+   для размещения сверху) не конфликтовал с transform внутри анимации карточки. */
+.user-mini-popover-positioner {
   position: fixed;
+  pointer-events: none;
+}
+
+.user-mini-popover {
+  position: relative;
+  width: 100%;
   pointer-events: auto;
   border-radius: 20px;
   overflow: hidden;
@@ -19,7 +27,8 @@
     0 24px 72px var(--scrim-3),
     0 10px 30px var(--scrim-2),
     inset 0 1px 0 var(--bg-elevated);
-  animation: profile-pop 160ms ease both;
+  animation: profile-pop 180ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: transform, opacity;
 }
 
 .user-mini-popover.is-top {
@@ -28,6 +37,19 @@
 
 .user-mini-popover.is-bottom {
   transform-origin: top center;
+}
+
+/* Закрытие по повторному клику / клику вне / Esc — плавный обратный ход. */
+.user-mini-popover.is-closing {
+  pointer-events: none;
+  animation: profile-pop-out 150ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .user-mini-popover,
+  .user-mini-popover.is-closing {
+    animation-duration: 1ms;
+  }
 }
 
 .user-mini-popover__head {

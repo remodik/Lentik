@@ -34,6 +34,10 @@ class AdminStats(BaseModel):
     messages: int
     banned_users: int
     uploads_bytes: int
+    # Прирост (новые записи) за последние 7 дней — превращает витрину в дашборд.
+    users_delta_7d: int = 0
+    families_delta_7d: int = 0
+    messages_delta_7d: int = 0
 
 
 class AdminAuditRow(BaseModel):

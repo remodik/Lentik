@@ -48,6 +48,13 @@ export default function ChatsListScreen({ navigation }: Props) {
     void loadChats();
   };
 
+  const handleContactOwner = useCallback(() => {
+    // Отдельного «личного» чата с владельцем пока нет — перечитываем список
+    // на случай, если владелец только что создал первый чат.
+    setLoading(true);
+    void loadChats();
+  }, [loadChats]);
+
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.header}>
@@ -65,9 +72,17 @@ export default function ChatsListScreen({ navigation }: Props) {
         <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 60 }} />
       ) : chats.length === 0 ? (
         <View style={styles.empty}>
-          <Ionicons name="chatbubbles-outline" size={64} color={colors.primaryLight} />
-          <Text style={styles.emptyTitle}>Нет чатов</Text>
-          <Text style={styles.emptyText}>Чаты создаёт владелец семьи</Text>
+          {/* Тёплая иллюстрация — emoji в круглом цветном контейнере */}
+          <View style={styles.emptyIllustration}>
+            <Text style={{ fontSize: 36 }}>💌</Text>
+          </View>
+          <Text style={styles.emptyTitle}>Начните общение</Text>
+          <Text style={styles.emptyText}>
+            Попросите владельца семьи создать первый чат — или напишите ему напрямую
+          </Text>
+          <TouchableOpacity style={styles.emptyBtn} onPress={handleContactOwner}>
+            <Text style={styles.emptyBtnText}>Написать владельцу</Text>
+          </TouchableOpacity>
         </View>
       ) : (
         <FlatList
@@ -117,11 +132,37 @@ const styles = StyleSheet.create({
   switchBtn: { alignItems: "center", paddingTop: spacing.xs },
   switchText: { fontSize: 12, color: colors.primary, marginTop: 2 },
   empty: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: spacing.xl },
+  emptyIllustration: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: "#f5d5a8",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: spacing.lg,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 4,
+  },
   emptyTitle: { fontSize: fontSize.xl, fontWeight: "700", color: colors.text, marginTop: spacing.lg },
   emptyText: {
     fontSize: fontSize.base,
     color: colors.textSecondary,
     textAlign: "center",
     marginTop: spacing.sm,
+  },
+  emptyBtn: {
+    marginTop: spacing.md,
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.sm + 2,
+    borderRadius: 12,
+  },
+  emptyBtnText: {
+    color: "#fff",
+    fontSize: fontSize.base,
+    fontWeight: "600",
   },
 });

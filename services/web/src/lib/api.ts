@@ -1163,6 +1163,9 @@ export type AdminStats = {
   messages: number;
   banned_users: number;
   uploads_bytes: number;
+  users_delta_7d?: number;
+  families_delta_7d?: number;
+  messages_delta_7d?: number;
 };
 
 export type AdminAuditRow = {

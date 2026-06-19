@@ -121,7 +121,7 @@ const SIDEBAR_CATEGORIES: SidebarCategory[] = [
   {
     id: "chat",
     icon: MessageCircle,
-    label: "Chat",
+    label: "Чаты",
     groups: [
       {
         id: "chat-conversations",
@@ -138,7 +138,7 @@ const SIDEBAR_CATEGORIES: SidebarCategory[] = [
   {
     id: "plans",
     icon: CalendarDays,
-    label: "Plans",
+    label: "Планирование",
     groups: [
       {
         id: "plans-main",
@@ -156,7 +156,7 @@ const SIDEBAR_CATEGORIES: SidebarCategory[] = [
   {
     id: "media",
     icon: Images,
-    label: "Media",
+    label: "Медиа",
     groups: [
       {
         id: "media-main",
@@ -171,7 +171,7 @@ const SIDEBAR_CATEGORIES: SidebarCategory[] = [
   {
     id: "family",
     icon: Users,
-    label: "Family",
+    label: "Семья",
     groups: [
       {
         id: "family-main",

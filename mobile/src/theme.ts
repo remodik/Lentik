@@ -3,7 +3,7 @@ export const colors = {
   background: "#FFF8F0", // Тёплый белый / бежевый фон
   surface: "#FFFFFF",
   surfaceWarm: "#FEF0E0",
-  primary: "#C8693A", // Тёплый терракот
+  primary: "#b07d52", // Единый акцент Web ↔ Mobile (был #C8693A)
   primaryLight: "#F5D5B8",
   primaryDark: "#8B4520",
   text: "#2D1B0E", // Тёмно-коричневый (хороший контраст)
@@ -16,8 +16,8 @@ export const colors = {
   white: "#FFFFFF",
   online: "#27AE60",
   offline: "#BDC3C7",
-  bubbleMine: "#F5D5B8", // Мои сообщения
-  bubbleTheirs: "#FFFFFF", // Чужие сообщения
+  bubbleMine: "#c4956a", // Мои сообщения — насыщенный терракот
+  bubbleTheirs: "#f0e8da", // Чужие сообщения — тёплый светлый
 } as const;
 
 // Минимум 18px согласно требованиям

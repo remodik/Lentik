@@ -346,12 +346,16 @@
     box-shadow: none;
 }
 .msg-bubble.is-other {
-    background: var(--bg-elevated);
-    border-color: var(--bg-surface-strong);
+    background: #f0e8da;
+    border-color: rgba(196, 149, 106, 0.18);
 }
 .msg-bubble.is-me {
-    background: var(--surface-warm-medium);
-    border-color: var(--accent-strong);
+    background: #c4956a;
+    border-color: transparent;
+    box-shadow: 0 2px 8px rgba(176, 125, 82, 0.25);
+}
+.msg-row.is-me .msg-text {
+    color: #ffffff;
 }
 .msg-actions {
     top: auto;

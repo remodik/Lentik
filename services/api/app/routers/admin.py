@@ -7,7 +7,7 @@ Read-only обзор (пользователи, семьи, статистика
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
@@ -135,12 +135,27 @@ async def get_stats(db: AsyncSession = Depends(get_db)):
     except Exception:  # noqa: BLE001
         uploads_bytes = -1  # каталог недоступен (например, S3-бэкенд)
 
+    # Прирост за последние 7 дней (по дате создания записи).
+    week_ago = datetime.now(timezone.utc) - timedelta(days=7)
+    users_delta = await db.scalar(
+        select(func.count(User.id)).where(User.created_at >= week_ago)
+    ) or 0
+    families_delta = await db.scalar(
+        select(func.count(Family.id)).where(Family.created_at >= week_ago)
+    ) or 0
+    messages_delta = await db.scalar(
+        select(func.count(Message.id)).where(Message.created_at >= week_ago)
+    ) or 0
+
     return AdminStats(
         users=users,
         families=families,
         messages=messages,
         banned_users=banned,
         uploads_bytes=uploads_bytes,
+        users_delta_7d=users_delta,
+        families_delta_7d=families_delta,
+        messages_delta_7d=messages_delta,
     )
 
 

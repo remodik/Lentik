@@ -770,6 +770,12 @@ export type Post = {
   created_at: string;
 };
 
+export function deleteChannel(familyId: string, channelId: string) {
+  return request<void>(`/families/${familyId}/channels/${channelId}`, {
+    method: "DELETE",
+  });
+}
+
 export function getChannels(familyId: string) {
   return request<Channel[]>(`/families/${familyId}/channels`);
 }

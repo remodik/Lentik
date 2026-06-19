@@ -293,10 +293,10 @@ function EventModal({
       aria-modal="true"
     >
       <div
-        className="glass-elevated glossy rounded-3xl w-full max-w-md overflow-hidden animate-pop"
+        className="glass-elevated glossy rounded-3xl w-full max-w-md overflow-hidden animate-pop flex flex-col max-h-[calc(100dvh-2rem)]"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className={`${c.bg} px-6 py-5`}>
+        <div className={`${c.bg} px-6 py-5 shrink-0`}>
           <p className="text-white/70 text-[11px] font-body uppercase tracking-widest mb-1">
             {editing ? "Редактировать" : "Новое событие"}
           </p>
@@ -305,7 +305,8 @@ function EventModal({
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="flex flex-col min-h-0 flex-1">
+          <div className="p-6 space-y-4 overflow-y-auto sidebar-scroll min-h-0 flex-1">
           <div>
             <label className="text-[11px] font-semibold text-ink-400 uppercase tracking-widest font-body mb-1.5 block">
               Название
@@ -467,9 +468,10 @@ function EventModal({
             )}
           </div>
 
-          {error && <p className="text-red-500 text-sm font-body">{error}</p>}
+            {error && <p className="text-red-500 text-sm font-body">{error}</p>}
+          </div>
 
-          <div className="flex gap-3 pt-1">
+          <div className="flex gap-3 px-6 py-4 shrink-0 border-t border-[color:var(--border-glass)]">
             <button
               type="submit"
               disabled={saving}

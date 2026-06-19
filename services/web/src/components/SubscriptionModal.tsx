@@ -92,7 +92,7 @@ export default function SubscriptionModal({ open, onClose }: Props) {
       aria-label="Покупка подписки"
     >
       <div
-        className="w-full max-w-4xl rounded-[28px] border border-[color:var(--border-glass-strong)] bg-[color:var(--bg-elevated)] backdrop-blur-2xl shadow-[0_30px_90px_var(--scrim-4)] p-5 sm:p-7"
+        className="w-full max-w-4xl max-h-[calc(100dvh-2rem)] overflow-y-auto sidebar-scroll rounded-[28px] border border-[color:var(--border-glass-strong)] bg-[color:var(--bg-elevated)] backdrop-blur-2xl shadow-[0_30px_90px_var(--scrim-4)] p-5 sm:p-7"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-4 mb-5">

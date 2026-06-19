@@ -64,7 +64,6 @@ backend на FastAPI.
 | Realtime    | WebSocket + Redis pub/sub (fan-out, кросс-инстанс)        |
 | Инфра       | Docker Compose, reverse-proxy                             |
 
-<<<<<<< HEAD
 <!--
 <div align="center">
   <img src="docs/screenshots/chat.png" width="45%" />
@@ -153,7 +152,3 @@ cp infra/.env.example infra/.env
 
 Полное руководство по развёртыванию в продакшене (reverse-proxy, security headers,
 WebSocket upgrade, масштабирование через Redis) — в [`DEPLOY.md`](DEPLOY.md).
-
-## 📄 Лицензия
-
-[MIT](LICENSE) © remodik

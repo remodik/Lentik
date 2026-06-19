@@ -1,7 +1,8 @@
 """Проверка Origin для WebSocket-handshake (defense-in-depth против CSWSH, CWE-346).
 
-Cookie уже защищена SameSite=lax (на cross-site WS-upgrade не уходит), но явная
-сверка Origin надёжнее и не зависит от настроек cookie.
+В проде cookie ставится с SameSite=None (фронт и API на разных доменах), т.е.
+уходит и на cross-site WS-upgrade — поэтому явная сверка Origin здесь и есть
+основная защита от CSWSH, а не настройки cookie.
 
 Политика: если заголовок Origin присутствует — он обязан быть в
 ``settings.cors_origins``. Отсутствие Origin (нативные/мобильные клиенты, которые

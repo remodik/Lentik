@@ -44,13 +44,36 @@ def _resolve_configured_upload_root() -> Path:
 @lru_cache(maxsize=1)
 def get_upload_root() -> Path:
     configured = _resolve_configured_upload_root()
+
+    # При S3-хранилище локальная папка для записи загрузок не используется
+    # (S3Storage пишет/читает в бакет). Не требуем её доступности и не падаем —
+    # иначе сломали бы старт при STORAGE_BACKEND=s3 без локального тома.
+    if settings.storage_backend == "s3":
+        return configured
+
     if _is_usable_upload_root(configured):
         return configured
 
+    # ── Хардненинг: в продакшене НЕ скатываемся молча в эфемерные папки.
+    # Тихий фолбэк в API_ROOT/uploads или /tmp — ловушка потери данных: файлы
+    # переживут до первого рестарта/редеплоя, а ссылки в БД останутся битыми
+    # («аватарки слетают»). Падаем сразу с понятной для оператора ошибкой.
+    if settings.is_production:
+        raise RuntimeError(
+            f"UPLOAD_DIR '{configured}' недоступен для записи (или его подпапки "
+            f"avatars/chat_files). В продакшене запрещён фолбэк в эфемерные "
+            f"папки — иначе загрузки потеряются при рестарте, а ссылки в БД "
+            f"останутся битыми. Смонтируйте постоянный том с правом записи для "
+            f"пользователя приложения (uid 1000 в Docker-образе) либо включите "
+            f"STORAGE_BACKEND=s3."
+        )
+
+    # ── Dev/локально: фолбэк допустим для удобства, но с явным предупреждением.
     if _is_usable_upload_root(FALLBACK_UPLOAD_DIR):
         logger.warning(
             "Upload directory '%s' (or required subdirs) is not writable. "
-            "Using fallback '%s'.",
+            "Using fallback '%s'. (Эфемерно — потеряется при рестарте; "
+            "недопустимо в проде.)",
             configured,
             FALLBACK_UPLOAD_DIR,
         )
@@ -59,7 +82,8 @@ def get_upload_root() -> Path:
     if _is_usable_upload_root(LEGACY_FALLBACK_UPLOAD_DIR):
         logger.warning(
             "Upload directories '%s' and '%s' are not writable. "
-            "Using legacy fallback '%s'.",
+            "Using legacy fallback '%s'. (Эфемерно — потеряется при рестарте; "
+            "недопустимо в проде.)",
             configured,
             FALLBACK_UPLOAD_DIR,
             LEGACY_FALLBACK_UPLOAD_DIR,

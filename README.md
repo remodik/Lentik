@@ -9,7 +9,6 @@
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?logo=postgresql)
 ![React Native](https://img.shields.io/badge/React_Native-Expo_51-61DAFB?logo=react)
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker)
-![License](https://img.shields.io/badge/License-MIT-green)
 
 </div>
 
@@ -24,7 +23,6 @@
 - [Быстрый старт](#-быстрый-старт)
 - [Переменные окружения](#-переменные-окружения)
 - [Деплой](#-деплой)
-- [Лицензия](#-лицензия)
 
 ## 🌟 О проекте
 

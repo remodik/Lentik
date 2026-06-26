@@ -55,9 +55,6 @@ class Settings(BaseSettings):
     s3_region: str | None = None
     s3_access_key_id: str | None = None
     s3_secret_access_key: str | None = None
-    # Стиль адресации S3: virtual (vHosted — по умолчанию, рекомендуется
-    # большинством провайдеров: Selectel, Timeweb, Yandex, AWS), path
-    # (нужен Cloudflare R2 и иногда MinIO) или auto.
     s3_addressing_style: str = "virtual"
 
     @field_validator("jwt_secret")

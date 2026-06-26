@@ -14,6 +14,7 @@ from app.core.uploads import get_upload_root
 from app.core.ws_security import is_allowed_ws_origin
 from app.core.ws_tickets import ws_ticket_store
 from app.db.deps import get_db
+from app.db.session import AsyncSessionLocal
 from app.models.chat import Chat
 from app.models.family import Family
 from app.models.membership import Membership, Role
@@ -533,7 +534,6 @@ async def transfer_ownership(
 async def family_ws(
     websocket: WebSocket,
     family_id: UUID,
-    db: AsyncSession = Depends(get_db),
 ):
     # Defense-in-depth против CSWSH: чужой Origin не пускаем (L8).
     if not is_allowed_ws_origin(websocket):
@@ -552,44 +552,52 @@ async def family_ws(
         await websocket.close(code=4001)
         return
 
-    user = await db.scalar(select(User).where(User.id == user_id))
-    if not user:
-        await websocket.close(code=4001)
-        return
+    async with AsyncSessionLocal() as db:
+        user = await db.scalar(select(User).where(User.id == user_id))
+        if not user:
+            await websocket.close(code=4001)
+            return
 
-    if token_iat is not None and token_iat + timedelta(seconds=1) < user.password_changed_at:
-        await websocket.close(code=4001)
-        return
+        if token_iat is not None and token_iat + timedelta(seconds=1) < user.password_changed_at:
+            await websocket.close(code=4001)
+            return
 
-    # Глобальный бан: закрываем даже валидный ticket-путь (где revocation по
-    # password_changed_at не срабатывает, т.к. token_iat is None).
-    if is_banned_now(user):
-        await websocket.close(code=4003)
-        return
+        # Глобальный бан: закрываем даже валидный ticket-путь (где revocation по
+        # password_changed_at не срабатывает, т.к. token_iat is None).
+        if is_banned_now(user):
+            await websocket.close(code=4003)
+            return
 
-    m = await db.scalar(
-        select(Membership).where(
-            Membership.family_id == family_id,
-            Membership.user_id == user.id,
+        m = await db.scalar(
+            select(Membership).where(
+                Membership.family_id == family_id,
+                Membership.user_id == user.id,
+            )
         )
-    )
-    if not m:
-        await websocket.close(code=4003)
-        return
+        if not m:
+            await websocket.close(code=4003)
+            return
+
+        was_online = user.is_online
+        last_seen_at = user.last_seen_at
 
     await websocket.accept()
-    await ws_manager.connect_family(family_id, websocket, user_id=user.id)
-    became_online = await ws_manager.register_presence_connection(family_id, user.id, websocket)
-    if became_online or not user.is_online:
-        user.is_online = True
-        await db.commit()
+    await ws_manager.connect_family(family_id, websocket, user_id=user_id)
+    became_online = await ws_manager.register_presence_connection(family_id, user_id, websocket)
+    if became_online or not was_online:
+        async with AsyncSessionLocal() as db:
+            u = await db.get(User, user_id)
+            if u:
+                u.is_online = True
+                await db.commit()
+                last_seen_at = u.last_seen_at
         await ws_manager.broadcast_to_family(
             family_id,
             _presence_payload(
                 family_id=family_id,
-                user_id=user.id,
+                user_id=user_id,
                 is_online=True,
-                last_seen_at=user.last_seen_at,
+                last_seen_at=last_seen_at,
             ),
         )
 
@@ -597,9 +605,9 @@ async def family_ws(
     await websocket.send_json(
         _presence_payload(
             family_id=family_id,
-            user_id=user.id,
-            is_online=user.is_online,
-            last_seen_at=user.last_seen_at,
+            user_id=user_id,
+            is_online=True,
+            last_seen_at=last_seen_at,
         )
     )
 
@@ -614,19 +622,24 @@ async def family_ws(
         ws_manager.disconnect_family(family_id, websocket)
         became_offline = await ws_manager.unregister_presence_connection(
             family_id,
-            user.id,
+            user_id,
             websocket,
         )
         if became_offline:
-            user.is_online = False
-            user.last_seen_at = datetime.now(timezone.utc)
-            await db.commit()
+            offline_seen = datetime.now(timezone.utc)
+            async with AsyncSessionLocal() as db:
+                u = await db.get(User, user_id)
+                if u:
+                    u.is_online = False
+                    u.last_seen_at = offline_seen
+                    await db.commit()
+                    offline_seen = u.last_seen_at
             await ws_manager.broadcast_to_family(
                 family_id,
                 _presence_payload(
                     family_id=family_id,
-                    user_id=user.id,
+                    user_id=user_id,
                     is_online=False,
-                    last_seen_at=user.last_seen_at,
+                    last_seen_at=offline_seen,
                 ),
             )

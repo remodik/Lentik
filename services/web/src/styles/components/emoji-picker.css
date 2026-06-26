@@ -6,6 +6,17 @@
     transform-origin: top right;
 }
 
+/* Мобильный нижний лист: пикер во всю ширину экрана над навбаром. */
+.emoji-picker-popover.is-sheet {
+    transform-origin: bottom center;
+}
+
+.emoji-picker-popover.is-sheet .emoji-picker {
+    width: 100%;
+    max-width: none;
+    height: min(56vh, 26.75rem);
+}
+
 @keyframes emoji-pop-in {
     from {
         opacity: 0;

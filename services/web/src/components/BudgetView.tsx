@@ -295,11 +295,11 @@ export default function BudgetView({ familyId, meId, members }: Props) {
 
   return (
     <div
-      className="h-full min-h-0 grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_var(--lentik-balance-w)] gap-4 p-5 overflow-hidden"
+      className="h-full min-h-0 grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_var(--lentik-balance-w)] gap-4 p-5 overflow-y-auto xl:overflow-hidden"
       style={{ ["--lentik-balance-w" as never]: `${balanceResize.width}px` }}
     >
       <section
-        className="rounded-3xl border h-full min-h-0 flex flex-col"
+        className="rounded-3xl border min-h-0 flex flex-col xl:h-full"
         style={{ borderColor: "var(--border-glass)", background: "var(--bg-surface)" }}
       >
         <header
@@ -373,7 +373,7 @@ export default function BudgetView({ familyId, meId, members }: Props) {
       </section>
 
       <section
-        className="relative rounded-3xl border h-full min-h-0 flex flex-col"
+        className="relative rounded-3xl border min-h-0 flex flex-col xl:h-full"
         style={{ borderColor: "var(--border-glass)", background: "var(--bg-surface)" }}
       >
         <div

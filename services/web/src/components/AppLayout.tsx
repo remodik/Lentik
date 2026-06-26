@@ -31,6 +31,7 @@ import ProfileMenu from "@/components/ProfileMenu";
 import NotificationBell from "@/components/NotificationBell";
 import NotificationCenter from "@/components/NotificationCenter";
 import MobileBottomNav, { type MobileNavCategory } from "@/components/MobileBottomNav";
+import MobileProfileSheet from "@/components/MobileProfileSheet";
 import {
   useNotifications,
   type Notification,
@@ -277,7 +278,10 @@ export default function AppLayout({
 
   const [isCenterOpen, setCenterOpen] = useState(false);
   const [isFamilyMenuOpen, setFamilyMenuOpen] = useState(false);
+  const [isMobileProfileOpen, setMobileProfileOpen] = useState(false);
   const familyMenuRef = useRef<HTMLDivElement>(null);
+
+  const meInitial = me.display_name?.[0]?.toUpperCase() ?? "?";
 
   const current = useMemo(
     () => NAV_ITEMS.find((n) => n.id === section) ?? NAV_ITEMS[0],
@@ -567,6 +571,20 @@ export default function AppLayout({
 
           <div className="app-topbar-actions">
             <button
+              onClick={() => setMobileProfileOpen(true)}
+              className="md:hidden w-11 h-11 rounded-full overflow-hidden grid place-items-center shrink-0 border border-[color:var(--border-glass-strong)] bg-gradient-to-br from-warm-300 via-warm-400 to-warm-500 text-white font-display text-sm"
+              type="button"
+              aria-label="Профиль и семьи"
+              title="Профиль и семьи"
+            >
+              {me.avatar_url ? (
+                <img src={me.avatar_url} alt="" className="w-full h-full object-cover" />
+              ) : (
+                meInitial
+              )}
+            </button>
+
+            <button
               onClick={() => setCenterOpen(true)}
               className="ui-btn ui-btn-icon"
               type="button"
@@ -604,9 +622,25 @@ export default function AppLayout({
 
       <MobileBottomNav section={section} onSection={onSection} categories={MOBILE_NAV} />
 
+      {isMobileProfileOpen && (
+        <MobileProfileSheet
+          me={me}
+          activeFamilyId={family.id}
+          myFamilies={myFamilies}
+          onClose={() => setMobileProfileOpen(false)}
+          onFamilySwitch={onFamilySwitch}
+          onCreateFamily={onCreateFamily}
+          onJoinFamily={onJoinFamily}
+          onRenameFamily={onRenameFamily}
+          onOpenFamilySettings={onOpenFamilySettings}
+          onLogout={onLogout}
+          onMeUpdate={onMeUpdate}
+        />
+      )}
+
       {toasts.length > 0 && (
         <div
-          className="fixed bottom-5 right-5 z-[70] flex flex-col gap-2.5 items-end pointer-events-none"
+          className="toast-wrap fixed bottom-5 right-5 z-[70] flex flex-col gap-2.5 items-end pointer-events-none"
           aria-live="polite"
           aria-relevant="additions"
         >

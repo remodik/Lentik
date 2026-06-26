@@ -183,7 +183,7 @@ function ReminderCard({
               {reminder.title}
             </h3>
             {canModify && (
-              <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition">
+              <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 max-md:opacity-100 transition">
                 <button
                   type="button"
                   onClick={() => onEdit(reminder)}
@@ -400,9 +400,9 @@ export default function RemindersView({
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      <div className="shrink-0 px-5 pt-5 pb-3 flex items-center justify-between gap-3">
+      <div className="shrink-0 px-5 pt-5 pb-3 flex flex-wrap items-center justify-between gap-2">
         <div
-          className="flex items-center gap-1 p-1 rounded-xl border"
+          className="flex items-center gap-1 p-1 rounded-xl border max-w-full overflow-x-auto sidebar-scroll"
           style={{ background: "var(--bg-surface-subtle)", borderColor: "var(--border-warm-dim)" }}
         >
           {(Object.keys(FILTER_LABELS) as Filter[]).map((f) => (
@@ -425,11 +425,12 @@ export default function RemindersView({
         <button
           type="button"
           onClick={openCreate}
-          className="ui-btn ui-btn-primary inline-flex items-center gap-1.5"
+          className="ui-btn ui-btn-primary inline-flex items-center gap-1.5 shrink-0"
           data-testid="reminder-create-btn"
+          aria-label="Создать напоминание"
         >
           <Plus className="w-3.5 h-3.5" strokeWidth={2.4} />
-          Напоминание
+          <span className="hidden sm:inline">Напоминание</span>
         </button>
       </div>
 

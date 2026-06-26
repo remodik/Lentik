@@ -810,8 +810,8 @@ export default function CalendarView({
   return (
     <div className="calendar-layout flex h-full overflow-hidden">
       <div className="flex flex-col flex-1 min-w-0">
-        <header className="shrink-0 glass-topbar glossy px-6 py-4 flex items-center gap-4">
-          <div className="flex items-center gap-2.5 mr-auto">
+        <header className="shrink-0 glass-topbar glossy px-3 md:px-6 py-3 md:py-4 flex flex-wrap items-center gap-2 md:gap-4">
+          <div className="flex items-center gap-1.5 md:gap-2.5 mr-auto">
             <button
               onClick={prevMonth}
               className={glassButton}
@@ -821,7 +821,7 @@ export default function CalendarView({
               <ChevronLeft className="w-4 h-4 text-ink-600" strokeWidth={2.2} />
             </button>
 
-            <h2 className="font-display text-xl text-ink-900 min-w-[180px] text-center">
+            <h2 className="font-display text-lg md:text-xl text-ink-900 md:min-w-[180px] text-center whitespace-nowrap">
               {MONTHS[month]} {year}
             </h2>
 
@@ -848,9 +848,11 @@ export default function CalendarView({
 
           <button
             onClick={() => setModal({ date: selectedDay ?? new Date(today) })}
-            className="btn-primary flex items-center gap-2 px-4 py-2 text-sm rounded-xl"
+            className="btn-primary flex items-center gap-2 px-3 md:px-4 py-2 text-sm rounded-xl shrink-0"
+            aria-label="Новое событие"
           >
-            <Plus className="w-4 h-4" strokeWidth={2.2} /> Событие
+            <Plus className="w-4 h-4" strokeWidth={2.2} />{" "}
+            <span className="hidden sm:inline">Событие</span>
           </button>
         </header>
 
@@ -996,7 +998,7 @@ export default function CalendarView({
       </div>
 
       {selectedDay ? (
-        <div className="calendar-side-panel w-72 shrink-0 flex flex-col overflow-hidden">
+        <div className="calendar-side-panel w-72 shrink-0 hidden md:flex flex-col overflow-hidden">
           <DayPanel
             date={selectedDay}
             events={dayPanelEvents}
@@ -1010,7 +1012,7 @@ export default function CalendarView({
           />
         </div>
       ) : (
-        <div className="calendar-side-panel w-72 shrink-0 flex flex-col overflow-hidden glass-sidebar glossy">
+        <div className="calendar-side-panel w-72 shrink-0 hidden md:flex flex-col overflow-hidden glass-sidebar glossy">
           <div
             className="calendar-side-head px-5 py-4 shrink-0"
           >
@@ -1096,6 +1098,34 @@ export default function CalendarView({
                   ))}
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Мобильный нижний лист с панелью дня (десктоп использует боковую панель). */}
+      {selectedDay && (
+        <div
+          className="md:hidden fixed inset-0 z-[85] flex flex-col justify-end"
+          role="dialog"
+          aria-modal="true"
+          aria-label="События дня"
+        >
+          <div
+            className="absolute inset-0 bg-[var(--bg-overlay)] backdrop-blur-sm animate-fade-in"
+            onClick={() => setSelectedDay(null)}
+          />
+          <div className="cal-sheet-panel relative z-10 max-h-[80vh] flex flex-col overflow-hidden rounded-t-3xl shadow-[0_-20px_60px_var(--scrim-4)]">
+            <DayPanel
+              date={selectedDay}
+              events={dayPanelEvents}
+              birthdays={dayPanelBirthdays}
+              meId={meId}
+              canManageOthers={canManageOthers}
+              onEdit={(ev) => setModal({ date: selectedDay, event: ev })}
+              onDelete={handleDelete}
+              onAdd={() => setModal({ date: selectedDay })}
+              onClose={() => setSelectedDay(null)}
+            />
           </div>
         </div>
       )}

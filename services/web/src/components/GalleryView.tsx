@@ -1093,7 +1093,7 @@ export default function GalleryView({
                       onMouseDown={stopControlPropagation}
                       onClick={(e) => handleSelectControlClick(item.id, e)}
                       className={`row-check ${isSelected ? "on" : ""}
-                                  opacity-0 group-hover:opacity-100 transition-opacity
+                                  opacity-0 group-hover:opacity-100 max-md:opacity-100 transition-opacity
                                   ${isSelected ? "opacity-100" : ""}`}
                       type="button"
                       aria-label={isSelected ? "Снять выделение" : "Выбрать"}

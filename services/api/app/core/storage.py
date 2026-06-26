@@ -74,15 +74,23 @@ class S3Storage:
 
     def _client(self):
         import aioboto3  # ленивый импорт: нужен только при storage_backend=s3
+        from botocore.config import Config
 
         if self._session is None:
             self._session = aioboto3.Session()
+        # Стиль адресации берём из настроек: virtual (vHosted) по умолчанию —
+        # рекомендуется Selectel/Timeweb/Yandex/AWS; path — для Cloudflare R2.
+        # signature_version s3v4 универсален.
         return self._session.client(
             "s3",
             endpoint_url=settings.s3_endpoint_url,
-            region_name=settings.s3_region,
+            region_name=settings.s3_region or "auto",
             aws_access_key_id=settings.s3_access_key_id,
             aws_secret_access_key=settings.s3_secret_access_key,
+            config=Config(
+                signature_version="s3v4",
+                s3={"addressing_style": settings.s3_addressing_style},
+            ),
         )
 
     async def save(self, key: str, data: bytes, content_type: str | None = None) -> None:

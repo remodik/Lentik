@@ -145,7 +145,7 @@ export default function Home() {
 
         {/* Финальный CTA */}
         <section className="text-center mb-10">
-          <div className="flex items-center justify-center gap-2 text-ink-400 font-body text-sm mb-5">
+          <div className="flex flex-wrap items-center justify-center gap-2 text-ink-400 font-body text-sm mb-5">
             <Users className="w-4 h-4 text-warm-500" strokeWidth={2.1} />
             Несколько семей в одном аккаунте · присутствие онлайн · напоминания
             <Bell className="w-4 h-4 text-warm-500" strokeWidth={2.1} />

@@ -587,7 +587,7 @@ export default function ChannelsView({
                           e.stopPropagation();
                           setChannelSettingsTarget(channel);
                         }}
-                        className="absolute top-2 right-9 w-7 h-7 rounded-lg grid place-items-center text-ink-400 hover:text-ink-700 hover:bg-white/70 transition opacity-0 group-hover:opacity-100 focus:opacity-100"
+                        className="absolute top-2 right-9 w-7 h-7 rounded-lg grid place-items-center text-ink-400 hover:text-ink-700 hover:bg-white/70 transition opacity-0 group-hover:opacity-100 max-md:opacity-100 focus:opacity-100"
                         title="Настройки канала"
                         aria-label="Настройки канала"
                         data-testid={`channel-settings-${channel.id}`}
@@ -600,7 +600,7 @@ export default function ChannelsView({
                           e.stopPropagation();
                           void handleDeleteChannel(channel, e.shiftKey);
                         }}
-                        className="absolute top-2 right-2 w-7 h-7 rounded-lg grid place-items-center text-ink-400 hover:text-[color:var(--danger-fg-bold)] hover:bg-[var(--danger-bg-soft)] transition opacity-0 group-hover:opacity-100 focus:opacity-100"
+                        className="absolute top-2 right-2 w-7 h-7 rounded-lg grid place-items-center text-ink-400 hover:text-[color:var(--danger-fg-bold)] hover:bg-[var(--danger-bg-soft)] transition opacity-0 group-hover:opacity-100 max-md:opacity-100 focus:opacity-100"
                         title="Удалить канал"
                         aria-label="Удалить канал"
                         data-testid={`channel-delete-${channel.id}`}

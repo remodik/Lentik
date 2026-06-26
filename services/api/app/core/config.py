@@ -55,6 +55,10 @@ class Settings(BaseSettings):
     s3_region: str | None = None
     s3_access_key_id: str | None = None
     s3_secret_access_key: str | None = None
+    # Стиль адресации S3: virtual (vHosted — по умолчанию, рекомендуется
+    # большинством провайдеров: Selectel, Timeweb, Yandex, AWS), path
+    # (нужен Cloudflare R2 и иногда MinIO) или auto.
+    s3_addressing_style: str = "virtual"
 
     @field_validator("jwt_secret")
     @classmethod
@@ -88,6 +92,14 @@ class Settings(BaseSettings):
         v = (v or "local").strip().lower()
         if v not in ("local", "s3"):
             raise ValueError("storage_backend должен быть 'local' или 's3'.")
+        return v
+
+    @field_validator("s3_addressing_style")
+    @classmethod
+    def validate_s3_addressing_style(cls, v: str) -> str:
+        v = (v or "virtual").strip().lower()
+        if v not in ("virtual", "path", "auto"):
+            raise ValueError("s3_addressing_style: 'virtual', 'path' или 'auto'.")
         return v
 
 

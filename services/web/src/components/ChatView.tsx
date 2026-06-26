@@ -680,6 +680,37 @@ export default function ChatView({
     [clearToolbarHideTimeout],
   );
 
+  // На touch нет ховера — действия с сообщением открываем по long-press через то
+  // же контекст-меню, что и ПКМ на десктопе.
+  const longPressRef = useRef<{
+    timer: ReturnType<typeof setTimeout> | null;
+    x: number;
+    y: number;
+  }>({ timer: null, x: 0, y: 0 });
+
+  const cancelLongPress = useCallback(() => {
+    if (longPressRef.current.timer) {
+      clearTimeout(longPressRef.current.timer);
+      longPressRef.current.timer = null;
+    }
+  }, []);
+
+  const openContextMenuAt = useCallback(
+    (x: number, y: number, entries: ContextMenuEntry[]) => {
+      if (!entries.length) return;
+      openContextMenu(
+        {
+          preventDefault() {},
+          stopPropagation() {},
+          clientX: x,
+          clientY: y,
+        } as unknown as React.MouseEvent,
+        entries,
+      );
+    },
+    [openContextMenu],
+  );
+
   const markMessagesAsRead = useCallback(
     async (messageIds: string[]) => {
       const uniqueIds = [...new Set(messageIds)];
@@ -1922,6 +1953,53 @@ export default function ChatView({
               (hoveredId === message.id || emojiPickerForId === message.id) &&
               editingId !== message.id;
             const toolbarDirection = toolbarPlacement[message.id] ?? "above";
+            const buildMsgEntries = (): ContextMenuEntry[] => {
+              const entries: ContextMenuEntry[] = [];
+              if (canAddReactions)
+                entries.push({
+                  label: "Реакция",
+                  icon: SmilePlus,
+                  onClick: () => {
+                    const node = rowRefs.current.get(message.id);
+                    if (!node) return;
+                    reactionTriggerRef.current = node;
+                    setEmojiPickerAnchorRect(node.getBoundingClientRect());
+                    setEmojiPickerForId(message.id);
+                  },
+                });
+              if (canSendMessages)
+                entries.push({ label: "Ответить", icon: ReplyIcon, onClick: () => setReplyTo(message) });
+              if (message.text)
+                entries.push({
+                  label: "Копировать текст",
+                  icon: CopyIcon,
+                  onClick: () => void navigator.clipboard?.writeText(message.text),
+                });
+              if (canPinMessages)
+                entries.push({
+                  label: isPinned ? "Открепить" : "Закрепить",
+                  icon: PinIcon,
+                  onClick: () => void handlePinToggle(message),
+                });
+              if (canEdit)
+                entries.push({ label: "Изменить", icon: PencilIcon, onClick: () => startEdit(message) });
+              if (familyPerms?.is_developer)
+                entries.push({
+                  label: "Копировать ID",
+                  icon: HashIcon,
+                  onClick: () => void navigator.clipboard?.writeText(message.id),
+                });
+              if (canDelete) {
+                entries.push({ type: "separator" });
+                entries.push({
+                  label: "Удалить",
+                  icon: TrashIcon,
+                  danger: true,
+                  onClick: () => void handleDelete(message.id),
+                });
+              }
+              return entries;
+            };
             const originalMessage = message.reply_to_id
               ? messageMap.get(message.reply_to_id) ?? null
               : null;
@@ -2040,40 +2118,44 @@ export default function ChatView({
                   onMouseEnter={() => showToolbar(message.id)}
                   onMouseLeave={() => scheduleToolbarHide(message.id)}
                   onContextMenu={(e) => {
-                    const entries: ContextMenuEntry[] = [];
-                    if (canSendMessages)
-                      entries.push({ label: "Ответить", icon: ReplyIcon, onClick: () => setReplyTo(message) });
-                    if (message.text)
-                      entries.push({
-                        label: "Копировать текст",
-                        icon: CopyIcon,
-                        onClick: () => void navigator.clipboard?.writeText(message.text),
-                      });
-                    if (canPinMessages)
-                      entries.push({
-                        label: isPinned ? "Открепить" : "Закрепить",
-                        icon: PinIcon,
-                        onClick: () => void handlePinToggle(message),
-                      });
-                    if (canEdit)
-                      entries.push({ label: "Изменить", icon: PencilIcon, onClick: () => startEdit(message) });
-                    if (familyPerms?.is_developer)
-                      entries.push({
-                        label: "Копировать ID",
-                        icon: HashIcon,
-                        onClick: () => void navigator.clipboard?.writeText(message.id),
-                      });
-                    if (canDelete) {
-                      entries.push({ type: "separator" });
-                      entries.push({
-                        label: "Удалить",
-                        icon: TrashIcon,
-                        danger: true,
-                        onClick: () => void handleDelete(message.id),
-                      });
-                    }
-                    openContextMenu(e, entries);
+                    const entries = buildMsgEntries();
+                    if (entries.length) openContextMenu(e, entries);
                   }}
+                  onPointerDown={(e) => {
+                    if (e.pointerType === "mouse") return;
+                    const el = e.target as Element;
+                    if (
+                      el.closest(
+                        "button, a, input, textarea, [role='button'], .msg-actions-panel",
+                      )
+                    )
+                      return;
+                    cancelLongPress();
+                    const x = e.clientX;
+                    const y = e.clientY;
+                    longPressRef.current.x = x;
+                    longPressRef.current.y = y;
+                    longPressRef.current.timer = setTimeout(() => {
+                      longPressRef.current.timer = null;
+                      const entries = buildMsgEntries();
+                      if (entries.length) {
+                        navigator.vibrate?.(12);
+                        openContextMenuAt(x, y, entries);
+                      }
+                    }, 450);
+                  }}
+                  onPointerMove={(e) => {
+                    if (
+                      longPressRef.current.timer &&
+                      Math.hypot(
+                        e.clientX - longPressRef.current.x,
+                        e.clientY - longPressRef.current.y,
+                      ) > 12
+                    )
+                      cancelLongPress();
+                  }}
+                  onPointerUp={cancelLongPress}
+                  onPointerCancel={cancelLongPress}
                 >
                   {isGrouped ? (
                     <div className="w-10 h-10 shrink-0" aria-hidden />

@@ -29,6 +29,9 @@ export const viewport: Viewport = {
     maximumScale: 1,
     userScalable: false,
     viewportFit: "cover",
+    // На мобиле экранная клавиатура «ужимает» вьюпорт, а не наезжает на контент,
+    // чтобы поля ввода (чат, формы) не перекрывались клавиатурой iOS/Android.
+    interactiveWidget: "resizes-content",
     themeColor: "#1c1714",
 };
 

@@ -139,3 +139,36 @@
     border-radius: 0;
     box-shadow: none;
 }
+
+/* Анимация выезда нижнего листа панели дня на мобиле. */
+@keyframes calSheetUp {
+    from {
+        transform: translateY(100%);
+    }
+    to {
+        transform: translateY(0);
+    }
+}
+.cal-sheet-panel {
+    animation: calSheetUp 0.26s var(--ease-out-expo);
+}
+
+/* ── Мобильная адаптация календаря ────────────────────────────────────── */
+@media (max-width: 767px) {
+    /* Ниже — компактнее, иначе месяц получается слишком высоким. */
+    .cal-day {
+        min-height: 64px;
+        padding: 0.35rem;
+    }
+
+    /* На мобиле панель дня показывается как нижний лист (см. CalendarView),
+       поэтому боковая рамка/слайд-анимация не нужны. */
+    .cal-event-panel {
+        border-left: 0;
+        animation: none;
+    }
+
+    .calendar-side-panel {
+        border-left: 0;
+    }
+}

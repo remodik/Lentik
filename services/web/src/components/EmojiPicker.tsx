@@ -365,11 +365,21 @@ export function EmojiPickerPopover({
 }: EmojiPickerPopoverProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+  // На мобиле пикер раскрывается нижним листом во всю ширину — иначе панель
+  // 352px не помещается и «выезжает» за край узкого экрана.
+  const [isMobile, setIsMobile] = useState(false);
 
   useLayoutEffect(() => {
     if (!anchorRect) return;
     const vw = window.innerWidth;
     const vh = window.innerHeight;
+
+    if (vw < 768) {
+      setIsMobile(true);
+      setPos({ left: 0, top: 0 }); // помечает готовность; позиция задаётся листом
+      return;
+    }
+    setIsMobile(false);
 
     // Prefer right-aligning the panel to the anchor's right edge.
     let left = anchorRect.right - PANEL_W;
@@ -409,14 +419,25 @@ export function EmojiPickerPopover({
   return createPortal(
     <div
       ref={panelRef}
-      className="emoji-picker-popover"
-      style={{
-        position: "fixed",
-        zIndex: 220,
-        left: pos?.left ?? -9999,
-        top: pos?.top ?? -9999,
-        visibility: pos ? "visible" : "hidden",
-      }}
+      className={`emoji-picker-popover ${isMobile ? "is-sheet" : ""}`}
+      style={
+        isMobile
+          ? {
+              position: "fixed",
+              zIndex: 220,
+              left: 8,
+              right: 8,
+              bottom: "calc(124px + env(safe-area-inset-bottom, 0px))",
+              visibility: pos ? "visible" : "hidden",
+            }
+          : {
+              position: "fixed",
+              zIndex: 220,
+              left: pos?.left ?? -9999,
+              top: pos?.top ?? -9999,
+              visibility: pos ? "visible" : "hidden",
+            }
+      }
     >
       <EmojiPicker
         onPick={(emoji) => {

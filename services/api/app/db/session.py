@@ -30,7 +30,13 @@ def _build_async_engine():
         connect_args["ssl"] = "require"
 
     cleaned_url = url.set(query=query)
-    return create_async_engine(cleaned_url, echo=False, connect_args=connect_args)
+    return create_async_engine(
+        cleaned_url,
+        echo=False,
+        connect_args=connect_args,
+        pool_pre_ping=True,
+        pool_recycle=300,
+    )
 
 
 engine = _build_async_engine()

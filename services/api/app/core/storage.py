@@ -78,9 +78,7 @@ class S3Storage:
 
         if self._session is None:
             self._session = aioboto3.Session()
-        # Стиль адресации берём из настроек: virtual (vHosted) по умолчанию —
-        # рекомендуется Selectel/Timeweb/Yandex/AWS; path — для Cloudflare R2.
-        # signature_version s3v4 универсален.
+
         return self._session.client(
             "s3",
             endpoint_url=settings.s3_endpoint_url,

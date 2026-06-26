@@ -211,9 +211,6 @@
     border-radius: 1.5rem !important;
   }
 
-  /* ── Тосты: во всю ширину над нижней навигацией ──────────────────── */
-  /* Навбар ~110px (z-index:200) перекрывал тосты у нижнего края. !important —
-     т.к. Tailwind-утилиты (bottom-5/right-5/items-end) подключаются позже. */
   .toast-wrap {
     bottom: calc(124px + env(safe-area-inset-bottom, 0px)) !important;
     left: 12px !important;
@@ -226,16 +223,10 @@
     max-width: none;
   }
 
-  /* ── Тач-доступ к действиям, скрытым под :hover ──────────────────── */
-  /* На touch нет ховера — у сообщения действия открываются по long-press
-     (контекст-меню, см. ChatView), но кнопку «добавить реакцию» к уже
-     существующим реакциям показываем сразу. */
   .reaction-add-btn {
     opacity: 1 !important;
   }
 
-  /* Гасим системный callout/выделение при удержании строки сообщения,
-     чтобы long-press открывал меню, а не системную лупу/копирование. */
   .msg-row {
     -webkit-touch-callout: none;
   }

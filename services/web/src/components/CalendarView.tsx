@@ -1102,7 +1102,6 @@ export default function CalendarView({
         </div>
       )}
 
-      {/* Мобильный нижний лист с панелью дня (десктоп использует боковую панель). */}
       {selectedDay && (
         <div
           className="md:hidden fixed inset-0 z-[85] flex flex-col justify-end"

@@ -6,7 +6,6 @@
     transform-origin: top right;
 }
 
-/* Мобильный нижний лист: пикер во всю ширину экрана над навбаром. */
 .emoji-picker-popover.is-sheet {
     transform-origin: bottom center;
 }

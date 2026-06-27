@@ -47,6 +47,7 @@ import BudgetView from "@/components/BudgetView";
 import RemindersView from "@/components/RemindersView";
 import FamilyTreeView from "@/components/FamilyTreeView";
 import TimeCapsulesView from "@/components/TimeCapsulesView";
+import BotsView from "@/components/BotsView";
 import SubscriptionModal from "@/components/SubscriptionModal";
 import { FREE_FAMILY_LIMIT, isFamilyLimitError } from "@/lib/families";
 import { apiFetch } from "@/lib/api-base";
@@ -787,6 +788,7 @@ export default function AppPage() {
       {section === "tree" && (
         <FamilyTreeView familyId={familyId} family={family} meId={me.id} />
       )}
+      {section === "bots" && <BotsView familyId={familyId} />}
 
       {/* Create chat modal */}
       {showNewChat && (

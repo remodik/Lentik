@@ -99,7 +99,7 @@ async def upload_avatar(
 
     content = await file.read()
     if len(content) > MAX_SIZE:
-        raise HTTPException(status_code=413, detail="File too large (max 5 MB)")
+        raise HTTPException(status_code=413, detail="Файл слишком большой (макс. 5 МБ)")
     enforce_safe_signature(ext, content)
 
     filename = f"{uuid.uuid4()}{ext}"

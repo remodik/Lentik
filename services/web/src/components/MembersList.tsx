@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Cake,
+  Bot,
   Check,
   ChevronDown,
   Copy,
@@ -188,6 +189,15 @@ function MemberCard({
             </p>
 
             {isMe && <span className="pill pill-muted">Это ты</span>}
+            {member.is_bot && (
+              <span
+                className="pill inline-flex items-center gap-1 bg-[var(--accent-soft)] text-[color:var(--warm-700)]"
+                title="Бот"
+              >
+                <Bot className="w-3 h-3" strokeWidth={2.2} />
+                Бот
+              </span>
+            )}
             {member.is_developer && (
               <span
                 className="pill inline-flex items-center gap-1 bg-[var(--special-bg)] text-[color:var(--special-fg)]"

@@ -111,6 +111,7 @@ def _family_to_detail_response(family: Family) -> FamilyDetailResponse:
             role=m.role,
             is_developer=m.user.is_developer,
             is_banned=m.user.is_banned,
+            is_bot=m.user.is_bot,
             joined_at=m.created_at,
         )
         for m in family.memberships
@@ -480,6 +481,7 @@ async def change_member_role(
             is_online=target_membership.user.is_online,
             last_seen_at=target_membership.user.last_seen_at,
             role=target_membership.role,
+            is_bot=target_membership.user.is_bot,
             joined_at=target_membership.created_at,
         )
 
@@ -505,6 +507,7 @@ async def change_member_role(
         is_online=m.user.is_online,
         last_seen_at=m.user.last_seen_at,
         role=m.role,
+        is_bot=m.user.is_bot,
         joined_at=m.created_at,
     )
 

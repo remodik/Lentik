@@ -15,6 +15,8 @@ from app.routers.budget import family_router as budget_family_router, tx_router 
 from app.routers.calendar import router as calendar_router
 from app.routers.channels import router as channels_router
 from app.routers.chats import router as chats_router
+from app.routers.chats import bot_router as bot_action_router
+from app.routers.bots import router as bots_router
 from app.routers.expenses import router as expenses_router
 from app.routers.families import router as families_router
 from app.routers.families_join import router as families_join_router
@@ -220,6 +222,8 @@ def create_app() -> FastAPI:
     app_.include_router(calendar_feed_router)
     app_.include_router(me_router)
     app_.include_router(chats_router)
+    app_.include_router(bots_router)
+    app_.include_router(bot_action_router)
     app_.include_router(channels_router)
     app_.include_router(gallery_router)
     app_.include_router(calendar_router)

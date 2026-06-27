@@ -157,6 +157,10 @@ async def login_by_pin(
         )
 
     user = await db.scalar(select(User).where(User.username == body.username))
+    # Боты не логинятся паролем (аутентификация только bot-токеном). Обращаемся
+    # как с несуществующим аккаунтом — без утечки факта, что это бот.
+    if user is not None and user.is_bot:
+        user = None
     # verify_pin (pbkdf2) дорог; чтобы несуществующий логин не отвечал заметно
     # быстрее существующего, при отсутствии пользователя гоняем фиктивную проверку.
     if user is None:

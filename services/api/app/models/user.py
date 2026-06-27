@@ -53,6 +53,13 @@ class User(Base):
         Boolean, nullable=False, default=False, server_default=text("false")
     )
 
+    # ── Бот ─────────────────────────────────────────────────────────────────
+    # True → это identity-пользователь бота (см. models/bot.py). Боты не
+    # логинятся паролем и аутентифицируются bot-токеном.
+    is_bot: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+
     # ── Глобальный бан ──────────────────────────────────────────────────────
     is_banned: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=text("false")

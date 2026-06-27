@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.auth.deps import get_current_user
+from app.auth.bot_deps import get_current_bot
 from app.core.permissions import Perm, has_perm
 from app.core.uploads import (
     ALLOWED_ATTACHMENT_EXT,
@@ -41,6 +42,7 @@ from app.models.message import Message
 from app.models.message_read import MessageRead
 from app.models.reaction import MessageReaction
 from app.models.user import User
+from app.schemas.bots import BotSendMessageRequest
 from app.schemas.chats import (
     EMOJI_PATTERN,
     ChatCreate,
@@ -908,7 +910,7 @@ async def send_message_with_attachments(
         if len(payload) > MAX_ATTACHMENT_SIZE:
             raise HTTPException(
                 status_code=413,
-                detail=f"File '{upload.filename}' is too large (max 50 MB)",
+                detail=f"Файл «{upload.filename}» слишком большой (макс. 50 МБ)",
             )
         # Содержимое должно соответствовать расширению — отсекаем замаскированные
         # файлы (например, HTML/скрипт с расширением картинки) до записи на диск.
@@ -1009,7 +1011,7 @@ async def send_voice_message(
 
     payload = await file.read()
     if len(payload) > MAX_VOICE_SIZE:
-        raise HTTPException(status_code=413, detail="Voice message too large (max 10 MB)")
+        raise HTTPException(status_code=413, detail="Голосовое сообщение слишком большое (макс. 10 МБ)")
 
     stored_name = f"voice_{uuid.uuid4()}.webm"
     try:
@@ -1379,3 +1381,126 @@ async def chat_ws(
                     last_seen_at=offline_seen,
                 ),
             )
+
+
+# ── Bot Dev API (аутентификация bot-токеном) ─────────────────────────────────
+# Действия бота переиспользуют те же помощники и проверки, что и человеческие
+# эндпоинты выше (членство, права, слоумод, модерация, broadcast в ws_manager).
+bot_router = APIRouter(prefix="/bot", tags=["bot"])
+
+
+@bot_router.get("/me")
+async def bot_me(
+    db: AsyncSession = Depends(get_db),
+    bot_user: User = Depends(get_current_bot),
+):
+    rows = await db.execute(
+        select(Membership.family_id).where(Membership.user_id == bot_user.id)
+    )
+    return {
+        "id": str(bot_user.id),
+        "username": bot_user.username,
+        "display_name": bot_user.display_name,
+        "is_bot": True,
+        "family_ids": [str(fid) for (fid,) in rows.all()],
+    }
+
+
+@bot_router.post(
+    "/families/{family_id}/chats/{chat_id}/messages",
+    response_model=MessageResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def bot_send_message(
+    family_id: UUID,
+    chat_id: UUID,
+    body: BotSendMessageRequest,
+    db: AsyncSession = Depends(get_db),
+    bot_user: User = Depends(get_current_bot),
+):
+    membership = await _require_member(family_id, bot_user, db)
+
+    chat = await db.get(Chat, chat_id)
+    if not chat or chat.family_id != family_id:
+        raise HTTPException(status_code=404, detail="Chat not found")
+
+    _ensure_age_gate(chat, bot_user)
+    await _ensure_18plus_perm(chat, membership, db)
+    await require_chat_perm(db, membership, chat_id, Perm.VIEW_CHANNEL, Perm.SEND_MESSAGES)
+    await _enforce_slow_mode(chat, bot_user, membership, db)
+
+    enforce_message_content(await get_settings(db, family_id), body.text)
+
+    mentions = _parse_mentions(body.text)
+    msg = Message(
+        chat_id=chat_id,
+        author_id=bot_user.id,
+        text=body.text,
+        reply_to_id=body.reply_to_id,
+        mentions=mentions,
+    )
+    db.add(msg)
+    await db.flush()
+    await db.refresh(msg, ["author"])
+    await db.commit()
+
+    msg_dict = _msg_to_dict(msg)
+    await ws_manager.broadcast_to_chat(chat_id, {"type": "new_message", "message": msg_dict})
+
+    if mentions:
+        await ws_manager.broadcast_to_family(
+            family_id,
+            {
+                "type": "mention",
+                "from": bot_user.display_name,
+                "chat_id": str(chat_id),
+                "chat_name": chat.name,
+                "text": body.text[:100],
+                "mentions": mentions,
+            },
+        )
+
+    return _msg_response(msg, bot_user.display_name)
+
+
+@bot_router.get(
+    "/families/{family_id}/chats/{chat_id}/messages",
+    response_model=list[MessageResponse],
+)
+async def bot_poll_messages(
+    family_id: UUID,
+    chat_id: UUID,
+    limit: int = Query(default=50, ge=1, le=100),
+    before_id: UUID | None = None,
+    db: AsyncSession = Depends(get_db),
+    bot_user: User = Depends(get_current_bot),
+):
+    membership = await _require_member(family_id, bot_user, db)
+
+    chat = await db.get(Chat, chat_id)
+    if not chat or chat.family_id != family_id:
+        raise HTTPException(status_code=404, detail="Chat not found")
+
+    await require_chat_perm(db, membership, chat_id, Perm.VIEW_CHANNEL, Perm.READ_HISTORY)
+    _ensure_age_gate(chat, bot_user)
+    await _ensure_18plus_perm(chat, membership, db)
+
+    query = (
+        select(Message)
+        .where(Message.chat_id == chat_id)
+        .options(
+            selectinload(Message.author),
+            selectinload(Message.reactions),
+            selectinload(Message.reads).selectinload(MessageRead.user),
+        )
+        .order_by(Message.created_at.desc())
+        .limit(limit)
+    )
+    if before_id:
+        anchor = await db.scalar(select(Message).where(Message.id == before_id))
+        if anchor:
+            query = query.where(Message.created_at < anchor.created_at)
+
+    result = await db.scalars(query)
+    messages = list(reversed(result.all()))
+    return [_msg_response(m) for m in messages]

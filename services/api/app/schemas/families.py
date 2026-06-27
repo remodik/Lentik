@@ -38,6 +38,7 @@ class FamilyMemberResponse(BaseModel):
     role: Role
     is_developer: bool = False
     is_banned: bool = False
+    is_bot: bool = False
     joined_at: datetime
 
 

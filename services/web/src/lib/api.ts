@@ -415,6 +415,7 @@ export type FamilyMember = {
   role: "owner" | "member";
   is_developer?: boolean;
   is_banned?: boolean;
+  is_bot?: boolean;
   joined_at: string;
 };
 
@@ -769,6 +770,48 @@ export type Post = {
   media_urls: string[] | null;
   created_at: string;
 };
+
+// ── Боты (Dev API, Фаза 1) ──────────────────────────────────────────────────
+export type Bot = {
+  id: string;
+  user_id: string;
+  username: string;
+  display_name: string;
+  avatar_url: string | null;
+  description: string | null;
+  owner_id: string;
+  token_prefix: string;
+  created_at: string;
+};
+
+// Сырой токен приходит только при создании/перевыпуске — показать один раз.
+export type BotWithToken = Bot & { token: string };
+
+export function getBots(familyId: string) {
+  return request<Bot[]>(`/families/${familyId}/bots`);
+}
+
+export function createBot(
+  familyId: string,
+  data: { display_name: string; username: string; description?: string | null },
+) {
+  return request<BotWithToken>(`/families/${familyId}/bots`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function regenerateBotToken(familyId: string, botId: string) {
+  return request<BotWithToken>(`/families/${familyId}/bots/${botId}/token`, {
+    method: "POST",
+  });
+}
+
+export function deleteBot(familyId: string, botId: string) {
+  return request<void>(`/families/${familyId}/bots/${botId}`, {
+    method: "DELETE",
+  });
+}
 
 export function deleteChannel(familyId: string, channelId: string) {
   return request<void>(`/families/${familyId}/channels/${channelId}`, {

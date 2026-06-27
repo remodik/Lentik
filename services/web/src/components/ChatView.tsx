@@ -101,6 +101,9 @@ import Age18Gate, { useAge18Gate } from "@/components/Age18Gate";
 type ToolbarPlacement = "above" | "below";
 
 const MAX_ATTACHMENTS_PER_MESSAGE = 8;
+// Должно совпадать с MAX_ATTACHMENT_SIZE в services/api/app/routers/chats.py.
+const MAX_CHAT_FILE_SIZE = 50 * 1024 * 1024;
+const MAX_CHAT_FILE_LABEL = "50 МБ";
 const TOOLBAR_MIN_SPACE = 72;
 const TOOLBAR_HIDE_DELAY_MS = 120;
 const MIN_SEARCH_QUERY_LENGTH = 2;
@@ -616,6 +619,7 @@ export default function ChatView({
         joined_at: authorMember?.joined_at ?? null,
         is_online: authorMember?.is_online ?? (isMine ? me.is_online : null),
         last_seen_at: authorMember?.last_seen_at ?? (isMine ? me.last_seen_at : null),
+        is_bot: authorMember?.is_bot ?? false,
       };
     },
     [
@@ -1167,12 +1171,35 @@ export default function ChatView({
 
   function handleFilePick(e: React.ChangeEvent<HTMLInputElement>) {
     const picked = Array.from(e.target.files ?? []);
+    e.target.value = "";
     if (!picked.length) return;
 
-    setSelectedFiles((prev) =>
-      [...prev, ...picked].slice(0, MAX_ATTACHMENTS_PER_MESSAGE),
-    );
-    e.target.value = "";
+    // Размер проверяем сразу при выборе — понятный отказ, а не падение отправки.
+    const tooBig = picked.filter((f) => f.size > MAX_CHAT_FILE_SIZE);
+    const allowed = picked.filter((f) => f.size <= MAX_CHAT_FILE_SIZE);
+
+    if (allowed.length > 0) {
+      setSelectedFiles((prev) =>
+        [...prev, ...allowed].slice(0, MAX_ATTACHMENTS_PER_MESSAGE),
+      );
+    }
+
+    if (tooBig.length > 0) {
+      void notify({
+        title: tooBig.length === 1 ? "Файл слишком большой" : "Файлы слишком большие",
+        tone: "danger",
+        description: (
+          <div className="space-y-1 text-left">
+            <p>Максимальный размер вложения — {MAX_CHAT_FILE_LABEL}. Не добавлены:</p>
+            {tooBig.map((f) => (
+              <p key={f.name} className="text-ink-500">
+                • {f.name} — {formatBytes(f.size)}
+              </p>
+            ))}
+          </div>
+        ),
+      });
+    }
   }
 
   function removeSelectedFile(index: number) {
@@ -1346,7 +1373,9 @@ export default function ChatView({
           ? "Медленный режим"
           : statusCode === 422
             ? "Сообщение отклонено"
-            : "Не удалось отправить";
+            : statusCode === 413
+              ? "Файл слишком большой"
+              : "Не удалось отправить";
       void notify({
         title,
         description: message,
@@ -1946,6 +1975,9 @@ export default function ChatView({
             const authorAvatarUrl = resolveAuthorAvatarUrl(message);
             const authorPopoverKey = `message:${message.id}`;
             const authorInitial = authorDisplayName[0]?.toUpperCase() ?? "?";
+            const authorIsBot = message.author_id
+              ? memberById.get(message.author_id)?.is_bot ?? false
+              : false;
             const canEdit = isMine && canManageOwn;
             const canDelete = (isMine && canManageOwn) || canManageMessages;
             const isPinned = pinnedMessageId === message.id;
@@ -2216,6 +2248,11 @@ export default function ChatView({
                         <span className={`text-[14px] font-semibold ${isMine ? "text-warm-700" : "text-ink-900"}`}>
                           {authorDisplayName}
                         </span>
+                        {authorIsBot && (
+                          <span className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-md border border-[color:var(--accent-border)] bg-[var(--accent-soft)] text-[color:var(--warm-700)] self-center">
+                            Бот
+                          </span>
+                        )}
                         <span className="text-[11px] text-ink-300">
                           {formatTime(message.created_at)}
                         </span>

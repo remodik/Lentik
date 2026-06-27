@@ -12,6 +12,7 @@ from .family_tree import (
 )
 from .gallery_item import GalleryItem, MediaType
 from .invite import Invite
+from .bot import Bot
 from .membership import Membership, Role
 from .message import Message
 from .message_read import MessageRead
@@ -38,6 +39,7 @@ __all__ = [
     "User",
     "Membership",
     "Role",
+    "Bot",
     "Invite",
     "Chat",
     "Message",

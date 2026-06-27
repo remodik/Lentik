@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { LucideIcon } from "lucide-react";
 import {
   AlarmClock,
+  Bot,
   CalendarDays,
   ChevronDown,
   Hourglass,
@@ -38,7 +39,7 @@ import {
   type PresenceUpdateEvent,
 } from "@/components/NotificationSystem";
 
-export type AppSection = "chat" | "gallery" | "files" | "calendar" | "members" | "channels" | "notes" | "budget" | "reminders" | "tree" | "time-capsules";
+export type AppSection = "chat" | "gallery" | "files" | "calendar" | "members" | "channels" | "notes" | "budget" | "reminders" | "tree" | "time-capsules" | "bots";
 
 type NavCategory = "chat" | "plans" | "media" | "family";
 
@@ -87,6 +88,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: "channels", icon: Rss, label: "Каналы", desc: "Объявления семьи" },
   { id: "members", icon: Users, label: "Участники", desc: "Члены семьи" },
   { id: "tree", icon: Network, label: "Древо", desc: "Семейное древо" },
+  { id: "bots", icon: Bot, label: "Боты", desc: "Свои боты и токены" },
 ];
 
 const SECTION_TO_CATEGORY: Record<AppSection, NavCategory> = {
@@ -101,6 +103,7 @@ const SECTION_TO_CATEGORY: Record<AppSection, NavCategory> = {
   files: "media",
   members: "family",
   tree: "family",
+  bots: "family",
 };
 
 const CATEGORY_DEFAULT_SECTION: Record<NavCategory, AppSection> = {
@@ -180,6 +183,7 @@ const SIDEBAR_CATEGORIES: SidebarCategory[] = [
         items: [
           { id: "members", label: "Участники", section: "members" },
           { id: "tree", label: "Древо", section: "tree" },
+          { id: "bots", label: "Боты", section: "bots" },
           { id: "achievements", label: "Достижения", disabled: true, soon: true },
         ],
       },

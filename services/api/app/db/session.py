@@ -15,13 +15,12 @@ def _build_async_engine():
     psycopg2 строят свой URL отдельно — см. alembic/env.py.
     """
     url = make_url(settings.database_url)
+    if url.get_backend_name() == "postgresql" and url.drivername != "postgresql+asyncpg":
+        url = url.set(drivername="postgresql+asyncpg")
     query = dict(url.query)
 
     sslmode = query.pop("sslmode", None)
-    # channel_binding — тоже libpq-only; asyncpg делает SCRAM channel binding
-    # сам и явного kwarg не принимает.
     query.pop("channel_binding", None)
-    # На случай, если кто-то задал asyncpg-style ssl прямо в URL.
     ssl_in_query = query.pop("ssl", None)
 
     connect_args: dict = {}

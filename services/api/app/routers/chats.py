@@ -42,7 +42,7 @@ from app.models.message import Message
 from app.models.message_read import MessageRead
 from app.models.reaction import MessageReaction
 from app.models.user import User
-from app.schemas.bots import BotSendMessageRequest
+from app.schemas.bots import BotChatInfo, BotSendMessageRequest
 from app.schemas.chats import (
     EMOJI_PATTERN,
     ChatCreate,
@@ -1504,3 +1504,196 @@ async def bot_poll_messages(
     result = await db.scalars(query)
     messages = list(reversed(result.all()))
     return [_msg_response(m) for m in messages]
+
+
+@bot_router.get("/families/{family_id}/chats", response_model=list[BotChatInfo])
+async def bot_list_chats(
+    family_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    bot_user: User = Depends(get_current_bot),
+):
+    """Чаты, видимые боту (VIEW_CHANNEL) — чтобы бот находил chat_id сам."""
+    m = await _require_member(family_id, bot_user, db)
+    chats = (
+        await db.scalars(select(Chat).where(Chat.family_id == family_id))
+    ).all()
+    perms = await effective_permissions_for_chats(db, m, [c.id for c in chats])
+    return [
+        BotChatInfo(id=c.id, name=c.name, is_18plus=c.is_18plus)
+        for c in chats
+        if has_perm(perms.get(c.id, 0), Perm.VIEW_CHANNEL)
+    ]
+
+
+@bot_router.post(
+    "/families/{family_id}/chats/{chat_id}/messages/{message_id}/reactions",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def bot_add_reaction(
+    family_id: UUID,
+    chat_id: UUID,
+    message_id: UUID,
+    body: MessageReactionCreate,
+    db: AsyncSession = Depends(get_db),
+    bot_user: User = Depends(get_current_bot),
+):
+    m = await _require_member(family_id, bot_user, db)
+    await require_chat_perm(db, m, chat_id, Perm.ADD_REACTIONS)
+
+    emoji = body.emoji.strip()
+    if not EMOJI_RE.fullmatch(emoji):
+        raise HTTPException(status_code=422, detail="Emoji must contain exactly one emoji")
+
+    msg = await db.scalar(select(Message).where(Message.id == message_id))
+    if not msg or msg.chat_id != chat_id:
+        raise HTTPException(status_code=404, detail="Message not found")
+
+    result = await db.execute(
+        pg_insert(MessageReaction)
+        .values(message_id=message_id, user_id=bot_user.id, emoji=emoji)
+        .on_conflict_do_nothing(index_elements=["message_id", "user_id", "emoji"])
+    )
+    await db.commit()
+
+    if (result.rowcount or 0) == 0:
+        return
+
+    await ws_manager.broadcast_to_chat(
+        chat_id,
+        {
+            "type": "reaction_added",
+            "message_id": str(message_id),
+            "emoji": emoji,
+            "user_id": str(bot_user.id),
+            "display_name": bot_user.display_name,
+        },
+    )
+
+
+@bot_router.delete(
+    "/families/{family_id}/chats/{chat_id}/messages/{message_id}/reactions/{emoji}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def bot_remove_reaction(
+    family_id: UUID,
+    chat_id: UUID,
+    message_id: UUID,
+    emoji: str,
+    db: AsyncSession = Depends(get_db),
+    bot_user: User = Depends(get_current_bot),
+):
+    await _require_member(family_id, bot_user, db)
+
+    if not EMOJI_RE.fullmatch(emoji):
+        raise HTTPException(status_code=422, detail="Emoji must contain exactly one emoji")
+
+    msg = await db.scalar(select(Message).where(Message.id == message_id))
+    if not msg or msg.chat_id != chat_id:
+        raise HTTPException(status_code=404, detail="Message not found")
+
+    result = await db.execute(
+        delete(MessageReaction).where(
+            MessageReaction.message_id == message_id,
+            MessageReaction.user_id == bot_user.id,
+            MessageReaction.emoji == emoji,
+        )
+    )
+    await db.commit()
+
+    if (result.rowcount or 0) > 0:
+        await ws_manager.broadcast_to_chat(
+            chat_id,
+            {
+                "type": "reaction_removed",
+                "message_id": str(message_id),
+                "emoji": emoji,
+                "user_id": str(bot_user.id),
+            },
+        )
+
+
+@bot_router.patch(
+    "/families/{family_id}/chats/{chat_id}/messages/{message_id}",
+    response_model=MessageResponse,
+)
+async def bot_edit_message(
+    family_id: UUID,
+    chat_id: UUID,
+    message_id: UUID,
+    body: MessageUpdate,
+    db: AsyncSession = Depends(get_db),
+    bot_user: User = Depends(get_current_bot),
+):
+    """Бот редактирует ТОЛЬКО свои сообщения."""
+    m = await _require_member(family_id, bot_user, db)
+
+    msg = await db.scalar(
+        select(Message).where(Message.id == message_id).options(
+            selectinload(Message.author),
+            selectinload(Message.reactions),
+            selectinload(Message.reads).selectinload(MessageRead.user),
+        )
+    )
+    if not msg or msg.chat_id != chat_id:
+        raise HTTPException(status_code=404, detail="Message not found")
+    if msg.author_id != bot_user.id:
+        raise HTTPException(status_code=403, detail="Bot can only edit its own messages")
+
+    await require_chat_perm(db, m, chat_id, Perm.MANAGE_OWN_MESSAGES)
+    enforce_message_content(await get_settings(db, family_id), body.text)
+
+    msg.text = body.text
+    msg.edited = True
+    msg.mentions = _parse_mentions(body.text)
+    await db.commit()
+
+    await ws_manager.broadcast_to_chat(
+        chat_id,
+        {"type": "message_edited", "message": {"id": str(msg.id), "text": msg.text, "edited": True}},
+    )
+    return _msg_response(msg)
+
+
+@bot_router.delete(
+    "/families/{family_id}/chats/{chat_id}/messages/{message_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def bot_delete_message(
+    family_id: UUID,
+    chat_id: UUID,
+    message_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    bot_user: User = Depends(get_current_bot),
+):
+    """Бот удаляет ТОЛЬКО свои сообщения."""
+    m = await _require_member(family_id, bot_user, db)
+
+    chat = await _load_chat_with_pin(db, family_id, chat_id)
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
+
+    msg = await db.get(Message, message_id)
+    if not msg or msg.chat_id != chat_id:
+        raise HTTPException(status_code=404, detail="Message not found")
+    if msg.author_id != bot_user.id:
+        raise HTTPException(status_code=403, detail="Bot can only delete its own messages")
+
+    await require_chat_perm(db, m, chat_id, Perm.MANAGE_OWN_MESSAGES)
+
+    was_pinned = chat.pinned_message_id == message_id
+    if was_pinned:
+        chat.pinned_message_id = None
+
+    for item in msg.attachments or []:
+        if isinstance(item, dict):
+            await storage.delete_by_url(item.get("url"))
+
+    await db.delete(msg)
+    await db.commit()
+
+    await ws_manager.broadcast_to_chat(
+        chat_id,
+        {"type": "message_deleted", "message_id": str(message_id)},
+    )
+    if was_pinned:
+        await ws_manager.broadcast_to_chat(chat_id, _chat_pin_update_payload(chat))

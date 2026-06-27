@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_current_user
+from app.auth.bot_deps import get_current_bot
 from app.core.permissions import Perm, has_perm
 from app.db.deps import get_db
 from app.services.audit import log_action
@@ -27,6 +28,7 @@ from app.schemas.channels import (
     PostCreate,
     PostResponse,
 )
+from app.schemas.bots import BotChannelInfo, BotPostRequest
 
 router = APIRouter(prefix="/families/{family_id}/channels", tags=["channels"])
 
@@ -315,6 +317,97 @@ async def create_post(
         author_id=user.id,
         text=body.text,
         media_urls=json.dumps(body.media_urls) if body.media_urls else None,
+    )
+    db.add(post)
+    await db.commit()
+    await db.refresh(post)
+    return post
+
+
+# ── Bot Dev API для каналов (аутентификация bot-токеном) ─────────────────────
+bot_router = APIRouter(prefix="/bot", tags=["bot"])
+
+
+@bot_router.get("/families/{family_id}/channels", response_model=list[BotChannelInfo])
+async def bot_list_channels(
+    family_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    bot_user: User = Depends(get_current_bot),
+):
+    """Каналы, видимые боту (VIEW_CHANNEL) — чтобы бот находил channel_id сам."""
+    m = await _require_member(family_id, bot_user, db)
+    channels = (
+        await db.scalars(select(Channel).where(Channel.family_id == family_id))
+    ).all()
+    perms = await effective_permissions_for_channels(db, m, [c.id for c in channels])
+    return [
+        BotChannelInfo(id=c.id, name=c.name, is_18plus=c.is_18plus)
+        for c in channels
+        if has_perm(perms.get(c.id, 0), Perm.VIEW_CHANNEL)
+    ]
+
+
+@bot_router.get(
+    "/families/{family_id}/channels/{channel_id}/posts",
+    response_model=list[PostResponse],
+)
+async def bot_list_posts(
+    family_id: UUID,
+    channel_id: UUID,
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    db: AsyncSession = Depends(get_db),
+    bot_user: User = Depends(get_current_bot),
+):
+    m = await _require_member(family_id, bot_user, db)
+
+    channel = await db.get(Channel, channel_id)
+    if not channel or channel.family_id != family_id:
+        raise HTTPException(status_code=404, detail="Channel not found")
+
+    await require_channel_perm(db, m, channel_id, Perm.VIEW_CHANNEL, Perm.READ_HISTORY)
+    _ensure_age_gate(channel, bot_user)
+    await _ensure_channel_18plus_perm(channel, m, db)
+
+    posts = await db.scalars(
+        select(Post)
+        .where(Post.channel_id == channel_id)
+        .order_by(Post.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    return posts.all()
+
+
+@bot_router.post(
+    "/families/{family_id}/channels/{channel_id}/posts",
+    response_model=PostResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def bot_create_post(
+    family_id: UUID,
+    channel_id: UUID,
+    body: BotPostRequest,
+    db: AsyncSession = Depends(get_db),
+    bot_user: User = Depends(get_current_bot),
+):
+    membership = await _require_member(family_id, bot_user, db)
+    channel = await db.get(Channel, channel_id)
+    if not channel or channel.family_id != family_id:
+        raise HTTPException(status_code=404, detail="Channel not found")
+
+    await require_channel_perm(db, membership, channel_id, Perm.VIEW_CHANNEL, Perm.SEND_MESSAGES)
+    _ensure_age_gate(channel, bot_user)
+    await _ensure_channel_18plus_perm(channel, membership, db)
+    await _enforce_slow_mode(channel, bot_user, membership, db)
+
+    enforce_message_content(await get_settings(db, family_id), body.text)
+
+    post = Post(
+        channel_id=channel_id,
+        author_id=bot_user.id,
+        text=body.text,
+        media_urls=None,
     )
     db.add(post)
     await db.commit()

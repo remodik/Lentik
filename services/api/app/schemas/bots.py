@@ -32,3 +32,23 @@ class BotWithToken(BotResponse):
 class BotSendMessageRequest(BaseModel):
     text: str = Field(min_length=1, max_length=4000)
     reply_to_id: UUID | None = None
+
+
+class BotChatInfo(BaseModel):
+    """Минимальная инфа о чате для бота — чтобы он находил chat_id сам."""
+
+    id: UUID
+    name: str
+    is_18plus: bool = False
+
+
+class BotChannelInfo(BaseModel):
+    """Минимальная инфа о канале для бота — чтобы он находил channel_id сам."""
+
+    id: UUID
+    name: str
+    is_18plus: bool = False
+
+
+class BotPostRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=10000)

@@ -3,6 +3,7 @@ import "./globals.css";
 import React from "react";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { ConfirmProvider } from "@/components/ConfirmDialog";
+import { Analytics } from "@vercel/analytics/next";
 
 export const metadata: Metadata = {
     title: "Lentik — Семейный альбом",
@@ -101,6 +102,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             кэши и снимает регистрацию. Снятие регистрации — во внешнем файле.
         */}
         <script src="/sw-unregister.js" defer />
+        <Analytics />
         </body>
         </html>
     );

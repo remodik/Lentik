@@ -14,13 +14,13 @@ interface TooltipProps {
 }
 
 /**
- * Портальный тултип. Позиционируется относительно viewport, не обрезается
- * overflow-hidden родителей и всегда поверх (z-[10000]).
+ * Портальный тултип в стиле Discord. Позиционируется относительно viewport
+ * (не режется overflow-hidden), всегда поверх (z-[10000]), с плавной
+ * анимацией появления/скрытия.
  *
- * Использование:
- *   <Tooltip content="Удалить роль">
- *     <button>...</button>
- *   </Tooltip>
+ * По умолчанию показывается СВЕРХУ триггера (даже поверх плавающих панелей).
+ * Вниз перемещается только если сверху нет места — триггер у самого верха
+ * экрана.
  */
 export default function Tooltip({
   content,
@@ -29,14 +29,17 @@ export default function Tooltip({
   className,
 }: TooltipProps) {
   const triggerRef = useRef<HTMLElement | null>(null);
-  const bubbleRef = useRef<HTMLDivElement | null>(null);
 
-  const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{
     left: number;
     top: number;
     placement: "top" | "bottom";
   } | null>(null);
+  // open — логическое «хотим показать»; render — в DOM (живёт до конца
+  // анимации ухода); active — CSS-видимость (запускает transition).
+  const [open, setOpen] = useState(false);
+  const [render, setRender] = useState(false);
+  const [active, setActive] = useState(false);
   const [mounted, setMounted] = useState(false);
 
   const hideTimerRef = useRef<number | null>(null);
@@ -55,98 +58,78 @@ export default function Tooltip({
     }
   };
 
-  const scheduleHide = () => {
-    clearHide();
-    hideTimerRef.current = window.setTimeout(() => {
-      setOpen(false);
-      setPos(null);
-    }, 60);
-  };
-
-  const show = () => {
-    clearHide();
-    setOpen(true);
-  };
-
   const updatePosition = () => {
     const trigger = triggerRef.current;
     if (!trigger) return;
 
     const rect = trigger.getBoundingClientRect();
     const vw = window.innerWidth;
-    const vh = window.innerHeight;
-
     const gap = 8;
-    const arrowH = 6;
 
-    // Предпочтительное размещение
+    // По умолчанию — сверху. Флип вниз только если триггер у верхнего края
+    // экрана (баббл + стрелка + зазор не помещаются над ним).
     let placement: "top" | "bottom" = forcedPlacement || "top";
     if (!forcedPlacement) {
-      const spaceAbove = rect.top;
-      const spaceBelow = vh - rect.bottom;
-      // Если сверху мало места — показываем снизу
-      if (spaceAbove < 50 && spaceBelow > spaceAbove) {
-        placement = "bottom";
-      }
+      const estBubbleH = 34;
+      if (rect.top < estBubbleH + gap) placement = "bottom";
     }
 
     const centerX = rect.left + rect.width / 2;
-
-    // Оцениваем высоту баббла (шрифт 12 + padding 6*2 + border ~ 26-30px)
-    const estBubbleH = 28;
-
-    let left = centerX;
-    let top: number;
-
-    if (placement === "top") {
-      // Баббл + стрелка над триггером.
-      // Позиционируем так, чтобы низ стрелки был чуть выше триггера.
-      top = rect.top - gap - arrowH;
-      // bubble будет выше через transform
-    } else {
-      top = rect.bottom + gap;
-    }
-
-    // Горизонтальный клемп (с запасом)
-    const minLeft = 8;
-    const maxLeft = vw - 8;
-    if (left < minLeft) left = minLeft;
-    if (left > maxLeft) left = maxLeft;
+    const left = Math.min(Math.max(centerX, 10), vw - 10);
+    const top = placement === "top" ? rect.top - gap : rect.bottom + gap;
 
     setPos({ left, top, placement });
   };
 
-  // Обновляем позицию когда открываем или меняется размер окна
+  const show = () => {
+    clearHide();
+    updatePosition();
+    setOpen(true);
+  };
+
+  const scheduleHide = () => {
+    clearHide();
+    hideTimerRef.current = window.setTimeout(() => setOpen(false), 60);
+  };
+
+  // open → появление; !open → доиграть уход и размонтировать.
+  useEffect(() => {
+    if (open) {
+      setRender(true);
+      return;
+    }
+    if (render) {
+      setActive(false);
+      const t = window.setTimeout(() => {
+        setRender(false);
+        setPos(null);
+      }, 140);
+      return () => window.clearTimeout(t);
+    }
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Как только смонтировались с открытым состоянием — на следующем кадре
+  // включаем active, чтобы отработал transition входа.
+  useEffect(() => {
+    if (render && open) {
+      const r = requestAnimationFrame(() => setActive(true));
+      return () => cancelAnimationFrame(r);
+    }
+  }, [render, open]);
+
+  // Репозиция/скрытие при скролле и ресайзе.
   useEffect(() => {
     if (!open) return;
-
-    updatePosition();
-
-    const onReposition = () => {
-      // При скролле/ресайзе просто прячем — надёжнее, чем пытаться следить
-      // (как делают в ContextMenu и некоторых поповерах).
-      setOpen(false);
-      setPos(null);
-    };
-
+    const onReposition = () => setOpen(false);
     window.addEventListener("resize", onReposition);
     window.addEventListener("scroll", onReposition, true);
-
     return () => {
       window.removeEventListener("resize", onReposition);
       window.removeEventListener("scroll", onReposition, true);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, content, forcedPlacement]);
+  }, [open]);
 
-  // После маунта баббла чуть подправляем позицию по реальной высоте
-  useEffect(() => {
-    if (open && pos && bubbleRef.current) {
-      // Можно добавить точный расчёт при желании, но для односложных тултипов не критично.
-    }
-  }, [open, pos]);
-
-  // Клонируем обработчики на ребёнка + ref
+  // Клонируем обработчики на ребёнка + ref.
   const childElement = React.Children.only(children) as React.ReactElement<any>;
   const mergedHandlers = {
     onMouseEnter: (e: React.MouseEvent) => {
@@ -171,8 +154,6 @@ export default function Tooltip({
     ...mergedHandlers,
     ref: (node: HTMLElement | null) => {
       triggerRef.current = node;
-
-      // Поддержка существующего ref у ребёнка
       const origRef = (childElement as any).ref;
       if (typeof origRef === "function") {
         origRef(node);
@@ -183,10 +164,31 @@ export default function Tooltip({
   });
 
   const renderTooltip = () => {
-    if (!mounted || !open || !pos) return null;
+    if (!mounted || !render || !pos) return null;
 
     const { left, top, placement } = pos;
     const isTop = placement === "top";
+
+    // Базовый сдвиг: для top баббл поднимается на свою высоту (-100%),
+    // для bottom растёт вниз (0). Анимация — небольшой «наезд» + scale.
+    const baseY = isTop ? "-100%" : "0%";
+    const nudge = active ? "0px" : isTop ? "4px" : "-4px";
+    const scale = active ? 1 : 0.96;
+
+    const bubble = (
+      <div className="bg-[#1a1a1a] text-white text-[12px] font-medium font-body whitespace-nowrap rounded-[6px] shadow-[0_8px_24px_rgba(0,0,0,0.32),0_0_0_1px_rgba(255,255,255,0.04)] px-[10px] py-[6px]">
+        {content}
+      </div>
+    );
+    const arrow = (
+      <div
+        className={
+          isTop
+            ? "w-0 h-0 border-l-[5px] border-r-[5px] border-l-transparent border-r-transparent border-t-[6px] border-t-[#1a1a1a] -mt-[1px]"
+            : "w-0 h-0 border-l-[5px] border-r-[5px] border-l-transparent border-r-transparent border-b-[6px] border-b-[#1a1a1a] -mb-[1px]"
+        }
+      />
+    );
 
     return createPortal(
       <div
@@ -194,34 +196,25 @@ export default function Tooltip({
         style={{
           left: `${left}px`,
           top: `${top}px`,
-          transform: "translateX(-50%)",
+          opacity: active ? 1 : 0,
+          transform: `translateX(-50%) translateY(calc(${baseY} + ${nudge})) scale(${scale})`,
+          transformOrigin: isTop ? "bottom center" : "top center",
+          transition:
+            "opacity 130ms ease, transform 130ms cubic-bezier(0.16, 1, 0.3, 1)",
         }}
         aria-hidden="true"
       >
-        <div ref={bubbleRef} className="relative flex flex-col items-center">
-          {isTop && (
-            <div
-              className="tooltip-bubble bg-[#1a1a1a] text-white text-[12px] font-medium font-body whitespace-nowrap rounded-[6px] shadow-[0_8px_24px_rgba(0,0,0,0.32),0_0_0_1px_rgba(255,255,255,0.04)] px-[10px] py-[6px]"
-            >
-              {content}
-            </div>
-          )}
-
-          {/* Arrow */}
-          <div
-            className={
-              isTop
-                ? "w-0 h-0 border-l-[5px] border-r-[5px] border-l-transparent border-r-transparent border-t-[6px] border-t-[#1a1a1a] -mt-[1px]"
-                : "w-0 h-0 border-l-[5px] border-r-[5px] border-l-transparent border-r-transparent border-b-[6px] border-b-[#1a1a1a] -mb-[1px]"
-            }
-          />
-
-          {!isTop && (
-            <div
-              className="tooltip-bubble bg-[#1a1a1a] text-white text-[12px] font-medium font-body whitespace-nowrap rounded-[6px] shadow-[0_8px_24px_rgba(0,0,0,0.32),0_0_0_1px_rgba(255,255,255,0.04)] px-[10px] py-[6px]"
-            >
-              {content}
-            </div>
+        <div className="relative flex flex-col items-center">
+          {isTop ? (
+            <>
+              {bubble}
+              {arrow}
+            </>
+          ) : (
+            <>
+              {arrow}
+              {bubble}
+            </>
           )}
         </div>
       </div>,
@@ -231,7 +224,13 @@ export default function Tooltip({
 
   return (
     <>
-      <span className={className ? `inline-block align-middle ${className}` : "inline-block align-middle"}>
+      <span
+        className={
+          className
+            ? `inline-block align-middle ${className}`
+            : "inline-block align-middle"
+        }
+      >
         {trigger}
       </span>
       {renderTooltip()}

@@ -41,6 +41,11 @@ class Message(Base):
     attachments: Mapped[list[dict[str, Any]]] = mapped_column(
         JSONB, nullable=False, default=list, server_default="[]"
     )
+    # Интерактивные компоненты (кнопки/select) — обычно от ботов. Формат —
+    # список action-row (см. app/schemas/components.py).
+    components: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default="[]"
+    )
 
     chat: Mapped["Chat"] = relationship(
         back_populates="messages",

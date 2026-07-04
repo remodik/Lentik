@@ -113,6 +113,7 @@ async def register(
         username=body.username,
         display_name=body.display_name,
         password_hash=hash_pin(body.pin),
+        birthday=body.birthday,
     )
     db.add(user)
     await db.commit()
@@ -237,6 +238,7 @@ async def join_by_invite(
         username=username,
         display_name=body.display_name.strip(),
         password_hash=hash_pin(body.pin),
+        birthday=body.birthday,
     )
     db.add(user)
     await db.flush()

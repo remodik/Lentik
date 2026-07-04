@@ -136,6 +136,7 @@ class MessageResponse(BaseModel):
     reply_to_id: UUID | None
     mentions: list[str] = []
     attachments: list[MessageAttachment] = []
+    components: list[dict] = []
     reactions: list[ReactionSummary] = []
     readers: list[ReaderInfo] = []
     created_at: datetime

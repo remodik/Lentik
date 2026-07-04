@@ -51,6 +51,7 @@ export default function Select<T extends string = string>({
   popoverMinWidth,
 }: SelectProps<T>) {
   const [open, setOpen] = useState(false);
+  const [exiting, setExiting] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [activeIndex, setActiveIndex] = useState<number>(-1);
   const [rect, setRect] = useState<PopoverRect | null>(null);
@@ -61,6 +62,17 @@ export default function Select<T extends string = string>({
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  const closePopover = useCallback(() => {
+    if (!open && !exiting) return;
+    setExiting(true);
+    // Allow the exit animation to play before unmounting
+    setTimeout(() => {
+      setOpen(false);
+      setExiting(false);
+      setRect(null);
+    }, 150);
+  }, [open, exiting]);
 
   const selected = useMemo(
     () => options.find((o) => o.value === value) ?? null,
@@ -107,7 +119,7 @@ export default function Select<T extends string = string>({
       if (!target) return;
       if (buttonRef.current?.contains(target)) return;
       if (listRef.current?.contains(target)) return;
-      setOpen(false);
+      closePopover();
     };
     document.addEventListener("mousedown", onPointerDown);
     return () => {
@@ -140,7 +152,7 @@ export default function Select<T extends string = string>({
     (option: SelectOption<T>) => {
       if (option.disabled) return;
       onChange(option.value);
-      setOpen(false);
+      closePopover();
       requestAnimationFrame(() => buttonRef.current?.focus());
     },
     [onChange],
@@ -157,7 +169,7 @@ export default function Select<T extends string = string>({
     }
     if (e.key === "Escape") {
       e.preventDefault();
-      setOpen(false);
+      closePopover();
     } else if (e.key === "ArrowDown") {
       e.preventDefault();
       moveActive(1);
@@ -180,7 +192,7 @@ export default function Select<T extends string = string>({
       const opt = options[activeIndex];
       if (opt) commit(opt);
     } else if (e.key === "Tab") {
-      setOpen(false);
+      closePopover();
     }
   };
 
@@ -191,13 +203,13 @@ export default function Select<T extends string = string>({
       );
 
   const popover =
-    mounted && open && rect ? (
+    mounted && (open || exiting) && rect ? (
       createPortal(
         <div
           ref={listRef}
           role="listbox"
           aria-labelledby={id}
-          className="lentik-popover z-[300] fixed rounded-2xl border border-[color:var(--border-glass-strong)] bg-[color:var(--bg-surface-strong)] backdrop-blur-xl shadow-[0_20px_60px_var(--scrim-3)] overflow-hidden"
+          className={`lentik-popover z-[300] fixed rounded-2xl border border-[color:var(--border-glass-strong)] bg-[color:var(--bg-surface-strong)] backdrop-blur-xl shadow-[0_20px_60px_var(--scrim-3)] overflow-hidden ${exiting ? "is-closing" : ""}`}
           style={{
             top: rect.openUp ? "auto" : rect.top,
             bottom: rect.openUp ? window.innerHeight - rect.top : "auto",
@@ -265,7 +277,15 @@ export default function Select<T extends string = string>({
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={ariaLabel}
-        onClick={() => !disabled && setOpen((o) => !o)}
+        onClick={() => {
+          if (disabled) return;
+          if (open || exiting) {
+            closePopover();
+          } else {
+            setOpen(true);
+            setExiting(false);
+          }
+        }}
         onKeyDown={onKeyDown}
         className={
           buttonClassName ??

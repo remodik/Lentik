@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Tooltip from "@/components/Tooltip";
 import {
   Clock as ClockIcon,
   Download,
@@ -60,6 +61,7 @@ import {
   pinChatMessage,
   removeReaction,
   searchChatMessages,
+  sendInteraction,
   sendMessage,
   sendMessageWithFiles,
   sendVoiceMessage,
@@ -69,6 +71,7 @@ import {
   type Me,
   type Message,
   type MessageAttachment,
+  type MsgActionRow,
   type MessageSearchResult,
 } from "@/lib/api";
 import { fetchWsTicket, toAbsoluteApiUrl, wsUrl } from "@/lib/api-base";
@@ -217,6 +220,96 @@ function renderText(text: string, meUsername: string) {
     }
     return part;
   });
+}
+
+// Phase 3 — рендер интерактивных компонентов сообщения (кнопки/select).
+function MessageComponents({
+  rows,
+  onInteract,
+}: {
+  rows: MsgActionRow[];
+  onInteract: (
+    customId: string,
+    type: "button" | "select",
+    values?: string[],
+  ) => Promise<void>;
+}) {
+  const [pending, setPending] = useState<string | null>(null);
+  const rowsKey = useMemo(() => JSON.stringify(rows), [rows]);
+  // Бот обновил сообщение (новые компоненты) → снимаем «загрузку».
+  useEffect(() => {
+    setPending(null);
+  }, [rowsKey]);
+
+  async function run(
+    customId: string,
+    type: "button" | "select",
+    values?: string[],
+  ) {
+    if (pending) return;
+    setPending(customId);
+    // Фолбэк-таймаут: если бот не ответил за 15с — компонент снова активен.
+    window.setTimeout(
+      () => setPending((p) => (p === customId ? null : p)),
+      15000,
+    );
+    try {
+      await onInteract(customId, type, values);
+    } catch {
+      setPending((p) => (p === customId ? null : p));
+    }
+  }
+
+  const btnStyle = (style: "primary" | "secondary" | "danger") =>
+    style === "primary"
+      ? "bg-[var(--accent)] text-[color:var(--text-on-dark)] border-[color:var(--accent-border)]"
+      : style === "danger"
+        ? "bg-[var(--danger-bg-soft)] text-[color:var(--danger-fg-bold)] border-[color:var(--danger-border)]"
+        : "bg-[var(--bg-surface)] text-ink-700 border-[color:var(--border-glass)]";
+
+  return (
+    <div className="mt-2 flex flex-col gap-1.5">
+      {rows.map((row, ri) => (
+        <div key={ri} className="flex flex-wrap items-center gap-1.5">
+          {row.components.map((c) =>
+            c.type === "button" ? (
+              <button
+                key={c.custom_id}
+                type="button"
+                disabled={c.disabled || pending !== null}
+                onClick={() => void run(c.custom_id, "button")}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-semibold border transition disabled:opacity-50 active:scale-[0.98] ${btnStyle(c.style)}`}
+              >
+                {pending === c.custom_id && (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" strokeWidth={2.2} />
+                )}
+                {c.label}
+              </button>
+            ) : (
+              <select
+                key={c.custom_id}
+                disabled={c.disabled || pending !== null}
+                defaultValue=""
+                onChange={(e) => {
+                  if (e.target.value) void run(c.custom_id, "select", [e.target.value]);
+                }}
+                className="rounded-lg border border-[color:var(--border-glass)] bg-[var(--bg-surface)] px-3 py-1.5 text-[13px] text-ink-700 outline-none disabled:opacity-50 min-w-[160px]"
+              >
+                <option value="" disabled>
+                  {c.placeholder || "Выбрать…"}
+                </option>
+                {c.options.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            ),
+          )}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function MessageAvatar({
@@ -1004,7 +1097,14 @@ export default function ChatView({
             setMessages((p) =>
               p.map((m) =>
                 m.id === d.message.id
-                  ? { ...m, text: d.message.text, edited: true }
+                  ? {
+                      ...m,
+                      text: d.message.text,
+                      edited: true,
+                      ...(d.message.components !== undefined
+                        ? { components: d.message.components }
+                        : {}),
+                    }
                   : m,
               ),
             );
@@ -1328,6 +1428,37 @@ export default function ChatView({
       mediaRecorderRef.current.stop();
     }
   };
+
+  const handleComponentInteract = useCallback(
+    async (
+      messageId: string,
+      customId: string,
+      type: "button" | "select",
+      values?: string[],
+    ) => {
+      try {
+        await sendInteraction(familyId, chat.id, messageId, {
+          custom_id: customId,
+          type,
+          values,
+        });
+      } catch (e) {
+        const statusCode = (e as { status?: number })?.status;
+        void notify({
+          title: "Не удалось обработать",
+          description:
+            statusCode === 404
+              ? "Бот не отвечает или интеракция устарела."
+              : e instanceof Error
+                ? e.message
+                : undefined,
+          tone: "danger",
+        });
+        throw e;
+      }
+    },
+    [familyId, chat.id, notify],
+  );
 
   async function handleSend() {
     if (sending) return;
@@ -2270,65 +2401,70 @@ export default function ChatView({
                       onMouseLeave={() => scheduleToolbarHide(message.id)}
                     >
                       {canAddReactions && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (emojiPickerForId === message.id) {
-                              setEmojiPickerForId(null);
-                              setEmojiPickerAnchorRect(null);
-                            } else {
-                              reactionTriggerRef.current = e.currentTarget;
-                              setEmojiPickerAnchorRect(e.currentTarget.getBoundingClientRect());
-                              setEmojiPickerForId(message.id);
-                            }
-                          }}
-                          className="msg-actions-btn"
-                          data-tooltip="Реакция"
-                        >
-                          <SmilePlus className="w-4 h-4" strokeWidth={2.2} />
-                        </button>
+                        <Tooltip content="Реакция">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (emojiPickerForId === message.id) {
+                                setEmojiPickerForId(null);
+                                setEmojiPickerAnchorRect(null);
+                              } else {
+                                reactionTriggerRef.current = e.currentTarget;
+                                setEmojiPickerAnchorRect(e.currentTarget.getBoundingClientRect());
+                                setEmojiPickerForId(message.id);
+                              }
+                            }}
+                            className="msg-actions-btn"
+                          >
+                            <SmilePlus className="w-4 h-4" strokeWidth={2.2} />
+                          </button>
+                        </Tooltip>
                       )}
                       {canSendMessages && (
-                      <button
-                        type="button"
-                        onClick={() => setReplyTo(message)}
-                        className="msg-actions-btn"
-                        data-tooltip="Ответить"
-                      >
-                        <CornerUpLeft className="w-4 h-4" strokeWidth={2.2} />
-                      </button>
-                      )}
-                      {canPinMessages && (
+                      <Tooltip content="Ответить">
                         <button
                           type="button"
-                          onClick={() => void handlePinToggle(message)}
-                          className={`msg-actions-btn ${isPinned ? "text-warm-700" : ""}`}
-                          data-tooltip={isPinned ? "Открепить" : "Закрепить"}
-                          disabled={pinUpdatingForId === message.id}
+                          onClick={() => setReplyTo(message)}
+                          className="msg-actions-btn"
                         >
-                          <Pin className="w-4 h-4" strokeWidth={2.2} />
+                          <CornerUpLeft className="w-4 h-4" strokeWidth={2.2} />
                         </button>
+                      </Tooltip>
+                      )}
+                      {canPinMessages && (
+                        <Tooltip content={isPinned ? "Открепить" : "Закрепить"}>
+                          <button
+                            type="button"
+                            onClick={() => void handlePinToggle(message)}
+                            className={`msg-actions-btn ${isPinned ? "text-warm-700" : ""}`}
+                            disabled={pinUpdatingForId === message.id}
+                          >
+                            <Pin className="w-4 h-4" strokeWidth={2.2} />
+                          </button>
+                        </Tooltip>
                       )}
                       {canEdit && (
+                        <Tooltip content="Изменить">
                         <button
                           type="button"
                           onClick={() => startEdit(message)}
                           className="msg-actions-btn"
-                          data-tooltip="Изменить"
                         >
                           <Pencil className="w-4 h-4" strokeWidth={2.2} />
                         </button>
+                      </Tooltip>
                       )}
                       {canDelete && (
+                        <Tooltip content="Удалить">
                         <button
                           type="button"
                           onClick={(e) => handleDelete(message.id, e.shiftKey)}
                           className="msg-actions-btn danger"
-                          data-tooltip="Удалить"
                         >
                           <Trash2 className="w-4 h-4" strokeWidth={2.2} />
                         </button>
+                      </Tooltip>
                       )}
 
                     </div>
@@ -2376,6 +2512,15 @@ export default function ChatView({
                           <div className="text-[15px] text-ink-800 whitespace-pre-wrap break-words leading-relaxed">
                             {renderText(message.text, me.username)}
                           </div>
+                        )}
+
+                        {message.components && message.components.length > 0 && (
+                          <MessageComponents
+                            rows={message.components}
+                            onInteract={(customId, type, values) =>
+                              handleComponentInteract(message.id, customId, type, values)
+                            }
+                          />
                         )}
 
                         {reactions.length > 0 && (
@@ -2554,15 +2699,16 @@ export default function ChatView({
             </div>
           )}
           {canAttachFiles && (
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="w-9 h-9 rounded-md grid place-items-center text-ink-500 hover:text-ink-900 hover:bg-white/75 transition shrink-0"
-              data-tooltip="Прикрепить файл"
-              aria-label="Прикрепить файл"
-            >
-              <Paperclip className="w-4 h-4" strokeWidth={2.2} />
-            </button>
+            <Tooltip content="Прикрепить файл">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="w-9 h-9 rounded-md grid place-items-center text-ink-500 hover:text-ink-900 hover:bg-white/75 transition shrink-0"
+                aria-label="Прикрепить файл"
+              >
+                <Paperclip className="w-4 h-4" strokeWidth={2.2} />
+              </button>
+            </Tooltip>
           )}
 
           <input
@@ -2613,29 +2759,30 @@ export default function ChatView({
             rows={1}
           />
 
-          <button
-            ref={emojiBtnRef}
-            type="button"
-            onClick={(e) => {
-              if (composerEmojiOpen) {
-                setComposerEmojiOpen(false);
-                setComposerEmojiAnchor(null);
-              } else {
-                setComposerEmojiAnchor(e.currentTarget.getBoundingClientRect());
-                setComposerEmojiOpen(true);
-              }
-            }}
-            className={`w-9 h-9 rounded-md grid place-items-center shrink-0 transition ${
-              composerEmojiOpen
-                ? "text-[var(--accent)] bg-[var(--accent-soft)]"
-                : "text-ink-500 hover:text-ink-900 hover:bg-white/75"
-            }`}
-            data-tooltip="Эмодзи"
-            aria-label="Эмодзи"
-            aria-expanded={composerEmojiOpen}
-          >
-            <Smile className="w-4 h-4" strokeWidth={2.2} />
-          </button>
+          <Tooltip content="Эмодзи">
+            <button
+              ref={emojiBtnRef}
+              type="button"
+              onClick={(e) => {
+                if (composerEmojiOpen) {
+                  setComposerEmojiOpen(false);
+                  setComposerEmojiAnchor(null);
+                } else {
+                  setComposerEmojiAnchor(e.currentTarget.getBoundingClientRect());
+                  setComposerEmojiOpen(true);
+                }
+              }}
+              className={`w-9 h-9 rounded-md grid place-items-center shrink-0 transition ${
+                composerEmojiOpen
+                  ? "text-[var(--accent)] bg-[var(--accent-soft)]"
+                  : "text-ink-500 hover:text-ink-900 hover:bg-white/75"
+              }`}
+              aria-label="Эмодзи"
+              aria-expanded={composerEmojiOpen}
+            >
+              <Smile className="w-4 h-4" strokeWidth={2.2} />
+            </button>
+          </Tooltip>
 
           <button
             type="button"

@@ -3,6 +3,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from app.schemas.components import ActionRow
+
 
 class BotCreate(BaseModel):
     display_name: str = Field(min_length=1, max_length=64)
@@ -32,6 +34,12 @@ class BotWithToken(BotResponse):
 class BotSendMessageRequest(BaseModel):
     text: str = Field(min_length=1, max_length=4000)
     reply_to_id: UUID | None = None
+    components: list[ActionRow] | None = Field(default=None, max_length=5)
+
+
+class BotEditMessageRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=4000)
+    components: list[ActionRow] | None = Field(default=None, max_length=5)
 
 
 class BotChatInfo(BaseModel):

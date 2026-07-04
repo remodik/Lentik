@@ -78,7 +78,7 @@ export default function BanUserModal({
           rows={3}
           maxLength={500}
           placeholder="За что блокируется аккаунт"
-          className="w-full rounded-xl border border-[color:var(--border-glass)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-ink-700 font-body focus:outline-none focus:ring-2 focus:ring-warm-200 resize-none"
+          className="w-full rounded-xl border border-[color:var(--border-glass)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-ink-700 font-body resize-none"
           autoFocus
         />
 

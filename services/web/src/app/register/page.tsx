@@ -14,6 +14,7 @@ export default function RegisterPage() {
 
   const [displayName, setDisplayName] = useState("");
   const [username, setUsername] = useState("");
+  const [birthday, setBirthday] = useState("");
   const [pin, setPin] = useState(emptyPin());
   const [confirm, setConfirm] = useState(emptyPin());
   const [error, setError] = useState("");
@@ -61,6 +62,7 @@ export default function RegisterPage() {
     if (!displayName.trim()) return setError("Введи своё имя");
     if (!username.trim()) return setError("Введи логин");
     if (nameTaken) return setError("Этот логин занят — выбери другой");
+    if (!birthday) return setError("Укажи дату рождения");
     const pinStr = joinPin(pin);
     if (!isValidPin(pinStr)) return setError("PIN — от 4 до 8 цифр");
     if (pinStr !== joinPin(confirm))
@@ -69,7 +71,7 @@ export default function RegisterPage() {
     setError("");
     setLoading(true);
     try {
-      await register(displayName.trim(), username.trim(), pinStr);
+      await register(displayName.trim(), username.trim(), pinStr, birthday);
       router.push("/onboarding");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Ошибка");
@@ -177,6 +179,21 @@ export default function RegisterPage() {
                   </div>
                 </div>
               )}
+            </div>
+
+            <div>
+              <label className="field-label">Дата рождения</label>
+              <input
+                type="date"
+                value={birthday}
+                onChange={(e) => setBirthday(e.target.value)}
+                max={new Date().toISOString().slice(0, 10)}
+                min="1900-01-01"
+                className="glass-input mt-1.5"
+              />
+              <p className="text-xs text-ink-400 mt-1.5 font-body">
+                Семья поздравит тебя в этот день. Изменить потом нельзя
+              </p>
             </div>
 
             <div>

@@ -56,6 +56,11 @@ async def update_profile(
         user.bio = body.bio
 
     if body.birthday is not None:
+        # ДР — set-once: у новых юзеров оно уже задано при регистрации и
+        # заблокировано; легаси-юзеры (birthday IS NULL) могут заполнить его
+        # ровно один раз, после чего изменение запрещено.
+        if user.birthday is not None and user.birthday != body.birthday:
+            raise HTTPException(status_code=400, detail="День рождения изменить нельзя")
         user.birthday = body.birthday
 
     if body.ui_mode is not None:

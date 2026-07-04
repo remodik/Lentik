@@ -18,6 +18,7 @@ from .message import Message
 from .message_read import MessageRead
 from .note import Note
 from .post import Post
+from .preset_bot import PresetBot
 from .reaction import MessageReaction
 from .reminder import Reminder, RepeatRule
 from .push_subscription import PushSubscription
@@ -53,6 +54,7 @@ __all__ = [
     "TreeRelationType",
     "Channel",
     "Post",
+    "PresetBot",
     "GalleryItem",
     "MediaType",
     "Note",

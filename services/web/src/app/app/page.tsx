@@ -800,7 +800,7 @@ export default function AppPage() {
           aria-label="Создать чат"
         >
           <div
-            className="w-full max-w-sm rounded-3xl border border-[color:var(--border-glass-strong)] bg-[color:var(--bg-elevated)] backdrop-blur-2xl p-6 shadow-[0_30px_90px_var(--scrim-4)]"
+            className="w-full max-w-sm max-h-[calc(100dvh-2rem)] overflow-y-auto sidebar-scroll rounded-3xl border border-[color:var(--border-glass-strong)] bg-[color:var(--bg-elevated)] backdrop-blur-2xl p-6 shadow-[0_30px_90px_var(--scrim-4)]"
             onClick={(e) => e.stopPropagation()}
           >
             <p className="text-xs uppercase tracking-[0.16em] text-ink-400 font-body">
@@ -857,7 +857,7 @@ export default function AppPage() {
           aria-label="Создать семью"
         >
           <div
-            className="w-full max-w-md rounded-3xl border border-[color:var(--border-glass-strong)] bg-[color:var(--bg-elevated)] backdrop-blur-2xl p-6 shadow-[0_30px_90px_var(--scrim-4)]"
+            className="w-full max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto sidebar-scroll rounded-3xl border border-[color:var(--border-glass-strong)] bg-[color:var(--bg-elevated)] backdrop-blur-2xl p-6 shadow-[0_30px_90px_var(--scrim-4)]"
             onClick={(e) => e.stopPropagation()}
           >
             <p className="text-xs uppercase tracking-[0.16em] text-ink-400 font-body">
@@ -933,7 +933,7 @@ export default function AppPage() {
           aria-label="Переименовать семью"
         >
           <div
-            className="w-full max-w-sm rounded-3xl border border-[color:var(--border-glass-strong)] bg-[color:var(--bg-elevated)] backdrop-blur-2xl p-6 shadow-[0_30px_90px_var(--scrim-4)]"
+            className="w-full max-w-sm max-h-[calc(100dvh-2rem)] overflow-y-auto sidebar-scroll rounded-3xl border border-[color:var(--border-glass-strong)] bg-[color:var(--bg-elevated)] backdrop-blur-2xl p-6 shadow-[0_30px_90px_var(--scrim-4)]"
             onClick={(e) => e.stopPropagation()}
           >
             <p className="text-xs uppercase tracking-[0.16em] text-ink-400 font-body">
@@ -985,7 +985,7 @@ export default function AppPage() {
           aria-label="Вступить в семью"
         >
           <div
-            className="w-full max-w-sm rounded-3xl border border-[color:var(--border-glass-strong)] bg-[color:var(--bg-elevated)] backdrop-blur-2xl p-6 shadow-[0_30px_90px_var(--scrim-4)]"
+            className="w-full max-w-sm max-h-[calc(100dvh-2rem)] overflow-y-auto sidebar-scroll rounded-3xl border border-[color:var(--border-glass-strong)] bg-[color:var(--bg-elevated)] backdrop-blur-2xl p-6 shadow-[0_30px_90px_var(--scrim-4)]"
             onClick={(e) => e.stopPropagation()}
           >
             <p className="text-xs uppercase tracking-[0.16em] text-ink-400 font-body">

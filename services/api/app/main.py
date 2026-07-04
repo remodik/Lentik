@@ -19,6 +19,7 @@ from app.routers.chats import bot_router as bot_action_router
 from app.routers.channels import bot_router as bot_channels_router
 from app.routers.bots import router as bots_router
 from app.routers.bot_gateway import router as bot_gateway_router
+from app.routers.presets import router as presets_router
 from app.routers.expenses import router as expenses_router
 from app.routers.families import router as families_router
 from app.routers.families_join import router as families_join_router
@@ -53,6 +54,10 @@ from app.services.reminder_dispatcher import (
 from app.services.capsule_dispatcher import (
     start_capsule_scheduler,
     stop_capsule_scheduler,
+)
+from app.services.preset_dispatcher import (
+    start_preset_scheduler,
+    stop_preset_scheduler,
 )
 
 logger = logging.getLogger(__name__)
@@ -229,6 +234,7 @@ def create_app() -> FastAPI:
     app_.include_router(channels_router)
     app_.include_router(bot_channels_router)
     app_.include_router(bot_gateway_router)
+    app_.include_router(presets_router)
     app_.include_router(gallery_router)
     app_.include_router(calendar_router)
     app_.include_router(families_join_router)
@@ -264,12 +270,14 @@ def create_app() -> FastAPI:
             await start_reminder_scheduler()
             await start_calendar_reminder_scheduler()
             await start_capsule_scheduler()
+            await start_preset_scheduler()
 
     @app_.on_event("shutdown")
     async def on_shutdown() -> None:
         await stop_calendar_reminder_scheduler()
         await stop_reminder_scheduler()
         await stop_capsule_scheduler()
+        await stop_preset_scheduler()
         await ws_manager.stop()
         await close_redis()
 

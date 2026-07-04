@@ -10,6 +10,7 @@ import {
   Plus,
   RefreshCw,
   ShieldAlert,
+  Sparkles,
   Trash2,
   X,
 } from "lucide-react";
@@ -17,8 +18,13 @@ import {
   createBot,
   deleteBot,
   getBots,
+  getChats,
+  getPresets,
   regenerateBotToken,
+  updatePreset,
   type Bot,
+  type Chat,
+  type Preset,
 } from "@/lib/api";
 import { API_BASE } from "@/lib/api-base";
 import { useConfirm } from "@/components/ConfirmDialog";
@@ -52,6 +58,9 @@ export default function BotsView({ familyId }: { familyId: string }) {
       hasBit(perms.base, PERM.MANAGE_FAMILY));
 
   const [bots, setBots] = useState<Bot[]>([]);
+  const [presets, setPresets] = useState<Preset[]>([]);
+  const [chats, setChats] = useState<Chat[]>([]);
+  const [presetKey, setPresetKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
@@ -78,8 +87,14 @@ export default function BotsView({ familyId }: { familyId: string }) {
     }
     setLoading(true);
     try {
-      const next = await getBots(familyId);
+      const [next, presetList, chatList] = await Promise.all([
+        getBots(familyId),
+        getPresets(familyId).catch(() => [] as Preset[]),
+        getChats(familyId).catch(() => [] as Chat[]),
+      ]);
       setBots(next);
+      setPresets(presetList);
+      setChats(chatList);
       setSelectedId((prev) => (prev && next.some((b) => b.id === prev) ? prev : next[0]?.id ?? null));
     } catch (e) {
       console.error("getBots failed", e);
@@ -87,6 +102,11 @@ export default function BotsView({ familyId }: { familyId: string }) {
       setLoading(false);
     }
   }, [familyId, canManage]);
+
+  const activePreset = useMemo(
+    () => presets.find((p) => p.key === presetKey) ?? null,
+    [presets, presetKey],
+  );
 
   useEffect(() => {
     void load();
@@ -136,6 +156,15 @@ export default function BotsView({ familyId }: { familyId: string }) {
     } finally {
       setBusy(false);
     }
+  }
+
+  async function handleSavePreset(
+    key: string,
+    data: { enabled: boolean; target_chat_id: string | null; hour: number },
+  ) {
+    const updated = await updatePreset(familyId, key, data);
+    setPresets((prev) => prev.map((p) => (p.key === key ? updated : p)));
+    return updated;
   }
 
   async function handleDelete(bot: Bot) {
@@ -203,7 +232,42 @@ export default function BotsView({ familyId }: { familyId: string }) {
           </button>
         </div>
 
-        <div className="mt-3 md:mt-4 space-y-1.5 max-h-[220px] md:max-h-none md:h-[calc(100%-72px)] overflow-y-auto sidebar-scroll pr-1">
+        {presets.length > 0 && (
+          <div className="mt-3 md:mt-4">
+            <p className="text-[11px] uppercase tracking-[0.12em] text-ink-400 font-body flex items-center gap-1.5 mb-1.5">
+              <Sparkles className="w-3.5 h-3.5" strokeWidth={2.2} /> Готовые боты
+            </p>
+            <div className="space-y-1.5">
+              {presets.map((p) => (
+                <button
+                  key={p.key}
+                  type="button"
+                  onClick={() => setPresetKey(p.key)}
+                  className="w-full text-left rounded-xl border px-3 py-2.5 transition flex items-center gap-2.5 hover:translate-y-[-1px]"
+                  style={{ borderColor: "var(--border-glass)", background: "var(--bg-surface)" }}
+                >
+                  <span className="w-8 h-8 shrink-0 rounded-lg grid place-items-center text-base bg-[var(--bg-surface-subtle)]">
+                    {p.emoji}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-semibold text-ink-800 truncate">{p.title}</span>
+                    <span className="block text-xs text-ink-400 font-body truncate">{p.description}</span>
+                  </span>
+                  <span
+                    className="shrink-0 w-2 h-2 rounded-full"
+                    style={{ background: p.enabled ? "var(--success-fg-bold, #22c55e)" : "var(--border-glass-strong, #d4d4d4)" }}
+                    title={p.enabled ? "Включён" : "Выключен"}
+                  />
+                </button>
+              ))}
+            </div>
+            <p className="text-[11px] uppercase tracking-[0.12em] text-ink-400 font-body mt-4 mb-1.5">
+              Свои боты
+            </p>
+          </div>
+        )}
+
+        <div className="mt-3 md:mt-4 space-y-1.5 max-h-[220px] md:max-h-none overflow-y-auto sidebar-scroll pr-1">
           {loading ? (
             <div className="text-sm text-ink-400 font-body px-1">Загрузка…</div>
           ) : bots.length === 0 ? (
@@ -358,6 +422,16 @@ export default function BotsView({ familyId }: { familyId: string }) {
         )}
       </section>
 
+      {activePreset && (
+        <PresetConfigModal
+          preset={activePreset}
+          chats={chats}
+          onClose={() => setPresetKey(null)}
+          onSave={handleSavePreset}
+          notify={notify}
+        />
+      )}
+
       {createOpen && (
         <div
           className="fixed inset-0 z-[80] bg-black/35 backdrop-blur-sm p-4 flex items-center justify-center"
@@ -448,6 +522,153 @@ export default function BotsView({ familyId }: { familyId: string }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function PresetConfigModal({
+  preset,
+  chats,
+  onClose,
+  onSave,
+  notify,
+}: {
+  preset: Preset;
+  chats: Chat[];
+  onClose: () => void;
+  onSave: (
+    key: string,
+    data: { enabled: boolean; target_chat_id: string | null; hour: number },
+  ) => Promise<Preset>;
+  notify: ReturnType<typeof useConfirm>["notify"];
+}) {
+  const [enabled, setEnabled] = useState(preset.enabled);
+  const [targetChatId, setTargetChatId] = useState<string | null>(preset.target_chat_id);
+  const [hour, setHour] = useState(preset.hour);
+  const [saving, setSaving] = useState(false);
+
+  async function handleSave() {
+    if (saving) return;
+    if (enabled && !targetChatId) {
+      void notify({ title: "Выберите чат", description: "Куда бот будет присылать сообщения.", tone: "danger" });
+      return;
+    }
+    setSaving(true);
+    try {
+      await onSave(preset.key, { enabled, target_chat_id: targetChatId, hour });
+      onClose();
+    } catch (e) {
+      void notify({ title: "Не удалось сохранить", description: e instanceof Error ? e.message : undefined, tone: "danger" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-[80] bg-black/35 backdrop-blur-sm p-4 flex items-center justify-center"
+      onClick={() => !saving && onClose()}
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Настройка: ${preset.title}`}
+    >
+      <div
+        className="w-full max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto sidebar-scroll rounded-3xl border border-[color:var(--border-glass-strong)] bg-[color:var(--bg-elevated)] backdrop-blur-2xl p-6 shadow-[0_30px_90px_var(--scrim-4)]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between mb-5 gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <span className="w-11 h-11 shrink-0 rounded-2xl grid place-items-center text-xl bg-[var(--bg-surface-subtle)]">
+              {preset.emoji}
+            </span>
+            <div className="min-w-0">
+              <h3 className="font-display text-xl text-ink-900 truncate">{preset.title}</h3>
+              <p className="text-[13px] text-ink-400 font-body">{preset.description}</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-8 h-8 shrink-0 rounded-lg grid place-items-center text-ink-400 hover:text-ink-700 hover:bg-white/60 transition"
+            disabled={saving}
+            aria-label="Закрыть"
+          >
+            <X className="w-4 h-4" strokeWidth={2.3} />
+          </button>
+        </div>
+
+        <div className="space-y-4">
+          {/* Вкл/выкл */}
+          <label className="flex items-center justify-between gap-3 rounded-2xl border p-3.5 cursor-pointer"
+            style={{ borderColor: "var(--border-glass)", background: "var(--bg-surface)" }}>
+            <span>
+              <span className="block text-sm font-semibold text-ink-800 font-body">Включить бота</span>
+              <span className="block text-xs text-ink-400 font-body mt-0.5">Будет работать автоматически</span>
+            </span>
+            <input
+              type="checkbox"
+              checked={enabled}
+              onChange={(e) => setEnabled(e.target.checked)}
+              className="w-5 h-5 accent-[color:var(--accent)]"
+            />
+          </label>
+
+          {/* Целевой чат */}
+          <div>
+            <label className="text-[11px] font-semibold text-ink-400 uppercase tracking-widest font-body mb-1.5 block">
+              Куда постить
+            </label>
+            <select
+              className="input-field"
+              value={targetChatId ?? ""}
+              onChange={(e) => setTargetChatId(e.target.value || null)}
+            >
+              <option value="">— выберите чат —</option>
+              {chats.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Час отправки */}
+          <div>
+            <label className="text-[11px] font-semibold text-ink-400 uppercase tracking-widest font-body mb-1.5 block">
+              Во сколько (час, МСК)
+            </label>
+            <input
+              type="number"
+              min={0}
+              max={23}
+              className="input-field"
+              value={hour}
+              onChange={(e) => setHour(Math.max(0, Math.min(23, Number(e.target.value) || 0)))}
+            />
+            <p className="text-[11px] text-ink-400 font-body mt-1.5">
+              Отправляется раз в день. На бесплатном хостинге возможна задержка, если сервис «спал».
+            </p>
+          </div>
+        </div>
+
+        <div className="flex gap-3 pt-5">
+          <button
+            type="button"
+            className="flex-1 btn-primary py-2.5 text-sm rounded-xl inline-flex items-center justify-center gap-2 disabled:opacity-50"
+            onClick={() => void handleSave()}
+            disabled={saving}
+          >
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" strokeWidth={2.2} /> : null}
+            {saving ? "Сохранение…" : "Сохранить"}
+          </button>
+          <button
+            type="button"
+            className="flex-1 ui-btn ui-btn-subtle py-2.5"
+            onClick={onClose}
+            disabled={saving}
+          >
+            Отмена
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

@@ -207,7 +207,7 @@ function CreateCapsuleModal({
         onChange={(e) => setTitle(e.target.value)}
         maxLength={200}
         placeholder="Например: Новый год 2027"
-        className="w-full rounded-xl border border-[color:var(--border-glass)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-ink-700 font-body focus:outline-none focus:ring-2 focus:ring-warm-200"
+        className="w-full rounded-xl border border-[color:var(--border-glass)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-ink-700 font-body "
         autoFocus
       />
       <label className="text-xs text-ink-500 font-body block mt-4 mb-1.5">Дата открытия</label>
@@ -215,7 +215,7 @@ function CreateCapsuleModal({
         type="datetime-local"
         value={when}
         onChange={(e) => setWhen(e.target.value)}
-        className="w-full rounded-xl border border-[color:var(--border-glass)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-ink-700 font-body focus:outline-none focus:ring-2 focus:ring-warm-200"
+        className="w-full rounded-xl border border-[color:var(--border-glass)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-ink-700 font-body "
       />
       <p className="text-xs text-ink-400 font-body mt-2">
         До этой даты записи каждого скрыты от остальных. В день открытия капсула раскроется всем.
@@ -368,7 +368,7 @@ function CapsuleDetail({
                   rows={3}
                   maxLength={4000}
                   placeholder="Послание себе и семье в будущее…"
-                  className="w-full rounded-xl border border-[color:var(--border-glass)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-ink-700 font-body focus:outline-none focus:ring-2 focus:ring-warm-200 resize-none"
+                  className="w-full rounded-xl border border-[color:var(--border-glass)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-ink-700 font-body resize-none"
                 />
                 <input
                   ref={fileRef}

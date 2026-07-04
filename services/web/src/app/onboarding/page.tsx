@@ -62,6 +62,7 @@ function OnboardingContent() {
   const [familyName, setFamilyName] = useState("");
   const [token, setToken] = useState(inviteToken ?? "");
   const [displayName, setDisplayName] = useState("");
+  const [birthday, setBirthday] = useState("");
   const [pin, setPin] = useState(emptyPin());
   const [inviteLink, setInviteLink] = useState("");
   const [error, setError] = useState("");
@@ -113,6 +114,7 @@ function OnboardingContent() {
     e.preventDefault();
     if (!token.trim()) return setError("Вставь ссылку или код приглашения");
     if (!displayName.trim()) return setError("Введи своё имя");
+    if (!birthday) return setError("Укажи дату рождения");
     const pinStr = joinPin(pin);
     if (!isValidPin(pinStr)) return setError("PIN — от 4 до 8 цифр");
 
@@ -127,7 +129,7 @@ function OnboardingContent() {
         t = url.searchParams.get("token") ?? t;
       } catch {}
 
-      const result = await joinByInvite(t, displayName.trim(), pinStr);
+      const result = await joinByInvite(t, displayName.trim(), pinStr, birthday);
 
       // Store session (сессия — в httpOnly-cookie; здесь лишь UI-состояние)
       if (result.family_id) localStorage.setItem("familyId", result.family_id);
@@ -330,6 +332,24 @@ function OnboardingContent() {
             />
             <p className="text-xs text-ink-400 mt-1.5 font-body">
               Так вас увидят другие члены семьи
+            </p>
+          </div>
+
+          {/* Birthday field */}
+          <div>
+            <label className="mobile-elderly-label block text-sm font-semibold text-ink-500 mb-2 font-body">
+              Дата рождения
+            </label>
+            <input
+              type="date"
+              value={birthday}
+              onChange={(e) => setBirthday(e.target.value)}
+              max={new Date().toISOString().slice(0, 10)}
+              min="1900-01-01"
+              className="glass-input"
+            />
+            <p className="text-xs text-ink-400 mt-1.5 font-body">
+              Семья поздравит вас в этот день. Изменить потом нельзя
             </p>
           </div>
 

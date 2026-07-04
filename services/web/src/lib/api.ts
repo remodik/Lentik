@@ -36,10 +36,15 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return normalizeApiPayload(payload) as T;
 }
 
-export function register(display_name: string, username: string, pin: string) {
+export function register(
+  display_name: string,
+  username: string,
+  pin: string,
+  birthday: string,
+) {
   return request<{ user_id: string }>("/auth/register", {
     method: "POST",
-    body: JSON.stringify({ display_name, username, pin }),
+    body: JSON.stringify({ display_name, username, pin, birthday }),
   });
 }
 
@@ -56,10 +61,15 @@ export async function logout() {
   await request<void>("/auth/logout", { method: "POST" });
 }
 
-export function joinByInvite(token: string, display_name: string, pin: string) {
+export function joinByInvite(
+  token: string,
+  display_name: string,
+  pin: string,
+  birthday: string,
+) {
   return request<{ user_id: string; family_id: string }>("/auth/invite", {
     method: "POST",
-    body: JSON.stringify({ token, display_name, pin }),
+    body: JSON.stringify({ token, display_name, pin, birthday }),
   });
 }
 
@@ -568,6 +578,26 @@ export type ReaderInfo = {
   avatar_url: string | null;
 };
 
+// ── Интерактивные компоненты сообщений (Phase 3) ───────────────────────────
+export type MsgButton = {
+  type: "button";
+  custom_id: string;
+  label: string;
+  style: "primary" | "secondary" | "danger";
+  disabled?: boolean;
+};
+export type MsgSelectOption = { label: string; value: string };
+export type MsgSelect = {
+  type: "select";
+  custom_id: string;
+  placeholder?: string | null;
+  options: MsgSelectOption[];
+  min_values?: number;
+  max_values?: number;
+  disabled?: boolean;
+};
+export type MsgActionRow = { type: "row"; components: (MsgButton | MsgSelect)[] };
+
 export type Message = {
   id: string;
   chat_id: string;
@@ -579,10 +609,23 @@ export type Message = {
   reply_to_id: string | null;
   mentions: string[];
   attachments: MessageAttachment[];
+  components?: MsgActionRow[];
   reactions?: ReactionSummary[];
   readers?: ReaderInfo[];
   created_at: string;
 };
+
+export function sendInteraction(
+  familyId: string,
+  chatId: string,
+  messageId: string,
+  data: { custom_id: string; type: "button" | "select"; values?: string[] },
+) {
+  return request<{ interaction_id: string }>(
+    `/families/${familyId}/chats/${chatId}/messages/${messageId}/interactions`,
+    { method: "POST", body: JSON.stringify(data) },
+  );
+}
 
 export type MessageSearchResult = {
   id: string;
@@ -810,6 +853,43 @@ export function regenerateBotToken(familyId: string, botId: string) {
 export function deleteBot(familyId: string, botId: string) {
   return request<void>(`/families/${familyId}/bots/${botId}`, {
     method: "DELETE",
+  });
+}
+
+// ── Готовые (пресет) боты ────────────────────────────────────────────────
+
+export type Preset = {
+  key: string;
+  title: string;
+  description: string;
+  emoji: string;
+  enabled: boolean;
+  configured: boolean;
+  target_chat_id: string | null;
+  bot_user_id: string | null;
+  bot_display_name: string | null;
+  hour: number;
+  tz_offset_minutes: number;
+  last_run_at: string | null;
+};
+
+export function getPresets(familyId: string) {
+  return request<Preset[]>(`/families/${familyId}/presets`);
+}
+
+export function updatePreset(
+  familyId: string,
+  key: string,
+  data: {
+    enabled?: boolean;
+    target_chat_id?: string | null;
+    hour?: number;
+    tz_offset_minutes?: number;
+  },
+) {
+  return request<Preset>(`/families/${familyId}/presets/${key}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
   });
 }
 

@@ -369,6 +369,24 @@ export function EmojiPickerPopover({
   // 352px не помещается и «выезжает» за край узкого экрана.
   const [isMobile, setIsMobile] = useState(false);
 
+  // Support exit animation
+  const [render, setRender] = useState(!!anchorRect);
+  const [closing, setClosing] = useState(false);
+
+  useEffect(() => {
+    if (anchorRect) {
+      setRender(true);
+      setClosing(false);
+    } else if (render) {
+      setClosing(true);
+      const t = setTimeout(() => {
+        setRender(false);
+        setClosing(false);
+      }, 150);
+      return () => clearTimeout(t);
+    }
+  }, [anchorRect, render]);
+
   useLayoutEffect(() => {
     if (!anchorRect) return;
     const vw = window.innerWidth;
@@ -414,12 +432,12 @@ export function EmojiPickerPopover({
     };
   }, [onClose, triggerRef]);
 
-  if (!anchorRect) return null;
+  if (!render) return null;
 
   return createPortal(
     <div
       ref={panelRef}
-      className={`emoji-picker-popover ${isMobile ? "is-sheet" : ""}`}
+      className={`emoji-picker-popover ${isMobile ? "is-sheet" : ""} ${closing ? "is-closing" : ""}`}
       style={
         isMobile
           ? {

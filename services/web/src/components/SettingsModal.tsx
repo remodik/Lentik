@@ -295,8 +295,16 @@ function ProfileSection({
             type="date"
             value={birthday}
             onChange={(e) => setBirthday(e.target.value)}
-            className="input-field"
+            max={new Date().toISOString().slice(0, 10)}
+            min="1900-01-01"
+            disabled={!!me.birthday}
+            className="input-field disabled:opacity-60 disabled:cursor-not-allowed"
           />
+          <p className="text-[11px] text-ink-300 mt-1 font-body">
+            {me.birthday
+              ? "Дату рождения изменить нельзя"
+              : "Указывается один раз — потом изменить нельзя"}
+          </p>
         </Field>
       </div>
 

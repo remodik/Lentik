@@ -82,8 +82,9 @@ nav::-webkit-scrollbar-thumb:hover {
     width: 0;
     height: 0;
 }
-/* Кастомные tooltips: bubble с тонким хвостом снизу,
-   плавное появление через transform+opacity, без задержки на hover. */
+/* Legacy CSS tooltips (data-tooltip). Предпочтительно использовать <Tooltip> компонент
+   (портал + высокий z-index), чтобы не обрезались overflow-hidden и были над всеми слоями.
+   Стили оставлены для обратной совместимости. */
 [data-tooltip] {
     position: relative;
 }
@@ -111,7 +112,7 @@ nav::-webkit-scrollbar-thumb:hover {
     white-space: nowrap;
     padding: 6px 10px;
     border-radius: 6px;
-    z-index: 1000;
+    z-index: 9999;
     box-shadow:
         0 8px 24px rgba(0, 0, 0, 0.32),
         0 0 0 1px rgba(255, 255, 255, 0.04);
@@ -126,7 +127,7 @@ nav::-webkit-scrollbar-thumb:hover {
     border-left: 5px solid transparent;
     border-right: 5px solid transparent;
     border-top: 6px solid #1a1a1a;
-    z-index: 1001;
+    z-index: 10000;
 }
 [data-tooltip]:hover::before,
 [data-tooltip]:hover::after,

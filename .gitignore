@@ -42,6 +42,7 @@ memory/
 # Environment files
 *.env
 *.env.*
+!.env.example
 -e
 /infra/build.log
 /.gitconfig

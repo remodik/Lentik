@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
+import Tooltip from "@/components/Tooltip";
 import {
   AlarmClock,
   Bot,
@@ -453,16 +454,17 @@ export default function AppLayout({
                   Семейное пространство
                 </p>
                 {onOpenFamilySettings && (
+                  <Tooltip content="Настройки семьи">
                   <button
                     type="button"
                     onClick={onOpenFamilySettings}
                     className="w-7 h-7 rounded-md grid place-items-center text-ink-400 hover:text-ink-900 hover:bg-white/60 transition shrink-0"
                     aria-label="Настройки семьи"
-                    data-tooltip="Настройки семьи"
                     data-testid="family-settings-btn"
                   >
                     <Settings className="w-3.5 h-3.5" strokeWidth={2.2} />
                   </button>
+                </Tooltip>
                 )}
               </div>
             </div>
@@ -493,28 +495,26 @@ export default function AppLayout({
                     />
                   </button>
 
-                  {isExpanded && (
-                    <div className="nav-accordion-items">
-                      {category.groups.map((group) =>
-                        group.items.map((item) => {
-                          const active = !!item.section && section === item.section;
-                          return (
-                            <button
-                              key={item.id}
-                              type="button"
-                              className={`nav-item ${active ? "active" : ""} ${item.disabled ? "disabled" : ""}`}
-                              onClick={() => handleContextItemClick(item)}
-                              disabled={item.disabled}
-                              aria-current={active ? "page" : undefined}
-                            >
-                              <span className="truncate">{item.label}</span>
-                              {item.soon && <span className="nav-soon-badge">скоро</span>}
-                            </button>
-                          );
-                        })
-                      )}
-                    </div>
-                  )}
+                  <div className={`nav-accordion-items ${isExpanded ? "expanded" : ""}`}>
+                    {category.groups.map((group) =>
+                      group.items.map((item) => {
+                        const active = !!item.section && section === item.section;
+                        return (
+                          <button
+                            key={item.id}
+                            type="button"
+                            className={`nav-item ${active ? "active" : ""} ${item.disabled ? "disabled" : ""}`}
+                            onClick={() => handleContextItemClick(item)}
+                            disabled={item.disabled}
+                            aria-current={active ? "page" : undefined}
+                          >
+                            <span className="truncate">{item.label}</span>
+                            {item.soon && <span className="nav-soon-badge">скоро</span>}
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
                 </div>
               );
             })}

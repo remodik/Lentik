@@ -42,7 +42,15 @@ from app.models.message import Message
 from app.models.message_read import MessageRead
 from app.models.reaction import MessageReaction
 from app.models.user import User
-from app.schemas.bots import BotChatInfo, BotSendMessageRequest
+from app.schemas.bots import BotChatInfo, BotEditMessageRequest, BotSendMessageRequest
+from app.schemas.components import (
+    BotInteractionResponse,
+    InteractionCreatedResponse,
+    InteractionRequest,
+    dump_components,
+    has_component,
+)
+from app.core.interactions import interaction_store
 from app.schemas.chats import (
     EMOJI_PATTERN,
     ChatCreate,
@@ -370,6 +378,7 @@ def _msg_to_dict(msg: Message) -> dict:
         "reply_to_id": str(msg.reply_to_id) if msg.reply_to_id else None,
         "mentions": msg.mentions or [],
         "attachments": msg.attachments or [],
+        "components": msg.components or [],
         "reactions": [reaction.model_dump() for reaction in reactions],
         "readers": [reader.model_dump() for reader in readers],
         "created_at": msg.created_at.isoformat(),
@@ -388,6 +397,7 @@ def _msg_response(msg: Message, display_name: str | None = None) -> MessageRespo
         reply_to_id=msg.reply_to_id,
         mentions=msg.mentions or [],
         attachments=msg.attachments or [],
+        components=msg.components or [],
         reactions=_reaction_summaries(msg),
         readers=_reader_infos(msg),
         created_at=msg.created_at,
@@ -1262,6 +1272,59 @@ async def remove_reaction(
         )
 
 
+@router.post(
+    "/{chat_id}/messages/{message_id}/interactions",
+    response_model=InteractionCreatedResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def create_interaction(
+    family_id: UUID,
+    chat_id: UUID,
+    message_id: UUID,
+    body: InteractionRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Человек кликнул кнопку / выбрал в select на сообщении бота. Создаём
+    pending-интеракцию и шлём событие боту-автору на gateway."""
+    m = await _require_member(family_id, user, db)
+    await require_chat_perm(db, m, chat_id, Perm.VIEW_CHANNEL)
+
+    msg = await db.scalar(select(Message).where(Message.id == message_id))
+    if not msg or msg.chat_id != chat_id:
+        raise HTTPException(status_code=404, detail="Message not found")
+    if not has_component(msg.components, body.custom_id, body.type):
+        raise HTTPException(status_code=404, detail="Component not found on message")
+    if not msg.author_id:
+        raise HTTPException(status_code=409, detail="Message has no bot author")
+    author = await db.get(User, msg.author_id)
+    if author is None or not author.is_bot:
+        raise HTTPException(status_code=409, detail="Message is not from a bot")
+
+    iid = interaction_store.create(
+        message_id=msg.id,
+        chat_id=chat_id,
+        family_id=family_id,
+        bot_id=author.id,
+        user_id=user.id,
+    )
+    await ws_manager.broadcast_to_user(
+        author.id,
+        {
+            "type": "interaction",
+            "interaction_id": iid,
+            "custom_id": body.custom_id,
+            "component_type": body.type,
+            "values": body.values or [],
+            "message_id": str(msg.id),
+            "chat_id": str(chat_id),
+            "family_id": str(family_id),
+            "user": {"id": str(user.id), "display_name": user.display_name},
+        },
+    )
+    return InteractionCreatedResponse(interaction_id=iid)
+
+
 @router.websocket("/{chat_id}/ws")
 async def chat_ws(
     websocket: WebSocket,
@@ -1438,6 +1501,7 @@ async def bot_send_message(
         text=body.text,
         reply_to_id=body.reply_to_id,
         mentions=mentions,
+        components=dump_components(body.components),
     )
     db.add(msg)
     await db.flush()
@@ -1620,11 +1684,11 @@ async def bot_edit_message(
     family_id: UUID,
     chat_id: UUID,
     message_id: UUID,
-    body: MessageUpdate,
+    body: BotEditMessageRequest,
     db: AsyncSession = Depends(get_db),
     bot_user: User = Depends(get_current_bot),
 ):
-    """Бот редактирует ТОЛЬКО свои сообщения."""
+    """Бот редактирует ТОЛЬКО свои сообщения (текст и/или компоненты)."""
     m = await _require_member(family_id, bot_user, db)
 
     msg = await db.scalar(
@@ -1645,11 +1709,21 @@ async def bot_edit_message(
     msg.text = body.text
     msg.edited = True
     msg.mentions = _parse_mentions(body.text)
+    if body.components is not None:
+        msg.components = dump_components(body.components)
     await db.commit()
 
     await ws_manager.broadcast_to_chat(
         chat_id,
-        {"type": "message_edited", "message": {"id": str(msg.id), "text": msg.text, "edited": True}},
+        {
+            "type": "message_edited",
+            "message": {
+                "id": str(msg.id),
+                "text": msg.text,
+                "edited": True,
+                "components": msg.components or [],
+            },
+        },
     )
     return _msg_response(msg)
 
@@ -1697,3 +1771,77 @@ async def bot_delete_message(
     )
     if was_pinned:
         await ws_manager.broadcast_to_chat(chat_id, _chat_pin_update_payload(chat))
+
+
+@bot_router.post("/interactions/{interaction_id}/respond")
+async def bot_respond_interaction(
+    interaction_id: str,
+    body: BotInteractionResponse,
+    db: AsyncSession = Depends(get_db),
+    bot_user: User = Depends(get_current_bot),
+):
+    """Бот отвечает на интеракцию: update_message / message / ack."""
+    pending = interaction_store.consume(interaction_id)
+    if pending is None:
+        raise HTTPException(status_code=404, detail="Interaction not found or expired")
+    if pending.bot_id != bot_user.id:
+        raise HTTPException(status_code=403, detail="Not your interaction")
+
+    chat_id = pending.chat_id
+    family_id = pending.family_id
+
+    if body.type == "ack":
+        return None
+
+    if body.type == "update_message":
+        msg = await db.scalar(
+            select(Message).where(Message.id == pending.message_id).options(
+                selectinload(Message.author),
+                selectinload(Message.reactions),
+                selectinload(Message.reads).selectinload(MessageRead.user),
+            )
+        )
+        if not msg or msg.author_id != bot_user.id:
+            raise HTTPException(status_code=404, detail="Message not found")
+        if body.text is not None:
+            enforce_message_content(await get_settings(db, family_id), body.text)
+            msg.text = body.text
+            msg.edited = True
+            msg.mentions = _parse_mentions(body.text)
+        if body.components is not None:
+            msg.components = dump_components(body.components)
+        await db.commit()
+        await ws_manager.broadcast_to_chat(
+            chat_id,
+            {
+                "type": "message_edited",
+                "message": {
+                    "id": str(msg.id),
+                    "text": msg.text,
+                    "edited": msg.edited,
+                    "components": msg.components or [],
+                },
+            },
+        )
+        return _msg_response(msg)
+
+    # body.type == "message" — новое сообщение от бота
+    if not body.text:
+        raise HTTPException(status_code=422, detail="text is required for a 'message' response")
+    enforce_message_content(await get_settings(db, family_id), body.text)
+    mentions = _parse_mentions(body.text)
+    new_msg = Message(
+        chat_id=chat_id,
+        author_id=bot_user.id,
+        text=body.text,
+        mentions=mentions,
+        components=dump_components(body.components),
+    )
+    db.add(new_msg)
+    await db.flush()
+    await db.refresh(new_msg, ["author"])
+    await db.commit()
+    await ws_manager.broadcast_to_chat(
+        chat_id, {"type": "new_message", "message": _msg_to_dict(new_msg)}
+    )
+    return _msg_response(new_msg, bot_user.display_name)

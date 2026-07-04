@@ -29,8 +29,25 @@ from app.schemas.channels import (
     PostResponse,
 )
 from app.schemas.bots import BotChannelInfo, BotPostRequest
+from app.ws.manager import ws_manager
 
 router = APIRouter(prefix="/families/{family_id}/channels", tags=["channels"])
+
+
+def _channel_post_payload(channel_id: UUID, post: Post) -> dict:
+    """Событие нового поста канала — рассылается семье (его ловят боты на
+    gateway; люди-клиенты пока тянут посты опросом и это событие игнорируют)."""
+    return {
+        "type": "channel_post",
+        "channel_id": str(channel_id),
+        "post": {
+            "id": str(post.id),
+            "channel_id": str(channel_id),
+            "author_id": str(post.author_id) if post.author_id else None,
+            "text": post.text,
+            "created_at": post.created_at.isoformat() if post.created_at else None,
+        },
+    }
 
 
 async def _require_member(family_id: UUID, user: User, db: AsyncSession) -> Membership:
@@ -321,6 +338,7 @@ async def create_post(
     db.add(post)
     await db.commit()
     await db.refresh(post)
+    await ws_manager.broadcast_to_family(family_id, _channel_post_payload(channel_id, post))
     return post
 
 
@@ -412,4 +430,5 @@ async def bot_create_post(
     db.add(post)
     await db.commit()
     await db.refresh(post)
+    await ws_manager.broadcast_to_family(family_id, _channel_post_payload(channel_id, post))
     return post

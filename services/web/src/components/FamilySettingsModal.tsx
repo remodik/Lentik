@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import Tooltip from "@/components/Tooltip";
 import {
   AlertTriangle,
   CalendarDays,
@@ -344,15 +345,16 @@ export default function FamilySettingsModal({
                 {TABS.find((t) => t.id === active)?.label}
               </h3>
             </div>
-            <button
-              type="button"
-              onClick={triggerClose}
-              className="w-9 h-9 rounded-lg grid place-items-center text-ink-500 hover:text-ink-900 hover:bg-white/70 transition shrink-0"
-              aria-label="Закрыть"
-              data-tooltip="Закрыть (Esc)"
-            >
-              <X className="w-4 h-4" strokeWidth={2.3} />
-            </button>
+            <Tooltip content="Закрыть (Esc)">
+              <button
+                type="button"
+                onClick={triggerClose}
+                className="w-9 h-9 rounded-lg grid place-items-center text-ink-500 hover:text-ink-900 hover:bg-white/70 transition shrink-0"
+                aria-label="Закрыть"
+              >
+                <X className="w-4 h-4" strokeWidth={2.3} />
+              </button>
+            </Tooltip>
           </header>
 
           <div className="flex-1 overflow-y-auto sidebar-scroll px-4 py-4 md:px-7 md:py-6 min-h-0">

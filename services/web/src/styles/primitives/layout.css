@@ -7,12 +7,31 @@
 
 .app-sidebar {
     width: 254px;
-    display: flex;
-    flex-direction: column;
     flex-shrink: 0;
     position: relative;
     z-index: 30;
-    overflow: visible;
+    /* Сворачивание: ширина едет к 0, а внутренняя обёртка держит фикс-ширину,
+       поэтому контент не пересобирается — он ровно «уезжает» за левый край. */
+    overflow: hidden;
+    transition: width var(--dur-normal) var(--ease-smooth);
+}
+
+.app-sidebar.collapsed {
+    width: 0;
+}
+
+.app-sidebar-inner {
+    width: 254px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .app-sidebar {
+        transition: none;
+    }
 }
 
 .nav-accordion-group {

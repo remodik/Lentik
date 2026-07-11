@@ -26,6 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
 from app.auth.deps import get_current_user
+from app.core.rate_limit import e2ee_mailbox_limiter
 from app.db.deps import get_db
 from app.models.chat import Chat
 from app.models.e2ee import E2EEDevice, E2EEMailboxItem, E2EEOneTimePrekey
@@ -269,6 +270,12 @@ async def send_mailbox(
     """Приём key-exchange блобов. Payload не разбирается и не логируется —
     сервер проверяет только маршрут: устройство существует, есть общая семья,
     chat_id (если указан) принадлежит семье отправителя."""
+    if not await e2ee_mailbox_limiter.allow(str(user.id)):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Слишком много запросов к mailbox. Попробуйте позже.",
+        )
+
     sender_device = await db.scalar(
         select(E2EEDevice)
         .where(E2EEDevice.user_id == user.id)
@@ -336,14 +343,17 @@ async def fetch_mailbox(
     user: User = Depends(get_current_user),
 ):
     device = await _own_device(db, user, device_id)
-    items = (
+    # +1 сверх страницы — чтобы понять, есть ли ещё, не считая всю очередь.
+    rows = (
         await db.scalars(
             select(E2EEMailboxItem)
             .where(E2EEMailboxItem.recipient_device_pk == device.id)
             .order_by(E2EEMailboxItem.created_at)
-            .limit(MAILBOX_PAGE)
+            .limit(MAILBOX_PAGE + 1)
         )
     ).all()
+    has_more = len(rows) > MAILBOX_PAGE
+    items = rows[:MAILBOX_PAGE]
     return MailboxResponse(
         items=[
             MailboxItemResponse(
@@ -355,7 +365,8 @@ async def fetch_mailbox(
                 created_at=i.created_at,
             )
             for i in items
-        ]
+        ],
+        has_more=has_more,
     )
 
 

@@ -132,3 +132,6 @@ class MailboxItemResponse(BaseModel):
 
 class MailboxResponse(BaseModel):
     items: list[MailboxItemResponse]
+    # True — в mailbox остались ещё непрочитанные блобы сверх этой страницы;
+    # клиент обязан ack'нуть текущие и запросить mailbox повторно.
+    has_more: bool = False

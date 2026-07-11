@@ -121,7 +121,14 @@ export interface MailboxItem {
   payload: Uint8Array;
 }
 
-export async function fetchMailbox(): Promise<MailboxItem[]> {
+export interface MailboxPage {
+  items: MailboxItem[];
+  /** Есть ли ещё непрочитанные блобы сверх этой страницы — если true, после
+   * ack текущих нужно вызвать fetchMailbox повторно (см. MAILBOX_PAGE на сервере). */
+  hasMore: boolean;
+}
+
+export async function fetchMailbox(deviceId: number): Promise<MailboxPage> {
   const data = await request<{
     items: {
       id: string;
@@ -130,14 +137,18 @@ export async function fetchMailbox(): Promise<MailboxItem[]> {
       chat_id: string | null;
       payload: string;
     }[];
-  }>("/e2ee/mailbox");
+    has_more: boolean;
+  }>(`/e2ee/mailbox?device_id=${deviceId}`);
 
-  return data.items.map((i) => ({
-    id: i.id,
-    sender: { userId: i.sender_user_id, deviceId: i.sender_device_id },
-    chatId: i.chat_id,
-    payload: fromBase64(i.payload),
-  }));
+  return {
+    items: data.items.map((i) => ({
+      id: i.id,
+      sender: { userId: i.sender_user_id, deviceId: i.sender_device_id },
+      chatId: i.chat_id,
+      payload: fromBase64(i.payload),
+    })),
+    hasMore: data.has_more,
+  };
 }
 
 /** Подтверждение обработки: элемент удаляется с сервера ПОСЛЕ успешного processIncomingKey. */

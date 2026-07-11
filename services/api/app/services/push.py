@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from datetime import datetime, timezone
 from typing import Iterable
 from uuid import UUID
 
@@ -112,3 +113,70 @@ async def send_push_to_users(user_ids: Iterable[UUID], payload: dict) -> None:
                 delete(PushSubscription).where(PushSubscription.endpoint.in_(gone))
             )
             await db.commit()
+
+
+async def notify_new_message(
+    *,
+    chat_id: UUID,
+    family_id: UUID,
+    is_18plus: bool,
+    exclude_user_id: UUID,
+    title: str,
+    body: str,
+) -> None:
+    """Push о новом сообщении всем, кто видит этот чат, кроме автора.
+
+    Открывает СОБСТВЕННУЮ сессию (как и `send_push_to_users`) — вызывается
+    через `asyncio.create_task` сразу после ответа на запрос, чтобы доставка
+    push не задерживала отправку сообщения; к моменту выполнения задачи
+    сессия исходного запроса может быть уже закрыта.
+
+    Получателей фильтруем по тем же правилам, что и на чтение (VIEW_CHANNEL,
+    возрастной ценз 18+) — иначе push сам стал бы утечкой факта существования
+    сообщения тем, кому чат не должен быть виден."""
+    if not is_push_enabled():
+        return
+
+    from sqlalchemy import select
+
+    from app.core.permissions import Perm, has_perm
+    from app.models.membership import Membership
+    from app.models.user import User
+    from app.services.roles import effective_permissions_for_chats
+
+    async with AsyncSessionLocal() as db:
+        rows = (
+            await db.execute(
+                select(Membership, User)
+                .join(User, User.id == Membership.user_id)
+                .where(
+                    Membership.family_id == family_id,
+                    Membership.user_id != exclude_user_id,
+                )
+            )
+        ).all()
+        if not rows:
+            return
+
+        recipients: list[UUID] = []
+        today = datetime.now(timezone.utc).date()
+        for m, u in rows:
+            is_owner = m.role.value == "owner"
+            if is_18plus and not is_owner:
+                bd = u.birthday
+                if bd is None:
+                    continue
+                age = today.year - bd.year - ((today.month, today.day) < (bd.month, bd.day))
+                if age < 18:
+                    continue
+            if not is_owner:
+                perms = await effective_permissions_for_chats(db, m, [chat_id])
+                if not has_perm(perms.get(chat_id, 0), Perm.VIEW_CHANNEL):
+                    continue
+            recipients.append(m.user_id)
+
+    if recipients:
+        await send_push_to_users(
+            recipients,
+            {"title": title, "body": body, "tag": f"chat-{chat_id}", "url": "/"},
+        )

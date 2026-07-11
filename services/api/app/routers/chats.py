@@ -1,3 +1,4 @@
+import asyncio
 import mimetypes
 import re
 import uuid
@@ -30,6 +31,7 @@ from app.db.session import AsyncSessionLocal
 from app.services.audit import log_action
 from app.services.bans import is_banned_now
 from app.services.moderation import enforce_message_content, get_settings
+from app.services.push import notify_new_message
 from app.services.roles import (
     effective_chat_permissions,
     effective_permissions_for_chats,
@@ -318,6 +320,36 @@ def _validate_attachment_type(original_name: str, content_type: str | None) -> s
 
 def _parse_mentions(text: str) -> list[str]:
     return list(set(MENTION_RE.findall(text)))
+
+
+_PUSH_PREVIEW_LEN = 120
+
+
+def _push_preview(text: str) -> str:
+    text = " ".join(text.split())
+    if len(text) <= _PUSH_PREVIEW_LEN:
+        return text
+    return text[:_PUSH_PREVIEW_LEN].rstrip() + "…"
+
+
+def _schedule_message_push(
+    *,
+    chat: Chat,
+    family_id: UUID,
+    author_id: UUID,
+    body: str,
+) -> None:
+    """Не блокирует ответ — доставка push идёт в фоне (см. notify_new_message)."""
+    asyncio.create_task(
+        notify_new_message(
+            chat_id=chat.id,
+            family_id=family_id,
+            is_18plus=chat.is_18plus,
+            exclude_user_id=author_id,
+            title=chat.name,
+            body=body,
+        )
+    )
 
 
 def _attachment_kind(content_type: str | None, file_name: str) -> str:
@@ -890,6 +922,13 @@ async def send_message(
             },
         )
 
+    push_body = (
+        "Новое сообщение"
+        if chat.encryption_protocol
+        else f"{user.display_name}: {_push_preview(body.text)}"
+    )
+    _schedule_message_push(chat=chat, family_id=family_id, author_id=user.id, body=push_body)
+
     return _msg_response(msg, user.display_name)
 
 
@@ -1004,8 +1043,11 @@ async def send_message_with_attachments(
             },
         )
 
-    return _msg_response(msg, user.display_name)
+    attachment_preview = "📎 Вложение" if len(attachments) == 1 else f"📎 Вложения ({len(attachments)})"
+    push_body = f"{user.display_name}: {_push_preview(body_text) if body_text else attachment_preview}"
+    _schedule_message_push(chat=chat, family_id=family_id, author_id=user.id, body=push_body)
 
+    return _msg_response(msg, user.display_name)
 
 
 
@@ -1087,6 +1129,9 @@ async def send_voice_message(
 
     msg_dict = _msg_to_dict(msg)
     await ws_manager.broadcast_to_chat(chat_id, {"type": "new_message", "message": msg_dict})
+
+    push_body = f"{user.display_name}: 🎤 Голосовое сообщение"
+    _schedule_message_push(chat=chat, family_id=family_id, author_id=user.id, body=push_body)
 
     return _msg_response(msg, user.display_name)
 
@@ -1575,6 +1620,9 @@ async def bot_send_message(
                 "mentions": mentions,
             },
         )
+
+    push_body = f"{bot_user.display_name}: {_push_preview(body.text)}"
+    _schedule_message_push(chat=chat, family_id=family_id, author_id=bot_user.id, body=push_body)
 
     return _msg_response(msg, bot_user.display_name)
 

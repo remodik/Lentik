@@ -2,6 +2,7 @@ from .budget_transaction import BudgetTransaction, BudgetTransactionSplit, Budge
 from .calendar_event import CalendarEvent
 from .channel import Channel
 from .chat import Chat
+from .e2ee import E2EEDevice, E2EEMailboxItem, E2EEOneTimePrekey
 from .expense import Expense, ExpenseSplit
 from .family import Family
 from .family_tree import (
@@ -43,6 +44,9 @@ __all__ = [
     "Bot",
     "Invite",
     "Chat",
+    "E2EEDevice",
+    "E2EEMailboxItem",
+    "E2EEOneTimePrekey",
     "Message",
     "MessageRead",
     "MessageReaction",

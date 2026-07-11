@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func, text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import ENUM, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -29,6 +29,14 @@ class Chat(Base):
     )
     is_18plus: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    # E2E-протокол чата (ADR-004). NULL — обычный чат (сервер видит текст).
+    # Выставляется только при создании и не меняется: историю одного режима
+    # невозможно конвертировать в другой. Для E2E-чатов поле text сообщений —
+    # непрозрачный конверт, который сервер не парсит.
+    encryption_protocol: Mapped[str | None] = mapped_column(
+        ENUM("signal", "mls", name="encryption_protocol", create_type=False),
+        nullable=True,
     )
     created_by: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True

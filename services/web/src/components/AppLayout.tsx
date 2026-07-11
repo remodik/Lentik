@@ -19,6 +19,8 @@ import {
   LayoutGrid,
   MessageCircle,
   Network,
+  PanelLeftClose,
+  PanelLeftOpen,
   Plus,
   Rss,
   StickyNote,
@@ -284,7 +286,23 @@ export default function AppLayout({
   const [isCenterOpen, setCenterOpen] = useState(false);
   const [isFamilyMenuOpen, setFamilyMenuOpen] = useState(false);
   const [isMobileProfileOpen, setMobileProfileOpen] = useState(false);
+  const [isSidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("lentik_sidebar_collapsed") === "1";
+    } catch {
+      return false;
+    }
+  });
   const familyMenuRef = useRef<HTMLDivElement>(null);
+
+  const toggleSidebar = useCallback(() => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      try { localStorage.setItem("lentik_sidebar_collapsed", next ? "1" : "0"); } catch {}
+      if (next) setFamilyMenuOpen(false);
+      return next;
+    });
+  }, []);
 
   const meInitial = me.display_name?.[0]?.toUpperCase() ?? "?";
 
@@ -345,7 +363,8 @@ export default function AppLayout({
 
   return (
     <div className="app-layout">
-      <aside className="app-sidebar glass-sidebar glossy">
+      <aside className={`app-sidebar glass-sidebar glossy ${isSidebarCollapsed ? "collapsed" : ""}`}>
+        <div className="app-sidebar-inner" inert={isSidebarCollapsed ? true : undefined}>
           <div className="app-sidebar-brand" ref={familyMenuRef}>
             <div className="app-family-menu-anchor">
               <button
@@ -555,11 +574,27 @@ export default function AppLayout({
             onLogout={onLogout}
             onUpdate={onMeUpdate}
           />
+        </div>
       </aside>
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <header className="app-topbar glass-topbar glossy">
           <div className="flex items-center gap-3 min-w-0">
+            <Tooltip content={isSidebarCollapsed ? "Развернуть панель" : "Свернуть панель"}>
+              <button
+                type="button"
+                onClick={toggleSidebar}
+                className="ui-btn ui-btn-icon hidden md:inline-flex shrink-0"
+                aria-label={isSidebarCollapsed ? "Развернуть боковую панель" : "Свернуть боковую панель"}
+                aria-pressed={isSidebarCollapsed}
+              >
+                {isSidebarCollapsed ? (
+                  <PanelLeftOpen className="w-[15px] h-[15px]" strokeWidth={2.2} aria-hidden />
+                ) : (
+                  <PanelLeftClose className="w-[15px] h-[15px]" strokeWidth={2.2} aria-hidden />
+                )}
+              </button>
+            </Tooltip>
             <div className="glass-icon glossy w-[40px] h-[40px] rounded-[16px] flex items-center justify-center shrink-0">
               <CurrentIcon className="w-[19px] h-[19px] text-ink-700" strokeWidth={2.2} />
             </div>

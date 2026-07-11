@@ -90,9 +90,70 @@ class InteractionCreatedResponse(BaseModel):
     interaction_id: str
 
 
+# ── Модалки (Phase 3b) ───────────────────────────────────────────────────────
+
+ModalInputStyle = Literal["short", "paragraph"]
+
+
+class ModalTextInput(BaseModel):
+    custom_id: str = Field(min_length=1, max_length=100)
+    label: str = Field(min_length=1, max_length=80)
+    style: ModalInputStyle = "short"
+    placeholder: str | None = Field(default=None, max_length=120)
+    value: str | None = Field(default=None, max_length=4000)
+    required: bool = True
+    max_length: int = Field(default=4000, ge=1, le=4000)
+
+
+class ModalSpec(BaseModel):
+    """Форма, которую бот просит человека заполнить (аналог Discord modal)."""
+
+    custom_id: str = Field(min_length=1, max_length=100)
+    title: str = Field(min_length=1, max_length=80)
+    inputs: list[ModalTextInput] = Field(min_length=1, max_length=5)
+
+    @model_validator(mode="after")
+    def _unique_input_ids(self) -> "ModalSpec":
+        ids = [i.custom_id for i in self.inputs]
+        if len(ids) != len(set(ids)):
+            raise ValueError("input custom_id must be unique within a modal")
+        return self
+
+
+class ModalSubmitRequest(BaseModel):
+    """Значения полей формы, введённые человеком."""
+
+    values: dict[str, str]
+
+    @model_validator(mode="after")
+    def _validate_values(self) -> "ModalSubmitRequest":
+        if len(self.values) > 5:
+            raise ValueError("too many fields")
+        for k, v in self.values.items():
+            if not k or len(k) > 100:
+                raise ValueError("invalid field id")
+            if len(v) > 4000:
+                raise ValueError("field value too long (max 4000)")
+        return self
+
+
 class BotInteractionResponse(BaseModel):
     """Ответ бота на интеракцию."""
 
-    type: Literal["update_message", "message", "ack"]
+    type: Literal["update_message", "message", "ack", "modal"]
     text: str | None = Field(default=None, max_length=4000)
     components: list[ActionRow] | None = Field(default=None, max_length=5)
+    # ephemeral: сообщение видно только кликнувшему — валидно только с
+    # type="message" (нельзя сделать приватным уже существующее для всех
+    # сообщение через update_message).
+    ephemeral: bool = False
+    # Обязателен при type="modal".
+    modal: ModalSpec | None = None
+
+    @model_validator(mode="after")
+    def _check(self) -> "BotInteractionResponse":
+        if self.type == "modal" and self.modal is None:
+            raise ValueError("modal is required for type='modal'")
+        if self.ephemeral and self.type != "message":
+            raise ValueError("ephemeral is only valid for type='message'")
+        return self

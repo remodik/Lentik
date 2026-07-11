@@ -17,6 +17,8 @@ from dataclasses import dataclass
 from uuid import UUID
 
 _TTL_SECONDS = 15.0
+# Модалку человек заполняет руками — 15с мало, даём 5 минут на отправку формы.
+MODAL_REPLY_TTL_SECONDS = 300.0
 _MAX_ITEMS = 5000
 
 
@@ -29,6 +31,10 @@ class PendingInteraction:
     bot_id: UUID
     user_id: UUID
     expires_at: float
+    # "component" — ждём ответа бота на клик; "modal" — ждём отправки формы
+    # человеком (см. ModalSpec/ModalSubmitRequest в schemas/components.py).
+    kind: str = "component"
+    modal_custom_id: str | None = None
 
 
 class InteractionStore:
@@ -43,6 +49,9 @@ class InteractionStore:
         family_id: UUID,
         bot_id: UUID,
         user_id: UUID,
+        kind: str = "component",
+        modal_custom_id: str | None = None,
+        ttl: float = _TTL_SECONDS,
     ) -> str:
         self._sweep()
         iid = uuid.uuid4().hex
@@ -53,7 +62,9 @@ class InteractionStore:
             family_id=family_id,
             bot_id=bot_id,
             user_id=user_id,
-            expires_at=time.monotonic() + _TTL_SECONDS,
+            expires_at=time.monotonic() + ttl,
+            kind=kind,
+            modal_custom_id=modal_custom_id,
         )
         return iid
 

@@ -49,10 +49,11 @@ from app.schemas.components import (
     BotInteractionResponse,
     InteractionCreatedResponse,
     InteractionRequest,
+    ModalSubmitRequest,
     dump_components,
     has_component,
 )
-from app.core.interactions import interaction_store
+from app.core.interactions import MODAL_REPLY_TTL_SECONDS, interaction_store
 from app.schemas.chats import (
     EMOJI_PATTERN,
     ChatCreate,
@@ -1417,6 +1418,57 @@ async def create_interaction(
     return InteractionCreatedResponse(interaction_id=iid)
 
 
+@router.post(
+    "/{chat_id}/messages/{message_id}/interactions/{interaction_id}/submit",
+    response_model=InteractionCreatedResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def submit_modal(
+    family_id: UUID,
+    chat_id: UUID,
+    message_id: UUID,
+    interaction_id: str,
+    body: ModalSubmitRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Человек отправил форму (модалку), которую боту открыл через
+    BotInteractionResponse(type="modal"). Создаём новую pending-интеракцию
+    для ответа бота и пересылаем значения полей на gateway."""
+    m = await _require_member(family_id, user, db)
+    await require_chat_perm(db, m, chat_id, Perm.VIEW_CHANNEL)
+
+    pending = interaction_store.consume(interaction_id)
+    if pending is None or pending.kind != "modal":
+        raise HTTPException(status_code=404, detail="Modal interaction not found or expired")
+    if pending.user_id != user.id:
+        raise HTTPException(status_code=403, detail="Not your interaction")
+    if pending.chat_id != chat_id or pending.message_id != message_id:
+        raise HTTPException(status_code=404, detail="Interaction does not match this message")
+
+    new_iid = interaction_store.create(
+        message_id=pending.message_id,
+        chat_id=chat_id,
+        family_id=family_id,
+        bot_id=pending.bot_id,
+        user_id=user.id,
+    )
+    await ws_manager.broadcast_to_user(
+        pending.bot_id,
+        {
+            "type": "modal_submit",
+            "interaction_id": new_iid,
+            "modal_custom_id": pending.modal_custom_id,
+            "values": body.values,
+            "message_id": str(pending.message_id),
+            "chat_id": str(chat_id),
+            "family_id": str(family_id),
+            "user": {"id": str(user.id), "display_name": user.display_name},
+        },
+    )
+    return InteractionCreatedResponse(interaction_id=new_iid)
+
+
 @router.websocket("/{chat_id}/ws")
 async def chat_ws(
     websocket: WebSocket,
@@ -1887,7 +1939,7 @@ async def bot_respond_interaction(
     db: AsyncSession = Depends(get_db),
     bot_user: User = Depends(get_current_bot),
 ):
-    """Бот отвечает на интеракцию: update_message / message / ack."""
+    """Бот отвечает на интеракцию: update_message / message / ack / modal."""
     pending = interaction_store.consume(interaction_id)
     if pending is None:
         raise HTTPException(status_code=404, detail="Interaction not found or expired")
@@ -1899,6 +1951,32 @@ async def bot_respond_interaction(
 
     if body.type == "ack":
         return None
+
+    if body.type == "modal":
+        # body.modal гарантирован валидатором схемы. Открываем форму ТОЛЬКО
+        # кликнувшему — модалка не идёт в общий чат.
+        assert body.modal is not None
+        new_iid = interaction_store.create(
+            message_id=pending.message_id,
+            chat_id=chat_id,
+            family_id=family_id,
+            bot_id=bot_user.id,
+            user_id=pending.user_id,
+            kind="modal",
+            modal_custom_id=body.modal.custom_id,
+            ttl=MODAL_REPLY_TTL_SECONDS,
+        )
+        await ws_manager.broadcast_to_user(
+            pending.user_id,
+            {
+                "type": "modal_open",
+                "interaction_id": new_iid,
+                "chat_id": str(chat_id),
+                "message_id": str(pending.message_id),
+                "modal": body.modal.model_dump(),
+            },
+        )
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     if body.type == "update_message":
         msg = await db.scalar(
@@ -1936,6 +2014,23 @@ async def bot_respond_interaction(
     if not body.text:
         raise HTTPException(status_code=422, detail="text is required for a 'message' response")
     enforce_message_content(await get_settings(db, family_id), body.text)
+
+    if body.ephemeral:
+        # Виден только кликнувшему: НЕ сохраняем как Message и НЕ шлём в общий
+        # чат — иначе перестал бы быть приватным для остальных участников.
+        await ws_manager.broadcast_to_user(
+            pending.user_id,
+            {
+                "type": "ephemeral_message",
+                "chat_id": str(chat_id),
+                "text": body.text,
+                "components": dump_components(body.components),
+                "author_id": str(bot_user.id),
+                "author_display_name": bot_user.display_name,
+            },
+        )
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
     mentions = _parse_mentions(body.text)
     new_msg = Message(
         chat_id=chat_id,

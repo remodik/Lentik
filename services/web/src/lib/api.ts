@@ -627,6 +627,37 @@ export function sendInteraction(
   );
 }
 
+// ── Модалки бота (Phase 3b) ──────────────────────────────────────────────
+
+export type ModalTextInput = {
+  custom_id: string;
+  label: string;
+  style: "short" | "paragraph";
+  placeholder?: string | null;
+  value?: string | null;
+  required?: boolean;
+  max_length?: number;
+};
+
+export type ModalSpec = {
+  custom_id: string;
+  title: string;
+  inputs: ModalTextInput[];
+};
+
+export function submitModal(
+  familyId: string,
+  chatId: string,
+  messageId: string,
+  interactionId: string,
+  values: Record<string, string>,
+) {
+  return request<{ interaction_id: string }>(
+    `/families/${familyId}/chats/${chatId}/messages/${messageId}/interactions/${interactionId}/submit`,
+    { method: "POST", body: JSON.stringify({ values }) },
+  );
+}
+
 export type MessageSearchResult = {
   id: string;
   author_display_name: string | null;

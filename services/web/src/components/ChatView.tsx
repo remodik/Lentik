@@ -65,6 +65,7 @@ import {
   sendMessage,
   sendMessageWithFiles,
   sendVoiceMessage,
+  submitModal,
   unpinChatMessage,
   type Chat,
   type Family,
@@ -73,6 +74,7 @@ import {
   type MessageAttachment,
   type MsgActionRow,
   type MessageSearchResult,
+  type ModalSpec,
 } from "@/lib/api";
 import { fetchWsTicket, toAbsoluteApiUrl, wsUrl } from "@/lib/api-base";
 import UserMiniProfilePopover, {
@@ -312,6 +314,129 @@ function MessageComponents({
   );
 }
 
+function BotModalDialog({
+  spec,
+  onClose,
+  onSubmit,
+}: {
+  spec: ModalSpec;
+  onClose: () => void;
+  onSubmit: (values: Record<string, string>) => Promise<void>;
+}) {
+  const [values, setValues] = useState<Record<string, string>>(() => {
+    const initial: Record<string, string> = {};
+    for (const input of spec.inputs) initial[input.custom_id] = input.value ?? "";
+    return initial;
+  });
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    for (const input of spec.inputs) {
+      if (input.required !== false && !values[input.custom_id]?.trim()) {
+        setError(`Заполните: ${input.label}`);
+        return;
+      }
+    }
+    setError("");
+    setSubmitting(true);
+    try {
+      await onSubmit(values);
+      onClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Не удалось отправить форму");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-[80] bg-black/35 backdrop-blur-sm p-4 flex items-center justify-center"
+      onClick={() => !submitting && onClose()}
+      role="dialog"
+      aria-modal="true"
+      aria-label={spec.title}
+    >
+      <div
+        className="w-full max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto sidebar-scroll rounded-3xl border border-[color:var(--border-glass-strong)] bg-[color:var(--bg-elevated)] backdrop-blur-2xl p-6 shadow-[0_30px_90px_var(--scrim-4)]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-5">
+          <h3 className="font-display text-xl text-ink-900">{spec.title}</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-8 h-8 rounded-lg grid place-items-center text-ink-400 hover:text-ink-700 hover:bg-white/60 transition"
+            disabled={submitting}
+            aria-label="Закрыть"
+          >
+            <X className="w-4 h-4" strokeWidth={2.3} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-3">
+          {spec.inputs.map((input) => (
+            <div key={input.custom_id}>
+              <label className="text-[11px] font-semibold text-ink-400 uppercase tracking-widest font-body mb-1.5 block">
+                {input.label}
+                {input.required === false && (
+                  <span className="text-ink-300 normal-case font-normal"> (необязательно)</span>
+                )}
+              </label>
+              {input.style === "paragraph" ? (
+                <textarea
+                  className="input-field resize-none"
+                  rows={3}
+                  value={values[input.custom_id] ?? ""}
+                  onChange={(e) =>
+                    setValues((p) => ({ ...p, [input.custom_id]: e.target.value }))
+                  }
+                  placeholder={input.placeholder ?? ""}
+                  maxLength={input.max_length ?? 4000}
+                />
+              ) : (
+                <input
+                  type="text"
+                  className="input-field"
+                  value={values[input.custom_id] ?? ""}
+                  onChange={(e) =>
+                    setValues((p) => ({ ...p, [input.custom_id]: e.target.value }))
+                  }
+                  placeholder={input.placeholder ?? ""}
+                  maxLength={input.max_length ?? 4000}
+                />
+              )}
+            </div>
+          ))}
+
+          {error && <p className="text-red-500 text-sm font-body">{error}</p>}
+
+          <div className="flex gap-3 pt-2">
+            <button
+              type="submit"
+              className="flex-1 btn-primary py-2.5 text-sm rounded-xl inline-flex items-center justify-center gap-2 disabled:opacity-50"
+              disabled={submitting}
+            >
+              {submitting ? <Loader2 className="w-4 h-4 animate-spin" strokeWidth={2.2} /> : null}
+              {submitting ? "Отправка…" : "Отправить"}
+            </button>
+            <button
+              type="button"
+              className="flex-1 ui-btn ui-btn-subtle py-2.5"
+              onClick={onClose}
+              disabled={submitting}
+            >
+              Отмена
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 function MessageAvatar({
   avatarUrl,
   fallback,
@@ -522,6 +647,19 @@ export default function ChatView({
   const router = useRouter();
   const [banTarget, setBanTarget] = useState<{ user_id: string; display_name: string } | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [openModal, setOpenModal] = useState<{
+    interactionId: string;
+    messageId: string;
+    spec: ModalSpec;
+  } | null>(null);
+  const [ephemeralMessages, setEphemeralMessages] = useState<
+    {
+      id: string;
+      text: string;
+      components: MsgActionRow[];
+      authorDisplayName: string | null;
+    }[]
+  >([]);
   const [text, setText] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
@@ -887,6 +1025,13 @@ export default function ChatView({
     void loadMessages();
   }, [ageGate.status, loadMessages]);
 
+  // Модалка/эфемерные сообщения бота привязаны к конкретному чату — при
+  // переключении чата они больше не актуальны.
+  useEffect(() => {
+    setOpenModal(null);
+    setEphemeralMessages([]);
+  }, [chat.id]);
+
   useEffect(() => {
     const isNewMessage = messages.length > lastMessageCountRef.current;
     lastMessageCountRef.current = messages.length;
@@ -1154,6 +1299,25 @@ export default function ChatView({
                 };
               }),
             );
+          } else if (d.type === "modal_open") {
+            if (typeof d.interaction_id === "string" && d.modal) {
+              setOpenModal({
+                interactionId: d.interaction_id,
+                messageId: String(d.message_id ?? ""),
+                spec: d.modal as ModalSpec,
+              });
+            }
+          } else if (d.type === "ephemeral_message") {
+            setEphemeralMessages((p) => [
+              ...p,
+              {
+                id: `eph-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+                text: typeof d.text === "string" ? d.text : "",
+                components: Array.isArray(d.components) ? (d.components as MsgActionRow[]) : [],
+                authorDisplayName:
+                  typeof d.author_display_name === "string" ? d.author_display_name : null,
+              },
+            ]);
           } else if (d.type === "chat_pin_updated") {
             const nextPinnedMessageId =
               typeof d.pinned_message_id === "string" ? d.pinned_message_id : null;
@@ -1458,6 +1622,25 @@ export default function ChatView({
       }
     },
     [familyId, chat.id, notify],
+  );
+
+  const handleModalSubmit = useCallback(
+    async (values: Record<string, string>) => {
+      if (!openModal) return;
+      try {
+        await submitModal(familyId, chat.id, openModal.messageId, openModal.interactionId, values);
+      } catch (e) {
+        const statusCode = (e as { status?: number })?.status;
+        throw new Error(
+          statusCode === 404
+            ? "Бот не отвечает или форма устарела."
+            : e instanceof Error
+              ? e.message
+              : "Не удалось отправить форму",
+        );
+      }
+    },
+    [familyId, chat.id, openModal],
   );
 
   async function handleSend() {
@@ -2619,6 +2802,23 @@ export default function ChatView({
           })
         )}
 
+        {ephemeralMessages.map((em) => (
+          <div key={em.id} className="flex justify-start mb-2">
+            <div
+              className="max-w-[75%] rounded-2xl border px-3 py-2"
+              style={{ borderColor: "var(--border-glass)", background: "var(--bg-surface-subtle)" }}
+            >
+              <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-ink-400 font-body mb-1">
+                <Eye className="w-3 h-3" strokeWidth={2.2} /> Только вам
+                {em.authorDisplayName ? ` · ${em.authorDisplayName}` : ""}
+              </p>
+              <p className="text-sm text-ink-800 font-body whitespace-pre-wrap break-words">
+                {em.text}
+              </p>
+            </div>
+          </div>
+        ))}
+
         <div ref={bottomRef} />
       </div>
 
@@ -2866,6 +3066,14 @@ export default function ChatView({
           displayName={banTarget.display_name}
           onClose={() => setBanTarget(null)}
           onBanned={() => void notify({ title: "Пользователь забанен" })}
+        />
+      )}
+
+      {openModal && (
+        <BotModalDialog
+          spec={openModal.spec}
+          onClose={() => setOpenModal(null)}
+          onSubmit={handleModalSubmit}
         />
       )}
 

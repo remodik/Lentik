@@ -164,6 +164,7 @@ def _chat_to_response(chat: Chat) -> ChatResponse:
         created_by=chat.created_by,
         pinned_message_id=chat.pinned_message_id,
         pinned_message=pinned_preview,
+        encryption_protocol=chat.encryption_protocol,
         created_at=chat.created_at,
     )
 
@@ -451,6 +452,9 @@ async def create_chat(
         slow_mode_seconds=slow_mode,
         is_18plus=body.is_18plus,
         created_by=user.id,
+        # Протокол фиксируется навсегда: ChatUpdate его не содержит, историю
+        # между режимами конвертировать нельзя.
+        encryption_protocol=body.encryption_protocol,
     )
     db.add(chat)
     await db.flush()
@@ -461,7 +465,11 @@ async def create_chat(
         action="chat.created",
         target_type="chat",
         target_id=chat.id,
-        metadata={"name": chat.name, "is_18plus": chat.is_18plus},
+        metadata={
+            "name": chat.name,
+            "is_18plus": chat.is_18plus,
+            "encryption_protocol": chat.encryption_protocol,
+        },
     )
     await db.commit()
     loaded_chat = await _load_chat_with_pin(db, family_id, chat.id)
@@ -697,12 +705,17 @@ async def search_messages(
     m = await _require_member(family_id, user, db)
 
     chat = await db.scalar(
-        select(Chat.id).where(Chat.id == chat_id, Chat.family_id == family_id)
+        select(Chat).where(Chat.id == chat_id, Chat.family_id == family_id)
     )
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
     # Поиск по истории чата требует видимости и доступа к истории.
     await require_chat_perm(db, m, chat_id, Perm.VIEW_CHANNEL, Perm.READ_HISTORY)
+
+    # По шифротексту искать нечего: поиск в E2E-чатах возможен только локально
+    # на клиенте, по расшифрованной им истории.
+    if chat.encryption_protocol:
+        return []
 
     normalized_query = " ".join(q.split()).strip()
     if len(normalized_query) == 0:
@@ -838,9 +851,16 @@ async def send_message(
     await require_chat_perm(db, membership, chat_id, Perm.VIEW_CHANNEL, Perm.SEND_MESSAGES)
     await _enforce_slow_mode(chat, user, membership, db)
 
-    enforce_message_content(await get_settings(db, family_id), body.text)
-
-    mentions = _parse_mentions(body.text)
+    if chat.encryption_protocol:
+        # E2E-чат: text — непрозрачный конверт (см. EncryptedEnvelope на
+        # клиенте). Сервер НЕ МОЖЕТ его прочитать, поэтому модерация и парсинг
+        # упоминаний здесь не выполняются — это гарантия E2E, а не упущение.
+        mentions: list[str] = []
+    else:
+        if len(body.text) > 4000:
+            raise HTTPException(status_code=400, detail="Text too long (max 4000)")
+        enforce_message_content(await get_settings(db, family_id), body.text)
+        mentions = _parse_mentions(body.text)
 
     msg = Message(
         chat_id=chat_id,
@@ -894,6 +914,13 @@ async def send_message_with_attachments(
         Perm.VIEW_CHANNEL, Perm.SEND_MESSAGES, Perm.ATTACH_FILES,
     )
     await _enforce_slow_mode(chat, user, membership, db)
+
+    # Файлы сохраняются в сторадже открытыми — их отправка в E2E-чат молча
+    # сломала бы гарантию шифрования. До появления шифрования вложений — 400.
+    if chat.encryption_protocol:
+        raise HTTPException(
+            status_code=400, detail="Вложения пока не поддерживаются в E2E-чатах"
+        )
 
     clean_files = [f for f in files if f.filename]
     if not clean_files:
@@ -1004,6 +1031,12 @@ async def send_voice_message(
     await require_chat_perm(db, membership, chat_id, Perm.VIEW_CHANNEL, Perm.SEND_VOICE)
     await _enforce_slow_mode(chat, user, membership, db)
 
+    # Как и вложения: голосовые лежат в сторадже открытыми — в E2E-чатах запрещены.
+    if chat.encryption_protocol:
+        raise HTTPException(
+            status_code=400, detail="Голосовые пока не поддерживаются в E2E-чатах"
+        )
+
     # Голосовое всегда сохраняется как .webm и отдаётся как audio/webm + nosniff,
     # так что XSS невозможен; но опасный заявленный тип всё равно отклоняем, а
     # сам тип ограничиваем аудио — чтобы эндпоинт не превращался в обход allowlist.
@@ -1085,9 +1118,23 @@ async def edit_message(
         Perm.MANAGE_OWN_MESSAGES if is_own else Perm.MANAGE_MESSAGES,
     )
 
-    # Модерация применяется и на редактирование — иначе стоп-слова/лимит длины
-    # обходятся: отправил безобидное, потом отредактировал в запрещённое.
-    enforce_message_content(await get_settings(db, family_id), body.text)
+    chat = await db.get(Chat, chat_id)
+    is_encrypted = bool(chat and chat.encryption_protocol)
+
+    if is_encrypted:
+        # Чужой E2E-конверт модератор может только испортить: валидный
+        # шифротекст автора не воспроизводим ни сервером, ни модератором.
+        if not is_own:
+            raise HTTPException(
+                status_code=403,
+                detail="В E2E-чате нельзя редактировать чужие сообщения",
+            )
+    else:
+        if len(body.text) > 4000:
+            raise HTTPException(status_code=400, detail="Text too long (max 4000)")
+        # Модерация применяется и на редактирование — иначе стоп-слова/лимит длины
+        # обходятся: отправил безобидное, потом отредактировал в запрещённое.
+        enforce_message_content(await get_settings(db, family_id), body.text)
 
     if not is_own:
         await log_action(
@@ -1107,7 +1154,7 @@ async def edit_message(
 
     msg.text = body.text
     msg.edited = True
-    msg.mentions = _parse_mentions(body.text)
+    msg.mentions = [] if is_encrypted else _parse_mentions(body.text)
     await db.commit()
 
     await ws_manager.broadcast_to_chat(
@@ -1492,6 +1539,11 @@ async def bot_send_message(
     await require_chat_perm(db, membership, chat_id, Perm.VIEW_CHANNEL, Perm.SEND_MESSAGES)
     await _enforce_slow_mode(chat, bot_user, membership, db)
 
+    # У ботов нет устройств и ключей: бот-API работает с плейнтекстом на
+    # сервере, и его допуск в E2E-чат стал бы серверным «оракулом» содержимого.
+    if chat.encryption_protocol:
+        raise HTTPException(status_code=403, detail="Боты недоступны в E2E-чатах")
+
     enforce_message_content(await get_settings(db, family_id), body.text)
 
     mentions = _parse_mentions(body.text)
@@ -1549,6 +1601,11 @@ async def bot_poll_messages(
     _ensure_age_gate(chat, bot_user)
     await _ensure_18plus_perm(chat, membership, db)
 
+    # См. bot_send_message: ботам в E2E-чаты нельзя (даже читать шифротекст —
+    # незачем, а метаданные истории им не положены).
+    if chat.encryption_protocol:
+        raise HTTPException(status_code=403, detail="Боты недоступны в E2E-чатах")
+
     query = (
         select(Message)
         .where(Message.chat_id == chat_id)
@@ -1585,7 +1642,9 @@ async def bot_list_chats(
     return [
         BotChatInfo(id=c.id, name=c.name, is_18plus=c.is_18plus)
         for c in chats
-        if has_perm(perms.get(c.id, 0), Perm.VIEW_CHANNEL)
+        # E2E-чаты для ботов не существуют (см. bot_send_message).
+        if c.encryption_protocol is None
+        and has_perm(perms.get(c.id, 0), Perm.VIEW_CHANNEL)
     ]
 
 

@@ -20,6 +20,7 @@ from app.routers.channels import bot_router as bot_channels_router
 from app.routers.bots import router as bots_router
 from app.routers.bot_gateway import router as bot_gateway_router
 from app.routers.presets import router as presets_router
+from app.routers.e2ee import router as e2ee_router
 from app.routers.expenses import router as expenses_router
 from app.routers.families import router as families_router
 from app.routers.families_join import router as families_join_router
@@ -229,6 +230,7 @@ def create_app() -> FastAPI:
     app_.include_router(calendar_feed_router)
     app_.include_router(me_router)
     app_.include_router(chats_router)
+    app_.include_router(e2ee_router)
     app_.include_router(bots_router)
     app_.include_router(bot_action_router)
     app_.include_router(channels_router)

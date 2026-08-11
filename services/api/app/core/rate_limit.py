@@ -109,3 +109,9 @@ check_username_limiter = SlidingWindowLimiter(limit=30, window_seconds=60, name=
 
 # /auth/register: max 10 регистраций за час с одного IP
 register_ip_limiter = SlidingWindowLimiter(limit=10, window_seconds=3600, name="register_ip")
+
+# /e2ee/mailbox (POST): max 30 запросов за 5 минут per-sender. Один запрос
+# уже несёт до 500 блобов — лимит на частоту запросов, а не на items, не даёт
+# засыпать чужие устройства бесконечным потоком key-exchange мусора (DoS на
+# чтение: жертва не успевает ack'ать быстрее, чем прилетает новое).
+e2ee_mailbox_limiter = SlidingWindowLimiter(limit=30, window_seconds=300, name="e2ee_mailbox")

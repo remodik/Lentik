@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
-import { Crown } from "lucide-react";
+import { Bot, Crown } from "lucide-react";
 import { toAbsoluteApiUrl } from "@/lib/api-base";
 import { getPresenceLabel } from "@/lib/presence";
 
@@ -16,6 +16,7 @@ export type UserMiniProfile = {
   joined_at?: string | null;
   is_online?: boolean | null;
   last_seen_at?: string | null;
+  is_bot?: boolean | null;
 };
 
 function formatBirthday(iso?: string | null) {
@@ -177,10 +178,17 @@ export default function UserMiniProfilePopover({
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <p className="user-mini-popover__name">{shownUser.display_name}</p>
-                <span className={`user-mini-role ${role}`}>
-                  {role === "owner" && <Crown className="w-3 h-3" strokeWidth={2.4} />}
-                  {roleLabel}
-                </span>
+                {shownUser.is_bot ? (
+                  <span className="user-mini-role owner">
+                    <Bot className="w-3 h-3" strokeWidth={2.4} />
+                    Бот
+                  </span>
+                ) : (
+                  <span className={`user-mini-role ${role}`}>
+                    {role === "owner" && <Crown className="w-3 h-3" strokeWidth={2.4} />}
+                    {roleLabel}
+                  </span>
+                )}
               </div>
 
               <p className="user-mini-popover__username">

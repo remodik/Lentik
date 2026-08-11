@@ -101,6 +101,26 @@ export default function NotificationCenter({
   const [filter, setFilter] = useState<FilterKey>("all");
   const drawerRef = useRef<HTMLDivElement>(null);
 
+  // Support smooth exit animation: keep mounted during close
+  const [shouldRender, setShouldRender] = useState(open);
+  const [isClosing, setIsClosing] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setShouldRender(true);
+      setIsClosing(false);
+    } else if (shouldRender) {
+      setIsClosing(true);
+      const t = setTimeout(() => {
+        setShouldRender(false);
+        setIsClosing(false);
+      }, 180);
+      return () => clearTimeout(t);
+    }
+  }, [open, shouldRender]);
+
+  if (!shouldRender) return null;
+
   useEffect(() => {
     if (!open) return;
 
@@ -172,10 +192,10 @@ export default function NotificationCenter({
   if (!open) return null;
 
   return (
-    <div className="notif-center-overlay" role="presentation">
+    <div className={`notif-center-overlay ${isClosing ? "is-closing" : ""}`} role="presentation">
       <div
         ref={drawerRef}
-        className="notif-center-drawer animate-slide-left"
+        className={`notif-center-drawer ${isClosing ? "is-closing" : "animate-slide-left"}`}
         role="dialog"
         aria-label="Центр уведомлений"
         aria-modal="true"

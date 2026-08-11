@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Tooltip from "@/components/Tooltip";
 import {
   Clock as ClockIcon,
   Download,
@@ -60,16 +61,20 @@ import {
   pinChatMessage,
   removeReaction,
   searchChatMessages,
+  sendInteraction,
   sendMessage,
   sendMessageWithFiles,
   sendVoiceMessage,
+  submitModal,
   unpinChatMessage,
   type Chat,
   type Family,
   type Me,
   type Message,
   type MessageAttachment,
+  type MsgActionRow,
   type MessageSearchResult,
+  type ModalSpec,
 } from "@/lib/api";
 import { fetchWsTicket, toAbsoluteApiUrl, wsUrl } from "@/lib/api-base";
 import UserMiniProfilePopover, {
@@ -101,6 +106,9 @@ import Age18Gate, { useAge18Gate } from "@/components/Age18Gate";
 type ToolbarPlacement = "above" | "below";
 
 const MAX_ATTACHMENTS_PER_MESSAGE = 8;
+// Должно совпадать с MAX_ATTACHMENT_SIZE в services/api/app/routers/chats.py.
+const MAX_CHAT_FILE_SIZE = 50 * 1024 * 1024;
+const MAX_CHAT_FILE_LABEL = "50 МБ";
 const TOOLBAR_MIN_SPACE = 72;
 const TOOLBAR_HIDE_DELAY_MS = 120;
 const MIN_SEARCH_QUERY_LENGTH = 2;
@@ -214,6 +222,219 @@ function renderText(text: string, meUsername: string) {
     }
     return part;
   });
+}
+
+// Phase 3 — рендер интерактивных компонентов сообщения (кнопки/select).
+function MessageComponents({
+  rows,
+  onInteract,
+}: {
+  rows: MsgActionRow[];
+  onInteract: (
+    customId: string,
+    type: "button" | "select",
+    values?: string[],
+  ) => Promise<void>;
+}) {
+  const [pending, setPending] = useState<string | null>(null);
+  const rowsKey = useMemo(() => JSON.stringify(rows), [rows]);
+  // Бот обновил сообщение (новые компоненты) → снимаем «загрузку».
+  useEffect(() => {
+    setPending(null);
+  }, [rowsKey]);
+
+  async function run(
+    customId: string,
+    type: "button" | "select",
+    values?: string[],
+  ) {
+    if (pending) return;
+    setPending(customId);
+    // Фолбэк-таймаут: если бот не ответил за 15с — компонент снова активен.
+    window.setTimeout(
+      () => setPending((p) => (p === customId ? null : p)),
+      15000,
+    );
+    try {
+      await onInteract(customId, type, values);
+    } catch {
+      setPending((p) => (p === customId ? null : p));
+    }
+  }
+
+  const btnStyle = (style: "primary" | "secondary" | "danger") =>
+    style === "primary"
+      ? "bg-[var(--accent)] text-[color:var(--text-on-dark)] border-[color:var(--accent-border)]"
+      : style === "danger"
+        ? "bg-[var(--danger-bg-soft)] text-[color:var(--danger-fg-bold)] border-[color:var(--danger-border)]"
+        : "bg-[var(--bg-surface)] text-ink-700 border-[color:var(--border-glass)]";
+
+  return (
+    <div className="mt-2 flex flex-col gap-1.5">
+      {rows.map((row, ri) => (
+        <div key={ri} className="flex flex-wrap items-center gap-1.5">
+          {row.components.map((c) =>
+            c.type === "button" ? (
+              <button
+                key={c.custom_id}
+                type="button"
+                disabled={c.disabled || pending !== null}
+                onClick={() => void run(c.custom_id, "button")}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-semibold border transition disabled:opacity-50 active:scale-[0.98] ${btnStyle(c.style)}`}
+              >
+                {pending === c.custom_id && (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" strokeWidth={2.2} />
+                )}
+                {c.label}
+              </button>
+            ) : (
+              <select
+                key={c.custom_id}
+                disabled={c.disabled || pending !== null}
+                defaultValue=""
+                onChange={(e) => {
+                  if (e.target.value) void run(c.custom_id, "select", [e.target.value]);
+                }}
+                className="rounded-lg border border-[color:var(--border-glass)] bg-[var(--bg-surface)] px-3 py-1.5 text-[13px] text-ink-700 outline-none disabled:opacity-50 min-w-[160px]"
+              >
+                <option value="" disabled>
+                  {c.placeholder || "Выбрать…"}
+                </option>
+                {c.options.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            ),
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function BotModalDialog({
+  spec,
+  onClose,
+  onSubmit,
+}: {
+  spec: ModalSpec;
+  onClose: () => void;
+  onSubmit: (values: Record<string, string>) => Promise<void>;
+}) {
+  const [values, setValues] = useState<Record<string, string>>(() => {
+    const initial: Record<string, string> = {};
+    for (const input of spec.inputs) initial[input.custom_id] = input.value ?? "";
+    return initial;
+  });
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    for (const input of spec.inputs) {
+      if (input.required !== false && !values[input.custom_id]?.trim()) {
+        setError(`Заполните: ${input.label}`);
+        return;
+      }
+    }
+    setError("");
+    setSubmitting(true);
+    try {
+      await onSubmit(values);
+      onClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Не удалось отправить форму");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-[80] bg-black/35 backdrop-blur-sm p-4 flex items-center justify-center"
+      onClick={() => !submitting && onClose()}
+      role="dialog"
+      aria-modal="true"
+      aria-label={spec.title}
+    >
+      <div
+        className="w-full max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto sidebar-scroll rounded-3xl border border-[color:var(--border-glass-strong)] bg-[color:var(--bg-elevated)] backdrop-blur-2xl p-6 shadow-[0_30px_90px_var(--scrim-4)]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-5">
+          <h3 className="font-display text-xl text-ink-900">{spec.title}</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-8 h-8 rounded-lg grid place-items-center text-ink-400 hover:text-ink-700 hover:bg-white/60 transition"
+            disabled={submitting}
+            aria-label="Закрыть"
+          >
+            <X className="w-4 h-4" strokeWidth={2.3} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-3">
+          {spec.inputs.map((input) => (
+            <div key={input.custom_id}>
+              <label className="text-[11px] font-semibold text-ink-400 uppercase tracking-widest font-body mb-1.5 block">
+                {input.label}
+                {input.required === false && (
+                  <span className="text-ink-300 normal-case font-normal"> (необязательно)</span>
+                )}
+              </label>
+              {input.style === "paragraph" ? (
+                <textarea
+                  className="input-field resize-none"
+                  rows={3}
+                  value={values[input.custom_id] ?? ""}
+                  onChange={(e) =>
+                    setValues((p) => ({ ...p, [input.custom_id]: e.target.value }))
+                  }
+                  placeholder={input.placeholder ?? ""}
+                  maxLength={input.max_length ?? 4000}
+                />
+              ) : (
+                <input
+                  type="text"
+                  className="input-field"
+                  value={values[input.custom_id] ?? ""}
+                  onChange={(e) =>
+                    setValues((p) => ({ ...p, [input.custom_id]: e.target.value }))
+                  }
+                  placeholder={input.placeholder ?? ""}
+                  maxLength={input.max_length ?? 4000}
+                />
+              )}
+            </div>
+          ))}
+
+          {error && <p className="text-red-500 text-sm font-body">{error}</p>}
+
+          <div className="flex gap-3 pt-2">
+            <button
+              type="submit"
+              className="flex-1 btn-primary py-2.5 text-sm rounded-xl inline-flex items-center justify-center gap-2 disabled:opacity-50"
+              disabled={submitting}
+            >
+              {submitting ? <Loader2 className="w-4 h-4 animate-spin" strokeWidth={2.2} /> : null}
+              {submitting ? "Отправка…" : "Отправить"}
+            </button>
+            <button
+              type="button"
+              className="flex-1 ui-btn ui-btn-subtle py-2.5"
+              onClick={onClose}
+              disabled={submitting}
+            >
+              Отмена
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
 }
 
 function MessageAvatar({
@@ -426,6 +647,19 @@ export default function ChatView({
   const router = useRouter();
   const [banTarget, setBanTarget] = useState<{ user_id: string; display_name: string } | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [openModal, setOpenModal] = useState<{
+    interactionId: string;
+    messageId: string;
+    spec: ModalSpec;
+  } | null>(null);
+  const [ephemeralMessages, setEphemeralMessages] = useState<
+    {
+      id: string;
+      text: string;
+      components: MsgActionRow[];
+      authorDisplayName: string | null;
+    }[]
+  >([]);
   const [text, setText] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
@@ -616,6 +850,7 @@ export default function ChatView({
         joined_at: authorMember?.joined_at ?? null,
         is_online: authorMember?.is_online ?? (isMine ? me.is_online : null),
         last_seen_at: authorMember?.last_seen_at ?? (isMine ? me.last_seen_at : null),
+        is_bot: authorMember?.is_bot ?? false,
       };
     },
     [
@@ -789,6 +1024,13 @@ export default function ChatView({
     if (ageGate.status !== "ok") return;
     void loadMessages();
   }, [ageGate.status, loadMessages]);
+
+  // Модалка/эфемерные сообщения бота привязаны к конкретному чату — при
+  // переключении чата они больше не актуальны.
+  useEffect(() => {
+    setOpenModal(null);
+    setEphemeralMessages([]);
+  }, [chat.id]);
 
   useEffect(() => {
     const isNewMessage = messages.length > lastMessageCountRef.current;
@@ -1000,7 +1242,14 @@ export default function ChatView({
             setMessages((p) =>
               p.map((m) =>
                 m.id === d.message.id
-                  ? { ...m, text: d.message.text, edited: true }
+                  ? {
+                      ...m,
+                      text: d.message.text,
+                      edited: true,
+                      ...(d.message.components !== undefined
+                        ? { components: d.message.components }
+                        : {}),
+                    }
                   : m,
               ),
             );
@@ -1050,6 +1299,25 @@ export default function ChatView({
                 };
               }),
             );
+          } else if (d.type === "modal_open") {
+            if (typeof d.interaction_id === "string" && d.modal) {
+              setOpenModal({
+                interactionId: d.interaction_id,
+                messageId: String(d.message_id ?? ""),
+                spec: d.modal as ModalSpec,
+              });
+            }
+          } else if (d.type === "ephemeral_message") {
+            setEphemeralMessages((p) => [
+              ...p,
+              {
+                id: `eph-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+                text: typeof d.text === "string" ? d.text : "",
+                components: Array.isArray(d.components) ? (d.components as MsgActionRow[]) : [],
+                authorDisplayName:
+                  typeof d.author_display_name === "string" ? d.author_display_name : null,
+              },
+            ]);
           } else if (d.type === "chat_pin_updated") {
             const nextPinnedMessageId =
               typeof d.pinned_message_id === "string" ? d.pinned_message_id : null;
@@ -1167,12 +1435,35 @@ export default function ChatView({
 
   function handleFilePick(e: React.ChangeEvent<HTMLInputElement>) {
     const picked = Array.from(e.target.files ?? []);
+    e.target.value = "";
     if (!picked.length) return;
 
-    setSelectedFiles((prev) =>
-      [...prev, ...picked].slice(0, MAX_ATTACHMENTS_PER_MESSAGE),
-    );
-    e.target.value = "";
+    // Размер проверяем сразу при выборе — понятный отказ, а не падение отправки.
+    const tooBig = picked.filter((f) => f.size > MAX_CHAT_FILE_SIZE);
+    const allowed = picked.filter((f) => f.size <= MAX_CHAT_FILE_SIZE);
+
+    if (allowed.length > 0) {
+      setSelectedFiles((prev) =>
+        [...prev, ...allowed].slice(0, MAX_ATTACHMENTS_PER_MESSAGE),
+      );
+    }
+
+    if (tooBig.length > 0) {
+      void notify({
+        title: tooBig.length === 1 ? "Файл слишком большой" : "Файлы слишком большие",
+        tone: "danger",
+        description: (
+          <div className="space-y-1 text-left">
+            <p>Максимальный размер вложения — {MAX_CHAT_FILE_LABEL}. Не добавлены:</p>
+            {tooBig.map((f) => (
+              <p key={f.name} className="text-ink-500">
+                • {f.name} — {formatBytes(f.size)}
+              </p>
+            ))}
+          </div>
+        ),
+      });
+    }
   }
 
   function removeSelectedFile(index: number) {
@@ -1302,6 +1593,56 @@ export default function ChatView({
     }
   };
 
+  const handleComponentInteract = useCallback(
+    async (
+      messageId: string,
+      customId: string,
+      type: "button" | "select",
+      values?: string[],
+    ) => {
+      try {
+        await sendInteraction(familyId, chat.id, messageId, {
+          custom_id: customId,
+          type,
+          values,
+        });
+      } catch (e) {
+        const statusCode = (e as { status?: number })?.status;
+        void notify({
+          title: "Не удалось обработать",
+          description:
+            statusCode === 404
+              ? "Бот не отвечает или интеракция устарела."
+              : e instanceof Error
+                ? e.message
+                : undefined,
+          tone: "danger",
+        });
+        throw e;
+      }
+    },
+    [familyId, chat.id, notify],
+  );
+
+  const handleModalSubmit = useCallback(
+    async (values: Record<string, string>) => {
+      if (!openModal) return;
+      try {
+        await submitModal(familyId, chat.id, openModal.messageId, openModal.interactionId, values);
+      } catch (e) {
+        const statusCode = (e as { status?: number })?.status;
+        throw new Error(
+          statusCode === 404
+            ? "Бот не отвечает или форма устарела."
+            : e instanceof Error
+              ? e.message
+              : "Не удалось отправить форму",
+        );
+      }
+    },
+    [familyId, chat.id, openModal],
+  );
+
   async function handleSend() {
     if (sending) return;
 
@@ -1346,7 +1687,9 @@ export default function ChatView({
           ? "Медленный режим"
           : statusCode === 422
             ? "Сообщение отклонено"
-            : "Не удалось отправить";
+            : statusCode === 413
+              ? "Файл слишком большой"
+              : "Не удалось отправить";
       void notify({
         title,
         description: message,
@@ -1946,6 +2289,9 @@ export default function ChatView({
             const authorAvatarUrl = resolveAuthorAvatarUrl(message);
             const authorPopoverKey = `message:${message.id}`;
             const authorInitial = authorDisplayName[0]?.toUpperCase() ?? "?";
+            const authorIsBot = message.author_id
+              ? memberById.get(message.author_id)?.is_bot ?? false
+              : false;
             const canEdit = isMine && canManageOwn;
             const canDelete = (isMine && canManageOwn) || canManageMessages;
             const isPinned = pinnedMessageId === message.id;
@@ -2216,6 +2562,11 @@ export default function ChatView({
                         <span className={`text-[14px] font-semibold ${isMine ? "text-warm-700" : "text-ink-900"}`}>
                           {authorDisplayName}
                         </span>
+                        {authorIsBot && (
+                          <span className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-md border border-[color:var(--accent-border)] bg-[var(--accent-soft)] text-[color:var(--warm-700)] self-center">
+                            Бот
+                          </span>
+                        )}
                         <span className="text-[11px] text-ink-300">
                           {formatTime(message.created_at)}
                         </span>
@@ -2233,65 +2584,70 @@ export default function ChatView({
                       onMouseLeave={() => scheduleToolbarHide(message.id)}
                     >
                       {canAddReactions && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (emojiPickerForId === message.id) {
-                              setEmojiPickerForId(null);
-                              setEmojiPickerAnchorRect(null);
-                            } else {
-                              reactionTriggerRef.current = e.currentTarget;
-                              setEmojiPickerAnchorRect(e.currentTarget.getBoundingClientRect());
-                              setEmojiPickerForId(message.id);
-                            }
-                          }}
-                          className="msg-actions-btn"
-                          data-tooltip="Реакция"
-                        >
-                          <SmilePlus className="w-4 h-4" strokeWidth={2.2} />
-                        </button>
+                        <Tooltip content="Реакция">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (emojiPickerForId === message.id) {
+                                setEmojiPickerForId(null);
+                                setEmojiPickerAnchorRect(null);
+                              } else {
+                                reactionTriggerRef.current = e.currentTarget;
+                                setEmojiPickerAnchorRect(e.currentTarget.getBoundingClientRect());
+                                setEmojiPickerForId(message.id);
+                              }
+                            }}
+                            className="msg-actions-btn"
+                          >
+                            <SmilePlus className="w-4 h-4" strokeWidth={2.2} />
+                          </button>
+                        </Tooltip>
                       )}
                       {canSendMessages && (
-                      <button
-                        type="button"
-                        onClick={() => setReplyTo(message)}
-                        className="msg-actions-btn"
-                        data-tooltip="Ответить"
-                      >
-                        <CornerUpLeft className="w-4 h-4" strokeWidth={2.2} />
-                      </button>
-                      )}
-                      {canPinMessages && (
+                      <Tooltip content="Ответить">
                         <button
                           type="button"
-                          onClick={() => void handlePinToggle(message)}
-                          className={`msg-actions-btn ${isPinned ? "text-warm-700" : ""}`}
-                          data-tooltip={isPinned ? "Открепить" : "Закрепить"}
-                          disabled={pinUpdatingForId === message.id}
+                          onClick={() => setReplyTo(message)}
+                          className="msg-actions-btn"
                         >
-                          <Pin className="w-4 h-4" strokeWidth={2.2} />
+                          <CornerUpLeft className="w-4 h-4" strokeWidth={2.2} />
                         </button>
+                      </Tooltip>
+                      )}
+                      {canPinMessages && (
+                        <Tooltip content={isPinned ? "Открепить" : "Закрепить"}>
+                          <button
+                            type="button"
+                            onClick={() => void handlePinToggle(message)}
+                            className={`msg-actions-btn ${isPinned ? "text-warm-700" : ""}`}
+                            disabled={pinUpdatingForId === message.id}
+                          >
+                            <Pin className="w-4 h-4" strokeWidth={2.2} />
+                          </button>
+                        </Tooltip>
                       )}
                       {canEdit && (
+                        <Tooltip content="Изменить">
                         <button
                           type="button"
                           onClick={() => startEdit(message)}
                           className="msg-actions-btn"
-                          data-tooltip="Изменить"
                         >
                           <Pencil className="w-4 h-4" strokeWidth={2.2} />
                         </button>
+                      </Tooltip>
                       )}
                       {canDelete && (
+                        <Tooltip content="Удалить">
                         <button
                           type="button"
                           onClick={(e) => handleDelete(message.id, e.shiftKey)}
                           className="msg-actions-btn danger"
-                          data-tooltip="Удалить"
                         >
                           <Trash2 className="w-4 h-4" strokeWidth={2.2} />
                         </button>
+                      </Tooltip>
                       )}
 
                     </div>
@@ -2339,6 +2695,15 @@ export default function ChatView({
                           <div className="text-[15px] text-ink-800 whitespace-pre-wrap break-words leading-relaxed">
                             {renderText(message.text, me.username)}
                           </div>
+                        )}
+
+                        {message.components && message.components.length > 0 && (
+                          <MessageComponents
+                            rows={message.components}
+                            onInteract={(customId, type, values) =>
+                              handleComponentInteract(message.id, customId, type, values)
+                            }
+                          />
                         )}
 
                         {reactions.length > 0 && (
@@ -2437,6 +2802,23 @@ export default function ChatView({
           })
         )}
 
+        {ephemeralMessages.map((em) => (
+          <div key={em.id} className="flex justify-start mb-2">
+            <div
+              className="max-w-[75%] rounded-2xl border px-3 py-2"
+              style={{ borderColor: "var(--border-glass)", background: "var(--bg-surface-subtle)" }}
+            >
+              <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-ink-400 font-body mb-1">
+                <Eye className="w-3 h-3" strokeWidth={2.2} /> Только вам
+                {em.authorDisplayName ? ` · ${em.authorDisplayName}` : ""}
+              </p>
+              <p className="text-sm text-ink-800 font-body whitespace-pre-wrap break-words">
+                {em.text}
+              </p>
+            </div>
+          </div>
+        ))}
+
         <div ref={bottomRef} />
       </div>
 
@@ -2517,15 +2899,16 @@ export default function ChatView({
             </div>
           )}
           {canAttachFiles && (
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="w-9 h-9 rounded-md grid place-items-center text-ink-500 hover:text-ink-900 hover:bg-white/75 transition shrink-0"
-              data-tooltip="Прикрепить файл"
-              aria-label="Прикрепить файл"
-            >
-              <Paperclip className="w-4 h-4" strokeWidth={2.2} />
-            </button>
+            <Tooltip content="Прикрепить файл">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="w-9 h-9 rounded-md grid place-items-center text-ink-500 hover:text-ink-900 hover:bg-white/75 transition shrink-0"
+                aria-label="Прикрепить файл"
+              >
+                <Paperclip className="w-4 h-4" strokeWidth={2.2} />
+              </button>
+            </Tooltip>
           )}
 
           <input
@@ -2576,29 +2959,30 @@ export default function ChatView({
             rows={1}
           />
 
-          <button
-            ref={emojiBtnRef}
-            type="button"
-            onClick={(e) => {
-              if (composerEmojiOpen) {
-                setComposerEmojiOpen(false);
-                setComposerEmojiAnchor(null);
-              } else {
-                setComposerEmojiAnchor(e.currentTarget.getBoundingClientRect());
-                setComposerEmojiOpen(true);
-              }
-            }}
-            className={`w-9 h-9 rounded-md grid place-items-center shrink-0 transition ${
-              composerEmojiOpen
-                ? "text-[var(--accent)] bg-[var(--accent-soft)]"
-                : "text-ink-500 hover:text-ink-900 hover:bg-white/75"
-            }`}
-            data-tooltip="Эмодзи"
-            aria-label="Эмодзи"
-            aria-expanded={composerEmojiOpen}
-          >
-            <Smile className="w-4 h-4" strokeWidth={2.2} />
-          </button>
+          <Tooltip content="Эмодзи">
+            <button
+              ref={emojiBtnRef}
+              type="button"
+              onClick={(e) => {
+                if (composerEmojiOpen) {
+                  setComposerEmojiOpen(false);
+                  setComposerEmojiAnchor(null);
+                } else {
+                  setComposerEmojiAnchor(e.currentTarget.getBoundingClientRect());
+                  setComposerEmojiOpen(true);
+                }
+              }}
+              className={`w-9 h-9 rounded-md grid place-items-center shrink-0 transition ${
+                composerEmojiOpen
+                  ? "text-[var(--accent)] bg-[var(--accent-soft)]"
+                  : "text-ink-500 hover:text-ink-900 hover:bg-white/75"
+              }`}
+              aria-label="Эмодзи"
+              aria-expanded={composerEmojiOpen}
+            >
+              <Smile className="w-4 h-4" strokeWidth={2.2} />
+            </button>
+          </Tooltip>
 
           <button
             type="button"
@@ -2682,6 +3066,14 @@ export default function ChatView({
           displayName={banTarget.display_name}
           onClose={() => setBanTarget(null)}
           onBanned={() => void notify({ title: "Пользователь забанен" })}
+        />
+      )}
+
+      {openModal && (
+        <BotModalDialog
+          spec={openModal.spec}
+          onClose={() => setOpenModal(null)}
+          onSubmit={handleModalSubmit}
         />
       )}
 

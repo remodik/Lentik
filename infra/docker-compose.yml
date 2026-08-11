@@ -7,15 +7,24 @@ services:
       POSTGRES_DB: lentik
       POSTGRES_USER: lentik
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    # Привязка к localhost: БД доступна только с dev-машины, не торчит наружу.
+    # Для прод-инстансов — вообще убрать публикацию порта (доступ только через api).
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - lentik_pgdata:/var/lib/postgresql/data
+    networks:
+      - datanet
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U lentik -d lentik"]
       interval: 5s
       timeout: 3s
       retries: 20
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+          pids: 200
 
   api:
     build:
@@ -32,15 +41,38 @@ services:
       # Username аккаунта разработчика (god-mode + админ-панель /admin).
       DEVELOPER_USERNAME: ${DEVELOPER_USERNAME:-}
       WATCHFILES_FORCE_POLLING: "true"
+    # Привязка к localhost: nginx проксирует снаружи, напрямую API не торчит.
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     volumes:
       - ../services/api:/app
       - ../services/cloud/uploads:/uploads
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir app
+    # --proxy-headers: uvicorn восстанавливает реальный клиентский IP из
+    # X-Forwarded-For, иначе app per-IP лимитеры за прокси схлопываются в один
+    # бакет. --forwarded-allow-ips доверяет только этому диапазону.
+    command: >
+      uvicorn app.main:app
+      --host 0.0.0.0 --port 8000
+      --proxy-headers --forwarded-allow-ips="127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+      --reload --reload-dir app
+    networks:
+      - appnet
+      - datanet
     depends_on:
       db:
         condition: service_healthy
+    healthcheck:
+      # /docs всегда доступен в FastAPI; если добавите /healthz — переключите сюда.
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/docs',timeout=3).status==200 else 1)\""]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+          pids: 200
 
   web:
     build:
@@ -54,13 +86,26 @@ services:
       CHOKIDAR_USEPOLLING: "true"
       WATCHPACK_POLLING: "true"
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     volumes:
       - ../services/web:/app
       - /app/node_modules
     command: npm run dev -- --hostname 0.0.0.0 --port 3000
+    networks:
+      - appnet
     depends_on:
       - api
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:3000/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+          pids: 100
 
   # Сайдкар шифрованных бэкапов: pg_dump + загрузки → один AES-256 GPG-архив,
   # ротация, опционально S3. Восстановление: docker compose run --rm backup restore.sh <archive>
@@ -90,9 +135,24 @@ services:
       # Загрузки — только для чтения (бэкап их не меняет).
       - ../services/cloud/uploads:/data/uploads:ro
       - lentik_backups:/backups
+    networks:
+      - datanet
     depends_on:
       db:
         condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          pids: 64
+
+networks:
+  # appnet: api ↔ web (фронт обращается только к api, не к БД).
+  appnet:
+    driver: bridge
+  # datanet: db ↔ api ↔ backup (данные и бэкапы).
+  datanet:
+    driver: bridge
 
 volumes:
   lentik_pgdata:

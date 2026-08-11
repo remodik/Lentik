@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Download, Pause, Play, Volume2, VolumeX, X } from "lucide-react";
+import Tooltip from "@/components/Tooltip";
 
 function sanitizeMediaUrl(url?: string): string | null {
   if (!url) return null;
@@ -326,26 +327,28 @@ export default function MediaLightbox({
         className="absolute top-4 right-4 z-10 flex items-center gap-1.5"
         onClick={(e) => e.stopPropagation()}
       >
-        <a
-          href={renderMedia.url}
-          download={renderMedia.fileName}
-          target="_blank"
-          rel="noreferrer"
-          className="w-10 h-10 rounded-full grid place-items-center bg-white/8 hover:bg-white/18 text-white transition backdrop-blur"
-          aria-label="Скачать"
-          data-tooltip="Скачать"
-        >
-          <Download className="w-4 h-4" strokeWidth={2.2} />
-        </a>
-        <button
-          type="button"
-          onClick={triggerClose}
-          className="w-10 h-10 rounded-full grid place-items-center bg-white/8 hover:bg-white/18 text-white transition backdrop-blur"
-          aria-label="Закрыть"
-          data-tooltip="Закрыть"
-        >
-          <X className="w-5 h-5" strokeWidth={2.4} />
-        </button>
+        <Tooltip content="Скачать">
+          <a
+            href={renderMedia.url}
+            download={renderMedia.fileName}
+            target="_blank"
+            rel="noreferrer"
+            className="w-10 h-10 rounded-full grid place-items-center bg-white/8 hover:bg-white/18 text-white transition backdrop-blur"
+            aria-label="Скачать"
+          >
+            <Download className="w-4 h-4" strokeWidth={2.2} />
+          </a>
+        </Tooltip>
+        <Tooltip content="Закрыть">
+          <button
+            type="button"
+            onClick={triggerClose}
+            className="w-10 h-10 rounded-full grid place-items-center bg-white/8 hover:bg-white/18 text-white transition backdrop-blur"
+            aria-label="Закрыть"
+          >
+            <X className="w-5 h-5" strokeWidth={2.4} />
+          </button>
+        </Tooltip>
       </div>
 
       {/* Имя файла в правом нижнем углу, тонкое */}

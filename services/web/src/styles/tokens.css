@@ -120,7 +120,7 @@
   --dur-enter:  480ms;
 
   /* ─── Focus ─── */
-  --focus-ring: 0 0 0 3px rgba(176, 125, 82, 0.26), 0 0 0 1px rgba(176, 125, 82, 0.12);
+  --focus-ring: 0 0 0 2px rgba(176, 125, 82, 0.42), 0 0 6px 3px rgba(176, 125, 82, 0.16);
 
   /* ─── Compatibility Aliases ─── */
   --r-sm: var(--radius-sm);

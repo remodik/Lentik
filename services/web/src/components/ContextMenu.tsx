@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 
 export type ContextMenuItem = {
@@ -42,20 +42,29 @@ export default function ContextMenu({
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState<number>(-1);
+  const [closing, setClosing] = useState(false);
 
   const actionableIdx = useMemo(
     () => entries.map((e, i) => (isActionable(e) ? i : -1)).filter((i) => i >= 0),
     [entries],
   );
 
+  const handleClose = useCallback(() => {
+    if (closing) return;
+    setClosing(true);
+    setTimeout(() => {
+      onClose();
+    }, 120);
+  }, [closing, onClose]);
+
   useEffect(() => {
     const onPointerDown = (e: PointerEvent) => {
-      if (!ref.current?.contains(e.target as Node)) onClose();
+      if (!ref.current?.contains(e.target as Node)) handleClose();
     };
-    const onScroll = () => onClose();
+    const onScroll = () => handleClose();
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        onClose();
+        handleClose();
         return;
       }
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
@@ -72,7 +81,7 @@ export default function ContextMenu({
         const entry = entries[active];
         if (entry && isActionable(entry)) {
           entry.onClick();
-          onClose();
+          handleClose();
         }
       }
     };
@@ -84,7 +93,7 @@ export default function ContextMenu({
       window.removeEventListener("scroll", onScroll, true);
       window.removeEventListener("keydown", onKey);
     };
-  }, [onClose, active, actionableIdx, entries]);
+  }, [handleClose, active, actionableIdx, entries]);
 
   // Не выходим за правый/нижний край экрана.
   const left = typeof window !== "undefined" ? Math.min(x, window.innerWidth - 240) : x;
@@ -96,7 +105,7 @@ export default function ContextMenu({
   return (
     <div
       ref={ref}
-      className="fixed z-[95] min-w-[210px] max-w-[280px] rounded-2xl border border-[color:var(--border-glass-strong)] bg-[color:var(--bg-elevated)] backdrop-blur-2xl p-1.5 shadow-[0_20px_60px_var(--scrim-4)]"
+      className={`fixed z-[95] min-w-[210px] max-w-[280px] rounded-2xl border border-[color:var(--border-glass-strong)] bg-[color:var(--bg-elevated)] backdrop-blur-2xl p-1.5 shadow-[0_20px_60px_var(--scrim-4)] ${closing ? "context-menu-closing" : "context-menu-enter"}`}
       style={{ left, top }}
       role="menu"
     >
@@ -125,7 +134,7 @@ export default function ContextMenu({
             onClick={() => {
               if (entry.disabled) return;
               entry.onClick();
-              onClose();
+              handleClose();
             }}
             className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-body transition text-left disabled:opacity-40 disabled:cursor-not-allowed ${
               entry.danger

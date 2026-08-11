@@ -7,12 +7,31 @@
 
 .app-sidebar {
     width: 254px;
-    display: flex;
-    flex-direction: column;
     flex-shrink: 0;
     position: relative;
     z-index: 30;
-    overflow: visible;
+    /* Сворачивание: ширина едет к 0, а внутренняя обёртка держит фикс-ширину,
+       поэтому контент не пересобирается — он ровно «уезжает» за левый край. */
+    overflow: hidden;
+    transition: width var(--dur-normal) var(--ease-smooth);
+}
+
+.app-sidebar.collapsed {
+    width: 0;
+}
+
+.app-sidebar-inner {
+    width: 254px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .app-sidebar {
+        transition: none;
+    }
 }
 
 .nav-accordion-group {
@@ -67,18 +86,14 @@
     gap: 0.18rem;
     padding: 0.2rem 0 0.5rem 0.5rem;
     overflow: hidden;
-    animation: accordion-open 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+    max-height: 0;
+    opacity: 0;
+    transition: max-height 220ms cubic-bezier(0.4, 0, 0.2, 1), opacity 180ms ease;
 }
 
-@keyframes accordion-open {
-    from {
-        opacity: 0;
-        transform: translateY(-6px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+.nav-accordion-items.expanded {
+    max-height: 420px; /* достаточно для контента категорий */
+    opacity: 1;
 }
 
 .nav-soon-badge {

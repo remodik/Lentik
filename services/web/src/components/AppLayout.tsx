@@ -2,8 +2,10 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
+import Tooltip from "@/components/Tooltip";
 import {
   AlarmClock,
+  Bot,
   CalendarDays,
   ChevronDown,
   Hourglass,
@@ -17,6 +19,8 @@ import {
   LayoutGrid,
   MessageCircle,
   Network,
+  PanelLeftClose,
+  PanelLeftOpen,
   Plus,
   Rss,
   StickyNote,
@@ -38,7 +42,7 @@ import {
   type PresenceUpdateEvent,
 } from "@/components/NotificationSystem";
 
-export type AppSection = "chat" | "gallery" | "files" | "calendar" | "members" | "channels" | "notes" | "budget" | "reminders" | "tree" | "time-capsules";
+export type AppSection = "chat" | "gallery" | "files" | "calendar" | "members" | "channels" | "notes" | "budget" | "reminders" | "tree" | "time-capsules" | "bots";
 
 type NavCategory = "chat" | "plans" | "media" | "family";
 
@@ -87,6 +91,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: "channels", icon: Rss, label: "Каналы", desc: "Объявления семьи" },
   { id: "members", icon: Users, label: "Участники", desc: "Члены семьи" },
   { id: "tree", icon: Network, label: "Древо", desc: "Семейное древо" },
+  { id: "bots", icon: Bot, label: "Боты", desc: "Свои боты и токены" },
 ];
 
 const SECTION_TO_CATEGORY: Record<AppSection, NavCategory> = {
@@ -101,6 +106,7 @@ const SECTION_TO_CATEGORY: Record<AppSection, NavCategory> = {
   files: "media",
   members: "family",
   tree: "family",
+  bots: "family",
 };
 
 const CATEGORY_DEFAULT_SECTION: Record<NavCategory, AppSection> = {
@@ -180,6 +186,7 @@ const SIDEBAR_CATEGORIES: SidebarCategory[] = [
         items: [
           { id: "members", label: "Участники", section: "members" },
           { id: "tree", label: "Древо", section: "tree" },
+          { id: "bots", label: "Боты", section: "bots" },
           { id: "achievements", label: "Достижения", disabled: true, soon: true },
         ],
       },
@@ -279,7 +286,23 @@ export default function AppLayout({
   const [isCenterOpen, setCenterOpen] = useState(false);
   const [isFamilyMenuOpen, setFamilyMenuOpen] = useState(false);
   const [isMobileProfileOpen, setMobileProfileOpen] = useState(false);
+  const [isSidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("lentik_sidebar_collapsed") === "1";
+    } catch {
+      return false;
+    }
+  });
   const familyMenuRef = useRef<HTMLDivElement>(null);
+
+  const toggleSidebar = useCallback(() => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      try { localStorage.setItem("lentik_sidebar_collapsed", next ? "1" : "0"); } catch {}
+      if (next) setFamilyMenuOpen(false);
+      return next;
+    });
+  }, []);
 
   const meInitial = me.display_name?.[0]?.toUpperCase() ?? "?";
 
@@ -340,7 +363,8 @@ export default function AppLayout({
 
   return (
     <div className="app-layout">
-      <aside className="app-sidebar glass-sidebar glossy">
+      <aside className={`app-sidebar glass-sidebar glossy ${isSidebarCollapsed ? "collapsed" : ""}`}>
+        <div className="app-sidebar-inner" inert={isSidebarCollapsed ? true : undefined}>
           <div className="app-sidebar-brand" ref={familyMenuRef}>
             <div className="app-family-menu-anchor">
               <button
@@ -449,16 +473,17 @@ export default function AppLayout({
                   Семейное пространство
                 </p>
                 {onOpenFamilySettings && (
+                  <Tooltip content="Настройки семьи">
                   <button
                     type="button"
                     onClick={onOpenFamilySettings}
                     className="w-7 h-7 rounded-md grid place-items-center text-ink-400 hover:text-ink-900 hover:bg-white/60 transition shrink-0"
                     aria-label="Настройки семьи"
-                    data-tooltip="Настройки семьи"
                     data-testid="family-settings-btn"
                   >
                     <Settings className="w-3.5 h-3.5" strokeWidth={2.2} />
                   </button>
+                </Tooltip>
                 )}
               </div>
             </div>
@@ -489,28 +514,26 @@ export default function AppLayout({
                     />
                   </button>
 
-                  {isExpanded && (
-                    <div className="nav-accordion-items">
-                      {category.groups.map((group) =>
-                        group.items.map((item) => {
-                          const active = !!item.section && section === item.section;
-                          return (
-                            <button
-                              key={item.id}
-                              type="button"
-                              className={`nav-item ${active ? "active" : ""} ${item.disabled ? "disabled" : ""}`}
-                              onClick={() => handleContextItemClick(item)}
-                              disabled={item.disabled}
-                              aria-current={active ? "page" : undefined}
-                            >
-                              <span className="truncate">{item.label}</span>
-                              {item.soon && <span className="nav-soon-badge">скоро</span>}
-                            </button>
-                          );
-                        })
-                      )}
-                    </div>
-                  )}
+                  <div className={`nav-accordion-items ${isExpanded ? "expanded" : ""}`}>
+                    {category.groups.map((group) =>
+                      group.items.map((item) => {
+                        const active = !!item.section && section === item.section;
+                        return (
+                          <button
+                            key={item.id}
+                            type="button"
+                            className={`nav-item ${active ? "active" : ""} ${item.disabled ? "disabled" : ""}`}
+                            onClick={() => handleContextItemClick(item)}
+                            disabled={item.disabled}
+                            aria-current={active ? "page" : undefined}
+                          >
+                            <span className="truncate">{item.label}</span>
+                            {item.soon && <span className="nav-soon-badge">скоро</span>}
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
                 </div>
               );
             })}
@@ -551,11 +574,27 @@ export default function AppLayout({
             onLogout={onLogout}
             onUpdate={onMeUpdate}
           />
+        </div>
       </aside>
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <header className="app-topbar glass-topbar glossy">
           <div className="flex items-center gap-3 min-w-0">
+            <Tooltip content={isSidebarCollapsed ? "Развернуть панель" : "Свернуть панель"}>
+              <button
+                type="button"
+                onClick={toggleSidebar}
+                className="ui-btn ui-btn-icon hidden md:inline-flex shrink-0"
+                aria-label={isSidebarCollapsed ? "Развернуть боковую панель" : "Свернуть боковую панель"}
+                aria-pressed={isSidebarCollapsed}
+              >
+                {isSidebarCollapsed ? (
+                  <PanelLeftOpen className="w-[15px] h-[15px]" strokeWidth={2.2} aria-hidden />
+                ) : (
+                  <PanelLeftClose className="w-[15px] h-[15px]" strokeWidth={2.2} aria-hidden />
+                )}
+              </button>
+            </Tooltip>
             <div className="glass-icon glossy w-[40px] h-[40px] rounded-[16px] flex items-center justify-center shrink-0">
               <CurrentIcon className="w-[19px] h-[19px] text-ink-700" strokeWidth={2.2} />
             </div>

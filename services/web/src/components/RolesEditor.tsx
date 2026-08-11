@@ -11,6 +11,7 @@ import {
   Trash2,
   Users,
 } from "lucide-react";
+import Tooltip from "@/components/Tooltip";
 import {
   createRole,
   deleteRole,
@@ -351,16 +352,17 @@ export default function RolesEditor({ familyId, isOwner }: Props) {
               />
             )}
             {canManageRoles && (
-              <button
-                type="button"
-                onClick={() => void handleCreate()}
-                disabled={creating}
-                className="tooltip-down w-6 h-6 rounded-md grid place-items-center text-ink-500 hover:text-ink-900 hover:bg-white/70 transition"
-                data-tooltip="Создать роль"
-                aria-label="Создать роль"
-              >
-                <Plus className="w-3.5 h-3.5" strokeWidth={2.4} />
-              </button>
+              <Tooltip content="Создать роль" placement="bottom">
+                <button
+                  type="button"
+                  onClick={() => void handleCreate()}
+                  disabled={creating}
+                  className="w-6 h-6 rounded-md grid place-items-center text-ink-500 hover:text-ink-900 hover:bg-white/70 transition"
+                  aria-label="Создать роль"
+                >
+                  <Plus className="w-3.5 h-3.5" strokeWidth={2.4} />
+                </button>
+              </Tooltip>
             )}
           </div>
         </div>
@@ -550,15 +552,16 @@ function RoleDetail({
           className="flex-1 min-w-0 bg-transparent border-0 outline-none font-display text-2xl text-ink-900 disabled:opacity-70 disabled:cursor-default"
         />
         {!isSystem && canManage && (
-          <button
-            type="button"
-            onClick={() => void handleDelete()}
-            className="ui-btn ui-btn-subtle text-[color:var(--danger-fg-bold)] hover:text-[color:var(--danger-fg-strong)] inline-flex items-center gap-1.5"
-            data-tooltip="Удалить роль"
-          >
-            <Trash2 className="w-3.5 h-3.5" strokeWidth={2.2} />
-            Удалить
-          </button>
+          <Tooltip content="Удалить роль">
+            <button
+              type="button"
+              onClick={() => void handleDelete()}
+              className="ui-btn ui-btn-subtle text-[color:var(--danger-fg-bold)] hover:text-[color:var(--danger-fg-strong)] inline-flex items-center gap-1.5"
+            >
+              <Trash2 className="w-3.5 h-3.5" strokeWidth={2.2} />
+              Удалить
+            </button>
+          </Tooltip>
         )}
       </header>
 

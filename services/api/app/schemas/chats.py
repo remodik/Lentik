@@ -43,6 +43,9 @@ class ChatCreate(BaseModel):
     description: str | None = Field(default=None, max_length=2000)
     slow_mode_seconds: int = Field(default=0, ge=0, le=21600)
     is_18plus: bool = False
+    # E2E-протокол (ADR-004). None — обычный чат. Задаётся только при создании;
+    # "mls" сознательно не принимается, пока не реализован (Literal, а не enum БД).
+    encryption_protocol: Literal["signal"] | None = None
 
 
 class ChatUpdate(BaseModel):
@@ -74,16 +77,19 @@ class ChatResponse(BaseModel):
     created_by: UUID | None
     pinned_message_id: UUID | None = None
     pinned_message: PinnedMessagePreview | None = None
+    encryption_protocol: str | None = None
     created_at: datetime
 
 
 class MessageCreate(BaseModel):
-    text: str = Field(min_length=1, max_length=4000)
+    # 8192 — потолок для E2E-конвертов (base64-оверхед шифротекста);
+    # для обычных чатов лимит 4000 дополнительно проверяется в хендлере.
+    text: str = Field(min_length=1, max_length=8192)
     reply_to_id: UUID | None = None
 
 
 class MessageUpdate(BaseModel):
-    text: str = Field(min_length=1, max_length=4000)
+    text: str = Field(min_length=1, max_length=8192)
 
 
 class MessageReactionCreate(BaseModel):
@@ -136,6 +142,7 @@ class MessageResponse(BaseModel):
     reply_to_id: UUID | None
     mentions: list[str] = []
     attachments: list[MessageAttachment] = []
+    components: list[dict] = []
     reactions: list[ReactionSummary] = []
     readers: list[ReaderInfo] = []
     created_at: datetime

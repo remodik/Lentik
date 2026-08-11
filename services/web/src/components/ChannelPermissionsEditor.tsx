@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Check, ChevronLeft, Loader2, Minus, X } from "lucide-react";
+import Tooltip from "@/components/Tooltip";
 import {
   deleteChannelOverride,
   deleteChannelMemberOverride,
@@ -438,15 +439,16 @@ function OverridesPanel({
                 </p>
               </div>
               {canManage && (
-                <button
-                  type="button"
-                  className="ui-btn ui-btn-subtle text-xs"
-                  onClick={resetAll}
-                  disabled={ovForActive.allow === 0 && ovForActive.deny === 0}
-                  data-tooltip="Очистить все переопределения"
-                >
-                  Сбросить
-                </button>
+                <Tooltip content="Очистить все переопределения">
+                  <button
+                    type="button"
+                    className="ui-btn ui-btn-subtle text-xs"
+                    onClick={resetAll}
+                    disabled={ovForActive.allow === 0 && ovForActive.deny === 0}
+                  >
+                    Сбросить
+                  </button>
+                </Tooltip>
               )}
             </div>
           )}
@@ -505,42 +507,45 @@ function TriToggle({
       }`}
       role="group"
     >
-      <button
-        type="button"
-        disabled={disabled || state === "deny"}
-        onClick={() => onSet("deny")}
-        className={`w-7 h-7 rounded-full grid place-items-center transition ${
-          state === "deny" ? "bg-[var(--danger-solid)] text-white" : "text-ink-400 hover:text-[color:var(--danger-fg-bold)]"
-        }`}
-        data-tooltip="Запретить"
-        aria-label="Запретить"
-      >
-        <X className="w-3.5 h-3.5" strokeWidth={2.6} />
-      </button>
-      <button
-        type="button"
-        disabled={disabled || state === "inherit"}
-        onClick={() => onSet("inherit")}
-        className={`w-7 h-7 rounded-full grid place-items-center transition ${
-          state === "inherit" ? "bg-ink-300/60 text-ink-700" : "text-ink-400 hover:text-ink-700"
-        }`}
-        data-tooltip="Наследовать"
-        aria-label="Наследовать"
-      >
-        <Minus className="w-3.5 h-3.5" strokeWidth={2.6} />
-      </button>
-      <button
-        type="button"
-        disabled={disabled || state === "allow"}
-        onClick={() => onSet("allow")}
-        className={`w-7 h-7 rounded-full grid place-items-center transition ${
-          state === "allow" ? "bg-[var(--success-solid)] text-white" : "text-ink-400 hover:text-[color:var(--success-fg-bold)]"
-        }`}
-        data-tooltip="Разрешить"
-        aria-label="Разрешить"
-      >
-        <Check className="w-3.5 h-3.5" strokeWidth={2.6} />
-      </button>
+      <Tooltip content="Запретить">
+        <button
+          type="button"
+          disabled={disabled || state === "deny"}
+          onClick={() => onSet("deny")}
+          className={`w-7 h-7 rounded-full grid place-items-center transition ${
+            state === "deny" ? "bg-[var(--danger-solid)] text-white" : "text-ink-400 hover:text-[color:var(--danger-fg-bold)]"
+          }`}
+          aria-label="Запретить"
+        >
+          <X className="w-3.5 h-3.5" strokeWidth={2.6} />
+        </button>
+      </Tooltip>
+      <Tooltip content="Наследовать">
+        <button
+          type="button"
+          disabled={disabled || state === "inherit"}
+          onClick={() => onSet("inherit")}
+          className={`w-7 h-7 rounded-full grid place-items-center transition ${
+            state === "inherit" ? "bg-ink-300/60 text-ink-700" : "text-ink-400 hover:text-ink-700"
+          }`}
+          aria-label="Наследовать"
+        >
+          <Minus className="w-3.5 h-3.5" strokeWidth={2.6} />
+        </button>
+      </Tooltip>
+      <Tooltip content="Разрешить">
+        <button
+          type="button"
+          disabled={disabled || state === "allow"}
+          onClick={() => onSet("allow")}
+          className={`w-7 h-7 rounded-full grid place-items-center transition ${
+            state === "allow" ? "bg-[var(--success-solid)] text-white" : "text-ink-400 hover:text-[color:var(--success-fg-bold)]"
+          }`}
+          aria-label="Разрешить"
+        >
+          <Check className="w-3.5 h-3.5" strokeWidth={2.6} />
+        </button>
+      </Tooltip>
     </div>
   );
 }

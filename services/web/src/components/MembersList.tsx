@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Cake,
+  Bot,
   Check,
   ChevronDown,
   Copy,
@@ -188,6 +189,15 @@ function MemberCard({
             </p>
 
             {isMe && <span className="pill pill-muted">Это ты</span>}
+            {member.is_bot && (
+              <span
+                className="pill inline-flex items-center gap-1 bg-[var(--accent-soft)] text-[color:var(--warm-700)]"
+                title="Бот"
+              >
+                <Bot className="w-3 h-3" strokeWidth={2.2} />
+                Бот
+              </span>
+            )}
             {member.is_developer && (
               <span
                 className="pill inline-flex items-center gap-1 bg-[var(--special-bg)] text-[color:var(--special-fg)]"
@@ -579,7 +589,7 @@ export default function MembersList({
 
   return (
     <div className="members-shell">
-      <header className="members-head glass-topbar glossy">
+      <header className="members-head glass-topbar glossy overflow-y-auto max-h-[50vh] md:max-h-none md:overflow-visible">
         <div className="members-head__inner">
           <div className="members-head__row">
             <div className="min-w-0">
@@ -656,7 +666,7 @@ export default function MembersList({
                       if (Number.isNaN(next)) return;
                       setInviteHours(Math.min(720, Math.max(1, next)));
                     }}
-                    className="w-full rounded-xl border border-white/65 bg-white/70 px-2.5 py-1.5 text-sm text-ink-700 font-body focus:outline-none focus:ring-2 focus:ring-warm-200"
+                    className="w-full rounded-xl border border-white/65 bg-white/70 px-2.5 py-1.5 text-sm text-ink-700 font-body"
                   />
                 </label>
                 <label className="text-xs text-ink-500 font-body">
@@ -672,7 +682,7 @@ export default function MembersList({
                       if (Number.isNaN(next)) return;
                       setInviteMaxUses(Math.min(1000, Math.max(1, next)));
                     }}
-                    className="w-full rounded-xl border border-white/65 bg-white/70 px-2.5 py-1.5 text-sm text-ink-700 font-body focus:outline-none focus:ring-2 focus:ring-warm-200"
+                    className="w-full rounded-xl border border-white/65 bg-white/70 px-2.5 py-1.5 text-sm text-ink-700 font-body"
                   />
                 </label>
               </div>
@@ -873,7 +883,7 @@ export default function MembersList({
           aria-label="QR-код приглашения"
         >
           <div
-            className="w-full max-w-sm rounded-3xl border border-[color:var(--border-glass-strong)] bg-[color:var(--bg-elevated)] backdrop-blur-2xl p-6 shadow-[0_30px_90px_var(--scrim-4)]"
+            className="w-full max-w-sm max-h-[calc(100dvh-2rem)] overflow-y-auto sidebar-scroll rounded-3xl border border-[color:var(--border-glass-strong)] bg-[color:var(--bg-elevated)] backdrop-blur-2xl p-6 shadow-[0_30px_90px_var(--scrim-4)]"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-3 mb-4">
@@ -945,7 +955,7 @@ export default function MembersList({
           aria-label="Передача прав владельца"
         >
           <div
-            className="w-full max-w-md rounded-3xl border border-[color:var(--border-glass-strong)] bg-[color:var(--bg-elevated)] backdrop-blur-2xl p-6 shadow-[0_30px_90px_var(--scrim-4)]"
+            className="w-full max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto sidebar-scroll rounded-3xl border border-[color:var(--border-glass-strong)] bg-[color:var(--bg-elevated)] backdrop-blur-2xl p-6 shadow-[0_30px_90px_var(--scrim-4)]"
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="font-display text-xl text-ink-900">

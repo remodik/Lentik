@@ -1,0 +1,62 @@
+from datetime import datetime
+from uuid import UUID
+
+from pydantic import BaseModel, Field
+
+from app.schemas.components import ActionRow
+
+
+class BotCreate(BaseModel):
+    display_name: str = Field(min_length=1, max_length=64)
+    username: str = Field(min_length=2, max_length=64)
+    description: str | None = Field(default=None, max_length=500)
+
+
+class BotResponse(BaseModel):
+    id: UUID
+    user_id: UUID
+    username: str
+    display_name: str
+    avatar_url: str | None = None
+    description: str | None = None
+    owner_id: UUID
+    token_prefix: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class BotWithToken(BotResponse):
+    # Сырой токен — отдаётся РОВНО один раз (создание/перевыпуск), в БД не хранится.
+    token: str
+
+
+class BotSendMessageRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=4000)
+    reply_to_id: UUID | None = None
+    components: list[ActionRow] | None = Field(default=None, max_length=5)
+
+
+class BotEditMessageRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=4000)
+    components: list[ActionRow] | None = Field(default=None, max_length=5)
+
+
+class BotChatInfo(BaseModel):
+    """Минимальная инфа о чате для бота — чтобы он находил chat_id сам."""
+
+    id: UUID
+    name: str
+    is_18plus: bool = False
+
+
+class BotChannelInfo(BaseModel):
+    """Минимальная инфа о канале для бота — чтобы он находил channel_id сам."""
+
+    id: UUID
+    name: str
+    is_18plus: bool = False
+
+
+class BotPostRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=10000)

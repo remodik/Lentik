@@ -1,3 +1,4 @@
+import asyncio
 import mimetypes
 import re
 import uuid
@@ -12,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.auth.deps import get_current_user
+from app.auth.bot_deps import get_current_bot
 from app.core.permissions import Perm, has_perm
 from app.core.uploads import (
     ALLOWED_ATTACHMENT_EXT,
@@ -29,6 +31,7 @@ from app.db.session import AsyncSessionLocal
 from app.services.audit import log_action
 from app.services.bans import is_banned_now
 from app.services.moderation import enforce_message_content, get_settings
+from app.services.push import notify_new_message
 from app.services.roles import (
     effective_chat_permissions,
     effective_permissions_for_chats,
@@ -41,6 +44,16 @@ from app.models.message import Message
 from app.models.message_read import MessageRead
 from app.models.reaction import MessageReaction
 from app.models.user import User
+from app.schemas.bots import BotChatInfo, BotEditMessageRequest, BotSendMessageRequest
+from app.schemas.components import (
+    BotInteractionResponse,
+    InteractionCreatedResponse,
+    InteractionRequest,
+    ModalSubmitRequest,
+    dump_components,
+    has_component,
+)
+from app.core.interactions import MODAL_REPLY_TTL_SECONDS, interaction_store
 from app.schemas.chats import (
     EMOJI_PATTERN,
     ChatCreate,
@@ -154,6 +167,7 @@ def _chat_to_response(chat: Chat) -> ChatResponse:
         created_by=chat.created_by,
         pinned_message_id=chat.pinned_message_id,
         pinned_message=pinned_preview,
+        encryption_protocol=chat.encryption_protocol,
         created_at=chat.created_at,
     )
 
@@ -309,6 +323,36 @@ def _parse_mentions(text: str) -> list[str]:
     return list(set(MENTION_RE.findall(text)))
 
 
+_PUSH_PREVIEW_LEN = 120
+
+
+def _push_preview(text: str) -> str:
+    text = " ".join(text.split())
+    if len(text) <= _PUSH_PREVIEW_LEN:
+        return text
+    return text[:_PUSH_PREVIEW_LEN].rstrip() + "…"
+
+
+def _schedule_message_push(
+    *,
+    chat: Chat,
+    family_id: UUID,
+    author_id: UUID,
+    body: str,
+) -> None:
+    """Не блокирует ответ — доставка push идёт в фоне (см. notify_new_message)."""
+    asyncio.create_task(
+        notify_new_message(
+            chat_id=chat.id,
+            family_id=family_id,
+            is_18plus=chat.is_18plus,
+            exclude_user_id=author_id,
+            title=chat.name,
+            body=body,
+        )
+    )
+
+
 def _attachment_kind(content_type: str | None, file_name: str) -> str:
     guessed = mimetypes.guess_type(file_name)[0]
     mime = (content_type or guessed or "").lower()
@@ -368,6 +412,7 @@ def _msg_to_dict(msg: Message) -> dict:
         "reply_to_id": str(msg.reply_to_id) if msg.reply_to_id else None,
         "mentions": msg.mentions or [],
         "attachments": msg.attachments or [],
+        "components": msg.components or [],
         "reactions": [reaction.model_dump() for reaction in reactions],
         "readers": [reader.model_dump() for reader in readers],
         "created_at": msg.created_at.isoformat(),
@@ -386,6 +431,7 @@ def _msg_response(msg: Message, display_name: str | None = None) -> MessageRespo
         reply_to_id=msg.reply_to_id,
         mentions=msg.mentions or [],
         attachments=msg.attachments or [],
+        components=msg.components or [],
         reactions=_reaction_summaries(msg),
         readers=_reader_infos(msg),
         created_at=msg.created_at,
@@ -439,6 +485,9 @@ async def create_chat(
         slow_mode_seconds=slow_mode,
         is_18plus=body.is_18plus,
         created_by=user.id,
+        # Протокол фиксируется навсегда: ChatUpdate его не содержит, историю
+        # между режимами конвертировать нельзя.
+        encryption_protocol=body.encryption_protocol,
     )
     db.add(chat)
     await db.flush()
@@ -449,7 +498,11 @@ async def create_chat(
         action="chat.created",
         target_type="chat",
         target_id=chat.id,
-        metadata={"name": chat.name, "is_18plus": chat.is_18plus},
+        metadata={
+            "name": chat.name,
+            "is_18plus": chat.is_18plus,
+            "encryption_protocol": chat.encryption_protocol,
+        },
     )
     await db.commit()
     loaded_chat = await _load_chat_with_pin(db, family_id, chat.id)
@@ -685,12 +738,17 @@ async def search_messages(
     m = await _require_member(family_id, user, db)
 
     chat = await db.scalar(
-        select(Chat.id).where(Chat.id == chat_id, Chat.family_id == family_id)
+        select(Chat).where(Chat.id == chat_id, Chat.family_id == family_id)
     )
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
     # Поиск по истории чата требует видимости и доступа к истории.
     await require_chat_perm(db, m, chat_id, Perm.VIEW_CHANNEL, Perm.READ_HISTORY)
+
+    # По шифротексту искать нечего: поиск в E2E-чатах возможен только локально
+    # на клиенте, по расшифрованной им истории.
+    if chat.encryption_protocol:
+        return []
 
     normalized_query = " ".join(q.split()).strip()
     if len(normalized_query) == 0:
@@ -826,9 +884,16 @@ async def send_message(
     await require_chat_perm(db, membership, chat_id, Perm.VIEW_CHANNEL, Perm.SEND_MESSAGES)
     await _enforce_slow_mode(chat, user, membership, db)
 
-    enforce_message_content(await get_settings(db, family_id), body.text)
-
-    mentions = _parse_mentions(body.text)
+    if chat.encryption_protocol:
+        # E2E-чат: text — непрозрачный конверт (см. EncryptedEnvelope на
+        # клиенте). Сервер НЕ МОЖЕТ его прочитать, поэтому модерация и парсинг
+        # упоминаний здесь не выполняются — это гарантия E2E, а не упущение.
+        mentions: list[str] = []
+    else:
+        if len(body.text) > 4000:
+            raise HTTPException(status_code=400, detail="Text too long (max 4000)")
+        enforce_message_content(await get_settings(db, family_id), body.text)
+        mentions = _parse_mentions(body.text)
 
     msg = Message(
         chat_id=chat_id,
@@ -858,6 +923,13 @@ async def send_message(
             },
         )
 
+    push_body = (
+        "Новое сообщение"
+        if chat.encryption_protocol
+        else f"{user.display_name}: {_push_preview(body.text)}"
+    )
+    _schedule_message_push(chat=chat, family_id=family_id, author_id=user.id, body=push_body)
+
     return _msg_response(msg, user.display_name)
 
 
@@ -882,6 +954,13 @@ async def send_message_with_attachments(
         Perm.VIEW_CHANNEL, Perm.SEND_MESSAGES, Perm.ATTACH_FILES,
     )
     await _enforce_slow_mode(chat, user, membership, db)
+
+    # Файлы сохраняются в сторадже открытыми — их отправка в E2E-чат молча
+    # сломала бы гарантию шифрования. До появления шифрования вложений — 400.
+    if chat.encryption_protocol:
+        raise HTTPException(
+            status_code=400, detail="Вложения пока не поддерживаются в E2E-чатах"
+        )
 
     clean_files = [f for f in files if f.filename]
     if not clean_files:
@@ -908,7 +987,7 @@ async def send_message_with_attachments(
         if len(payload) > MAX_ATTACHMENT_SIZE:
             raise HTTPException(
                 status_code=413,
-                detail=f"File '{upload.filename}' is too large (max 50 MB)",
+                detail=f"Файл «{upload.filename}» слишком большой (макс. 50 МБ)",
             )
         # Содержимое должно соответствовать расширению — отсекаем замаскированные
         # файлы (например, HTML/скрипт с расширением картинки) до записи на диск.
@@ -965,8 +1044,11 @@ async def send_message_with_attachments(
             },
         )
 
-    return _msg_response(msg, user.display_name)
+    attachment_preview = "📎 Вложение" if len(attachments) == 1 else f"📎 Вложения ({len(attachments)})"
+    push_body = f"{user.display_name}: {_push_preview(body_text) if body_text else attachment_preview}"
+    _schedule_message_push(chat=chat, family_id=family_id, author_id=user.id, body=push_body)
 
+    return _msg_response(msg, user.display_name)
 
 
 
@@ -992,6 +1074,12 @@ async def send_voice_message(
     await require_chat_perm(db, membership, chat_id, Perm.VIEW_CHANNEL, Perm.SEND_VOICE)
     await _enforce_slow_mode(chat, user, membership, db)
 
+    # Как и вложения: голосовые лежат в сторадже открытыми — в E2E-чатах запрещены.
+    if chat.encryption_protocol:
+        raise HTTPException(
+            status_code=400, detail="Голосовые пока не поддерживаются в E2E-чатах"
+        )
+
     # Голосовое всегда сохраняется как .webm и отдаётся как audio/webm + nosniff,
     # так что XSS невозможен; но опасный заявленный тип всё равно отклоняем, а
     # сам тип ограничиваем аудио — чтобы эндпоинт не превращался в обход allowlist.
@@ -1009,7 +1097,7 @@ async def send_voice_message(
 
     payload = await file.read()
     if len(payload) > MAX_VOICE_SIZE:
-        raise HTTPException(status_code=413, detail="Voice message too large (max 10 MB)")
+        raise HTTPException(status_code=413, detail="Голосовое сообщение слишком большое (макс. 10 МБ)")
 
     stored_name = f"voice_{uuid.uuid4()}.webm"
     try:
@@ -1043,6 +1131,9 @@ async def send_voice_message(
     msg_dict = _msg_to_dict(msg)
     await ws_manager.broadcast_to_chat(chat_id, {"type": "new_message", "message": msg_dict})
 
+    push_body = f"{user.display_name}: 🎤 Голосовое сообщение"
+    _schedule_message_push(chat=chat, family_id=family_id, author_id=user.id, body=push_body)
+
     return _msg_response(msg, user.display_name)
 
 @router.patch("/{chat_id}/messages/{message_id}", response_model=MessageResponse)
@@ -1073,9 +1164,23 @@ async def edit_message(
         Perm.MANAGE_OWN_MESSAGES if is_own else Perm.MANAGE_MESSAGES,
     )
 
-    # Модерация применяется и на редактирование — иначе стоп-слова/лимит длины
-    # обходятся: отправил безобидное, потом отредактировал в запрещённое.
-    enforce_message_content(await get_settings(db, family_id), body.text)
+    chat = await db.get(Chat, chat_id)
+    is_encrypted = bool(chat and chat.encryption_protocol)
+
+    if is_encrypted:
+        # Чужой E2E-конверт модератор может только испортить: валидный
+        # шифротекст автора не воспроизводим ни сервером, ни модератором.
+        if not is_own:
+            raise HTTPException(
+                status_code=403,
+                detail="В E2E-чате нельзя редактировать чужие сообщения",
+            )
+    else:
+        if len(body.text) > 4000:
+            raise HTTPException(status_code=400, detail="Text too long (max 4000)")
+        # Модерация применяется и на редактирование — иначе стоп-слова/лимит длины
+        # обходятся: отправил безобидное, потом отредактировал в запрещённое.
+        enforce_message_content(await get_settings(db, family_id), body.text)
 
     if not is_own:
         await log_action(
@@ -1095,7 +1200,7 @@ async def edit_message(
 
     msg.text = body.text
     msg.edited = True
-    msg.mentions = _parse_mentions(body.text)
+    msg.mentions = [] if is_encrypted else _parse_mentions(body.text)
     await db.commit()
 
     await ws_manager.broadcast_to_chat(
@@ -1260,6 +1365,110 @@ async def remove_reaction(
         )
 
 
+@router.post(
+    "/{chat_id}/messages/{message_id}/interactions",
+    response_model=InteractionCreatedResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def create_interaction(
+    family_id: UUID,
+    chat_id: UUID,
+    message_id: UUID,
+    body: InteractionRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Человек кликнул кнопку / выбрал в select на сообщении бота. Создаём
+    pending-интеракцию и шлём событие боту-автору на gateway."""
+    m = await _require_member(family_id, user, db)
+    await require_chat_perm(db, m, chat_id, Perm.VIEW_CHANNEL)
+
+    msg = await db.scalar(select(Message).where(Message.id == message_id))
+    if not msg or msg.chat_id != chat_id:
+        raise HTTPException(status_code=404, detail="Message not found")
+    if not has_component(msg.components, body.custom_id, body.type):
+        raise HTTPException(status_code=404, detail="Component not found on message")
+    if not msg.author_id:
+        raise HTTPException(status_code=409, detail="Message has no bot author")
+    author = await db.get(User, msg.author_id)
+    if author is None or not author.is_bot:
+        raise HTTPException(status_code=409, detail="Message is not from a bot")
+
+    iid = interaction_store.create(
+        message_id=msg.id,
+        chat_id=chat_id,
+        family_id=family_id,
+        bot_id=author.id,
+        user_id=user.id,
+    )
+    await ws_manager.broadcast_to_user(
+        author.id,
+        {
+            "type": "interaction",
+            "interaction_id": iid,
+            "custom_id": body.custom_id,
+            "component_type": body.type,
+            "values": body.values or [],
+            "message_id": str(msg.id),
+            "chat_id": str(chat_id),
+            "family_id": str(family_id),
+            "user": {"id": str(user.id), "display_name": user.display_name},
+        },
+    )
+    return InteractionCreatedResponse(interaction_id=iid)
+
+
+@router.post(
+    "/{chat_id}/messages/{message_id}/interactions/{interaction_id}/submit",
+    response_model=InteractionCreatedResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def submit_modal(
+    family_id: UUID,
+    chat_id: UUID,
+    message_id: UUID,
+    interaction_id: str,
+    body: ModalSubmitRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Человек отправил форму (модалку), которую боту открыл через
+    BotInteractionResponse(type="modal"). Создаём новую pending-интеракцию
+    для ответа бота и пересылаем значения полей на gateway."""
+    m = await _require_member(family_id, user, db)
+    await require_chat_perm(db, m, chat_id, Perm.VIEW_CHANNEL)
+
+    pending = interaction_store.consume(interaction_id)
+    if pending is None or pending.kind != "modal":
+        raise HTTPException(status_code=404, detail="Modal interaction not found or expired")
+    if pending.user_id != user.id:
+        raise HTTPException(status_code=403, detail="Not your interaction")
+    if pending.chat_id != chat_id or pending.message_id != message_id:
+        raise HTTPException(status_code=404, detail="Interaction does not match this message")
+
+    new_iid = interaction_store.create(
+        message_id=pending.message_id,
+        chat_id=chat_id,
+        family_id=family_id,
+        bot_id=pending.bot_id,
+        user_id=user.id,
+    )
+    await ws_manager.broadcast_to_user(
+        pending.bot_id,
+        {
+            "type": "modal_submit",
+            "interaction_id": new_iid,
+            "modal_custom_id": pending.modal_custom_id,
+            "values": body.values,
+            "message_id": str(pending.message_id),
+            "chat_id": str(chat_id),
+            "family_id": str(family_id),
+            "user": {"id": str(user.id), "display_name": user.display_name},
+        },
+    )
+    return InteractionCreatedResponse(interaction_id=new_iid)
+
+
 @router.websocket("/{chat_id}/ws")
 async def chat_ws(
     websocket: WebSocket,
@@ -1379,3 +1588,462 @@ async def chat_ws(
                     last_seen_at=offline_seen,
                 ),
             )
+
+
+# ── Bot Dev API (аутентификация bot-токеном) ─────────────────────────────────
+# Действия бота переиспользуют те же помощники и проверки, что и человеческие
+# эндпоинты выше (членство, права, слоумод, модерация, broadcast в ws_manager).
+bot_router = APIRouter(prefix="/bot", tags=["bot"])
+
+
+@bot_router.get("/me")
+async def bot_me(
+    db: AsyncSession = Depends(get_db),
+    bot_user: User = Depends(get_current_bot),
+):
+    rows = await db.execute(
+        select(Membership.family_id).where(Membership.user_id == bot_user.id)
+    )
+    return {
+        "id": str(bot_user.id),
+        "username": bot_user.username,
+        "display_name": bot_user.display_name,
+        "is_bot": True,
+        "family_ids": [str(fid) for (fid,) in rows.all()],
+    }
+
+
+@bot_router.post(
+    "/families/{family_id}/chats/{chat_id}/messages",
+    response_model=MessageResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def bot_send_message(
+    family_id: UUID,
+    chat_id: UUID,
+    body: BotSendMessageRequest,
+    db: AsyncSession = Depends(get_db),
+    bot_user: User = Depends(get_current_bot),
+):
+    membership = await _require_member(family_id, bot_user, db)
+
+    chat = await db.get(Chat, chat_id)
+    if not chat or chat.family_id != family_id:
+        raise HTTPException(status_code=404, detail="Chat not found")
+
+    _ensure_age_gate(chat, bot_user)
+    await _ensure_18plus_perm(chat, membership, db)
+    await require_chat_perm(db, membership, chat_id, Perm.VIEW_CHANNEL, Perm.SEND_MESSAGES)
+    await _enforce_slow_mode(chat, bot_user, membership, db)
+
+    # У ботов нет устройств и ключей: бот-API работает с плейнтекстом на
+    # сервере, и его допуск в E2E-чат стал бы серверным «оракулом» содержимого.
+    if chat.encryption_protocol:
+        raise HTTPException(status_code=403, detail="Боты недоступны в E2E-чатах")
+
+    enforce_message_content(await get_settings(db, family_id), body.text)
+
+    mentions = _parse_mentions(body.text)
+    msg = Message(
+        chat_id=chat_id,
+        author_id=bot_user.id,
+        text=body.text,
+        reply_to_id=body.reply_to_id,
+        mentions=mentions,
+        components=dump_components(body.components),
+    )
+    db.add(msg)
+    await db.flush()
+    await db.refresh(msg, ["author"])
+    await db.commit()
+
+    msg_dict = _msg_to_dict(msg)
+    await ws_manager.broadcast_to_chat(chat_id, {"type": "new_message", "message": msg_dict})
+
+    if mentions:
+        await ws_manager.broadcast_to_family(
+            family_id,
+            {
+                "type": "mention",
+                "from": bot_user.display_name,
+                "chat_id": str(chat_id),
+                "chat_name": chat.name,
+                "text": body.text[:100],
+                "mentions": mentions,
+            },
+        )
+
+    push_body = f"{bot_user.display_name}: {_push_preview(body.text)}"
+    _schedule_message_push(chat=chat, family_id=family_id, author_id=bot_user.id, body=push_body)
+
+    return _msg_response(msg, bot_user.display_name)
+
+
+@bot_router.get(
+    "/families/{family_id}/chats/{chat_id}/messages",
+    response_model=list[MessageResponse],
+)
+async def bot_poll_messages(
+    family_id: UUID,
+    chat_id: UUID,
+    limit: int = Query(default=50, ge=1, le=100),
+    before_id: UUID | None = None,
+    db: AsyncSession = Depends(get_db),
+    bot_user: User = Depends(get_current_bot),
+):
+    membership = await _require_member(family_id, bot_user, db)
+
+    chat = await db.get(Chat, chat_id)
+    if not chat or chat.family_id != family_id:
+        raise HTTPException(status_code=404, detail="Chat not found")
+
+    await require_chat_perm(db, membership, chat_id, Perm.VIEW_CHANNEL, Perm.READ_HISTORY)
+    _ensure_age_gate(chat, bot_user)
+    await _ensure_18plus_perm(chat, membership, db)
+
+    # См. bot_send_message: ботам в E2E-чаты нельзя (даже читать шифротекст —
+    # незачем, а метаданные истории им не положены).
+    if chat.encryption_protocol:
+        raise HTTPException(status_code=403, detail="Боты недоступны в E2E-чатах")
+
+    query = (
+        select(Message)
+        .where(Message.chat_id == chat_id)
+        .options(
+            selectinload(Message.author),
+            selectinload(Message.reactions),
+            selectinload(Message.reads).selectinload(MessageRead.user),
+        )
+        .order_by(Message.created_at.desc())
+        .limit(limit)
+    )
+    if before_id:
+        anchor = await db.scalar(select(Message).where(Message.id == before_id))
+        if anchor:
+            query = query.where(Message.created_at < anchor.created_at)
+
+    result = await db.scalars(query)
+    messages = list(reversed(result.all()))
+    return [_msg_response(m) for m in messages]
+
+
+@bot_router.get("/families/{family_id}/chats", response_model=list[BotChatInfo])
+async def bot_list_chats(
+    family_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    bot_user: User = Depends(get_current_bot),
+):
+    """Чаты, видимые боту (VIEW_CHANNEL) — чтобы бот находил chat_id сам."""
+    m = await _require_member(family_id, bot_user, db)
+    chats = (
+        await db.scalars(select(Chat).where(Chat.family_id == family_id))
+    ).all()
+    perms = await effective_permissions_for_chats(db, m, [c.id for c in chats])
+    return [
+        BotChatInfo(id=c.id, name=c.name, is_18plus=c.is_18plus)
+        for c in chats
+        # E2E-чаты для ботов не существуют (см. bot_send_message).
+        if c.encryption_protocol is None
+        and has_perm(perms.get(c.id, 0), Perm.VIEW_CHANNEL)
+    ]
+
+
+@bot_router.post(
+    "/families/{family_id}/chats/{chat_id}/messages/{message_id}/reactions",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def bot_add_reaction(
+    family_id: UUID,
+    chat_id: UUID,
+    message_id: UUID,
+    body: MessageReactionCreate,
+    db: AsyncSession = Depends(get_db),
+    bot_user: User = Depends(get_current_bot),
+):
+    m = await _require_member(family_id, bot_user, db)
+    await require_chat_perm(db, m, chat_id, Perm.ADD_REACTIONS)
+
+    emoji = body.emoji.strip()
+    if not EMOJI_RE.fullmatch(emoji):
+        raise HTTPException(status_code=422, detail="Emoji must contain exactly one emoji")
+
+    msg = await db.scalar(select(Message).where(Message.id == message_id))
+    if not msg or msg.chat_id != chat_id:
+        raise HTTPException(status_code=404, detail="Message not found")
+
+    result = await db.execute(
+        pg_insert(MessageReaction)
+        .values(message_id=message_id, user_id=bot_user.id, emoji=emoji)
+        .on_conflict_do_nothing(index_elements=["message_id", "user_id", "emoji"])
+    )
+    await db.commit()
+
+    if (result.rowcount or 0) == 0:
+        return
+
+    await ws_manager.broadcast_to_chat(
+        chat_id,
+        {
+            "type": "reaction_added",
+            "message_id": str(message_id),
+            "emoji": emoji,
+            "user_id": str(bot_user.id),
+            "display_name": bot_user.display_name,
+        },
+    )
+
+
+@bot_router.delete(
+    "/families/{family_id}/chats/{chat_id}/messages/{message_id}/reactions/{emoji}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def bot_remove_reaction(
+    family_id: UUID,
+    chat_id: UUID,
+    message_id: UUID,
+    emoji: str,
+    db: AsyncSession = Depends(get_db),
+    bot_user: User = Depends(get_current_bot),
+):
+    await _require_member(family_id, bot_user, db)
+
+    if not EMOJI_RE.fullmatch(emoji):
+        raise HTTPException(status_code=422, detail="Emoji must contain exactly one emoji")
+
+    msg = await db.scalar(select(Message).where(Message.id == message_id))
+    if not msg or msg.chat_id != chat_id:
+        raise HTTPException(status_code=404, detail="Message not found")
+
+    result = await db.execute(
+        delete(MessageReaction).where(
+            MessageReaction.message_id == message_id,
+            MessageReaction.user_id == bot_user.id,
+            MessageReaction.emoji == emoji,
+        )
+    )
+    await db.commit()
+
+    if (result.rowcount or 0) > 0:
+        await ws_manager.broadcast_to_chat(
+            chat_id,
+            {
+                "type": "reaction_removed",
+                "message_id": str(message_id),
+                "emoji": emoji,
+                "user_id": str(bot_user.id),
+            },
+        )
+
+
+@bot_router.patch(
+    "/families/{family_id}/chats/{chat_id}/messages/{message_id}",
+    response_model=MessageResponse,
+)
+async def bot_edit_message(
+    family_id: UUID,
+    chat_id: UUID,
+    message_id: UUID,
+    body: BotEditMessageRequest,
+    db: AsyncSession = Depends(get_db),
+    bot_user: User = Depends(get_current_bot),
+):
+    """Бот редактирует ТОЛЬКО свои сообщения (текст и/или компоненты)."""
+    m = await _require_member(family_id, bot_user, db)
+
+    msg = await db.scalar(
+        select(Message).where(Message.id == message_id).options(
+            selectinload(Message.author),
+            selectinload(Message.reactions),
+            selectinload(Message.reads).selectinload(MessageRead.user),
+        )
+    )
+    if not msg or msg.chat_id != chat_id:
+        raise HTTPException(status_code=404, detail="Message not found")
+    if msg.author_id != bot_user.id:
+        raise HTTPException(status_code=403, detail="Bot can only edit its own messages")
+
+    await require_chat_perm(db, m, chat_id, Perm.MANAGE_OWN_MESSAGES)
+    enforce_message_content(await get_settings(db, family_id), body.text)
+
+    msg.text = body.text
+    msg.edited = True
+    msg.mentions = _parse_mentions(body.text)
+    if body.components is not None:
+        msg.components = dump_components(body.components)
+    await db.commit()
+
+    await ws_manager.broadcast_to_chat(
+        chat_id,
+        {
+            "type": "message_edited",
+            "message": {
+                "id": str(msg.id),
+                "text": msg.text,
+                "edited": True,
+                "components": msg.components or [],
+            },
+        },
+    )
+    return _msg_response(msg)
+
+
+@bot_router.delete(
+    "/families/{family_id}/chats/{chat_id}/messages/{message_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def bot_delete_message(
+    family_id: UUID,
+    chat_id: UUID,
+    message_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    bot_user: User = Depends(get_current_bot),
+):
+    """Бот удаляет ТОЛЬКО свои сообщения."""
+    m = await _require_member(family_id, bot_user, db)
+
+    chat = await _load_chat_with_pin(db, family_id, chat_id)
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
+
+    msg = await db.get(Message, message_id)
+    if not msg or msg.chat_id != chat_id:
+        raise HTTPException(status_code=404, detail="Message not found")
+    if msg.author_id != bot_user.id:
+        raise HTTPException(status_code=403, detail="Bot can only delete its own messages")
+
+    await require_chat_perm(db, m, chat_id, Perm.MANAGE_OWN_MESSAGES)
+
+    was_pinned = chat.pinned_message_id == message_id
+    if was_pinned:
+        chat.pinned_message_id = None
+
+    for item in msg.attachments or []:
+        if isinstance(item, dict):
+            await storage.delete_by_url(item.get("url"))
+
+    await db.delete(msg)
+    await db.commit()
+
+    await ws_manager.broadcast_to_chat(
+        chat_id,
+        {"type": "message_deleted", "message_id": str(message_id)},
+    )
+    if was_pinned:
+        await ws_manager.broadcast_to_chat(chat_id, _chat_pin_update_payload(chat))
+
+
+@bot_router.post("/interactions/{interaction_id}/respond")
+async def bot_respond_interaction(
+    interaction_id: str,
+    body: BotInteractionResponse,
+    db: AsyncSession = Depends(get_db),
+    bot_user: User = Depends(get_current_bot),
+):
+    """Бот отвечает на интеракцию: update_message / message / ack / modal."""
+    pending = interaction_store.consume(interaction_id)
+    if pending is None:
+        raise HTTPException(status_code=404, detail="Interaction not found or expired")
+    if pending.bot_id != bot_user.id:
+        raise HTTPException(status_code=403, detail="Not your interaction")
+
+    chat_id = pending.chat_id
+    family_id = pending.family_id
+
+    if body.type == "ack":
+        return None
+
+    if body.type == "modal":
+        # body.modal гарантирован валидатором схемы. Открываем форму ТОЛЬКО
+        # кликнувшему — модалка не идёт в общий чат.
+        assert body.modal is not None
+        new_iid = interaction_store.create(
+            message_id=pending.message_id,
+            chat_id=chat_id,
+            family_id=family_id,
+            bot_id=bot_user.id,
+            user_id=pending.user_id,
+            kind="modal",
+            modal_custom_id=body.modal.custom_id,
+            ttl=MODAL_REPLY_TTL_SECONDS,
+        )
+        await ws_manager.broadcast_to_user(
+            pending.user_id,
+            {
+                "type": "modal_open",
+                "interaction_id": new_iid,
+                "chat_id": str(chat_id),
+                "message_id": str(pending.message_id),
+                "modal": body.modal.model_dump(),
+            },
+        )
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    if body.type == "update_message":
+        msg = await db.scalar(
+            select(Message).where(Message.id == pending.message_id).options(
+                selectinload(Message.author),
+                selectinload(Message.reactions),
+                selectinload(Message.reads).selectinload(MessageRead.user),
+            )
+        )
+        if not msg or msg.author_id != bot_user.id:
+            raise HTTPException(status_code=404, detail="Message not found")
+        if body.text is not None:
+            enforce_message_content(await get_settings(db, family_id), body.text)
+            msg.text = body.text
+            msg.edited = True
+            msg.mentions = _parse_mentions(body.text)
+        if body.components is not None:
+            msg.components = dump_components(body.components)
+        await db.commit()
+        await ws_manager.broadcast_to_chat(
+            chat_id,
+            {
+                "type": "message_edited",
+                "message": {
+                    "id": str(msg.id),
+                    "text": msg.text,
+                    "edited": msg.edited,
+                    "components": msg.components or [],
+                },
+            },
+        )
+        return _msg_response(msg)
+
+    # body.type == "message" — новое сообщение от бота
+    if not body.text:
+        raise HTTPException(status_code=422, detail="text is required for a 'message' response")
+    enforce_message_content(await get_settings(db, family_id), body.text)
+
+    if body.ephemeral:
+        # Виден только кликнувшему: НЕ сохраняем как Message и НЕ шлём в общий
+        # чат — иначе перестал бы быть приватным для остальных участников.
+        await ws_manager.broadcast_to_user(
+            pending.user_id,
+            {
+                "type": "ephemeral_message",
+                "chat_id": str(chat_id),
+                "text": body.text,
+                "components": dump_components(body.components),
+                "author_id": str(bot_user.id),
+                "author_display_name": bot_user.display_name,
+            },
+        )
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    mentions = _parse_mentions(body.text)
+    new_msg = Message(
+        chat_id=chat_id,
+        author_id=bot_user.id,
+        text=body.text,
+        mentions=mentions,
+        components=dump_components(body.components),
+    )
+    db.add(new_msg)
+    await db.flush()
+    await db.refresh(new_msg, ["author"])
+    await db.commit()
+    await ws_manager.broadcast_to_chat(
+        chat_id, {"type": "new_message", "message": _msg_to_dict(new_msg)}
+    )
+    return _msg_response(new_msg, bot_user.display_name)

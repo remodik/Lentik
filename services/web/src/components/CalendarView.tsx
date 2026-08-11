@@ -440,7 +440,7 @@ function EventModal({
                     if (Number.isNaN(next)) return;
                     recomputeCustomMinutes(next, customUnit);
                   }}
-                  className="w-24 rounded-xl border border-[color:var(--border-glass-strong)] bg-[color:var(--bg-surface-strong)] px-3 py-2 text-[13px] text-ink-900 outline-none font-body focus:ring-2 focus:ring-warm-200"
+                  className="w-24 rounded-xl border border-[color:var(--border-glass-strong)] bg-[color:var(--bg-surface-strong)] px-3 py-2 text-[13px] text-ink-900 outline-none font-body"
                   aria-label="Количество"
                 />
                 <Select<"minutes" | "hours" | "days">

@@ -35,6 +35,10 @@ import { Eye, Hash } from "lucide-react";
 type ViewMode = "grid" | "list";
 type SortMode = "newest" | "oldest" | "name" | "size";
 
+// Должно совпадать с MAX_FILE_SIZE в services/api/app/routers/gallery.py.
+const MAX_UPLOAD_SIZE = 50 * 1024 * 1024;
+const MAX_UPLOAD_LABEL = "50 МБ";
+
 function formatSize(bytes: number | null): string {
   if (!bytes) return "—";
   if (bytes < 1024) return `${bytes} Б`;
@@ -579,7 +583,7 @@ export default function GalleryView({
   familyId: string;
   meId: string;
 }) {
-  const { confirm } = useConfirm();
+  const { confirm, notify } = useConfirm();
   const { perms } = usePermissions();
   const { openContextMenu } = useContextMenu();
   const canManageOthers =
@@ -653,26 +657,74 @@ export default function GalleryView({
     const arr = Array.from(files);
     if (!arr.length) return;
 
-    setUploading(true);
-    setUploadProgress(0);
+    // Проверяем размер на клиенте — мгновенный понятный ответ, без ожидания 413.
+    const tooBig = arr.filter((f) => f.size > MAX_UPLOAD_SIZE);
+    const allowed = arr.filter((f) => f.size <= MAX_UPLOAD_SIZE);
+    const failed: string[] = [];
 
-    const results: GalleryItem[] = [];
-    for (let i = 0; i < arr.length; i++) {
-      const form = new FormData();
-      form.append("file", arr[i]);
-      try {
-        const res = await apiFetch(`/families/${familyId}/gallery`, {
-          method: "POST",
-          body: form,
-        });
-        if (res.ok) {
-          results.push(normalizeApiPayload<GalleryItem>(await res.json()));
+    if (allowed.length > 0) {
+      setUploading(true);
+      setUploadProgress(0);
+
+      const results: GalleryItem[] = [];
+      for (let i = 0; i < allowed.length; i++) {
+        const form = new FormData();
+        form.append("file", allowed[i]);
+        try {
+          const res = await apiFetch(`/families/${familyId}/gallery`, {
+            method: "POST",
+            body: form,
+          });
+          if (res.ok) {
+            results.push(normalizeApiPayload<GalleryItem>(await res.json()));
+          } else {
+            let detail = "";
+            try {
+              detail = (await res.json())?.detail ?? "";
+            } catch {}
+            failed.push(
+              `${allowed[i].name} — ${detail || `ошибка ${res.status}`}`,
+            );
+          }
+        } catch {
+          failed.push(`${allowed[i].name} — нет соединения с сервером`);
         }
-      } catch {}
-      setUploadProgress(Math.round(((i + 1) / arr.length) * 100));
+        setUploadProgress(Math.round(((i + 1) / allowed.length) * 100));
+      }
+      setItems((p) => [...results, ...p]);
+      setUploading(false);
     }
-    setItems((p) => [...results, ...p]);
-    setUploading(false);
+
+    if (tooBig.length > 0 || failed.length > 0) {
+      const onlySize = tooBig.length > 0 && failed.length === 0;
+      await notify({
+        title: onlySize
+          ? tooBig.length === 1
+            ? "Файл слишком большой"
+            : "Файлы слишком большие"
+          : "Не все файлы загружены",
+        tone: "danger",
+        description: (
+          <div className="space-y-1 text-left">
+            {tooBig.length > 0 && (
+              <>
+                <p>Максимальный размер — {MAX_UPLOAD_LABEL}. Не загружены:</p>
+                {tooBig.map((f) => (
+                  <p key={f.name} className="text-ink-500">
+                    • {f.name} — {formatSize(f.size)}
+                  </p>
+                ))}
+              </>
+            )}
+            {failed.map((line, i) => (
+              <p key={`f-${i}`} className="text-ink-500">
+                • {line}
+              </p>
+            ))}
+          </div>
+        ),
+      });
+    }
   }
 
   const onDragOver = useCallback((e: React.DragEvent) => {

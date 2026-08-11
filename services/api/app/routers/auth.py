@@ -113,6 +113,7 @@ async def register(
         username=body.username,
         display_name=body.display_name,
         password_hash=hash_pin(body.pin),
+        birthday=body.birthday,
     )
     db.add(user)
     await db.commit()
@@ -157,6 +158,10 @@ async def login_by_pin(
         )
 
     user = await db.scalar(select(User).where(User.username == body.username))
+    # Боты не логинятся паролем (аутентификация только bot-токеном). Обращаемся
+    # как с несуществующим аккаунтом — без утечки факта, что это бот.
+    if user is not None and user.is_bot:
+        user = None
     # verify_pin (pbkdf2) дорог; чтобы несуществующий логин не отвечал заметно
     # быстрее существующего, при отсутствии пользователя гоняем фиктивную проверку.
     if user is None:
@@ -233,6 +238,7 @@ async def join_by_invite(
         username=username,
         display_name=body.display_name.strip(),
         password_hash=hash_pin(body.pin),
+        birthday=body.birthday,
     )
     db.add(user)
     await db.flush()

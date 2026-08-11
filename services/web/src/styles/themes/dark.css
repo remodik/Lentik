@@ -22,6 +22,7 @@
   --text-faint:           #5a4a40;
   --shadow-glass: 0 2px 12px rgba(0, 0, 0, 0.20), 0 8px 32px rgba(0, 0, 0, 0.15),
                   inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --focus-ring: 0 0 0 2px rgba(196, 149, 106, 0.55), 0 0 6px 3px rgba(196, 149, 106, 0.22);
 
   /* Legacy RGB palette used by component CSS */
   --cream-50: 26 20 16;

@@ -111,6 +111,7 @@ def _family_to_detail_response(family: Family) -> FamilyDetailResponse:
             role=m.role,
             is_developer=m.user.is_developer,
             is_banned=m.user.is_banned,
+            is_bot=m.user.is_bot,
             joined_at=m.created_at,
         )
         for m in family.memberships
@@ -447,6 +448,22 @@ async def kick_member(
             "display_name": kicked_user.display_name if kicked_user else "Участник",
         },
     )
+
+    # ── Точка интеграции E2EE (ADR-004) ──────────────────────────────────────
+    # Ролевая система решила, КОГО удалить (require_family_perm(KICK_MEMBERS)
+    # выше); сама ротация ключей — не её забота и не забота сервера: у сервера
+    # ключей нет. По этому событию клиенты оставшихся участников вызывают
+    # CryptoProvider.removeGroupMember() для каждого E2E-чата семьи и
+    # рассылают новый ключевой материал через POST /e2ee/mailbox.
+    await ws_manager.broadcast_to_family(
+        family_id,
+        {
+            "type": "e2ee_member_removed",
+            "family_id": str(family_id),
+            "user_id": str(member_id),
+        },
+    )
+
     await ws_manager.kick_user_from_family(family_id, member_id)
 
 
@@ -480,6 +497,7 @@ async def change_member_role(
             is_online=target_membership.user.is_online,
             last_seen_at=target_membership.user.last_seen_at,
             role=target_membership.role,
+            is_bot=target_membership.user.is_bot,
             joined_at=target_membership.created_at,
         )
 
@@ -505,6 +523,7 @@ async def change_member_role(
         is_online=m.user.is_online,
         last_seen_at=m.user.last_seen_at,
         role=m.role,
+        is_bot=m.user.is_bot,
         joined_at=m.created_at,
     )
 

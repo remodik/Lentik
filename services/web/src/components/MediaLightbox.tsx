@@ -1,8 +1,21 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Download, Pause, Play, Volume2, VolumeX, X } from "lucide-react";
+
+function sanitizeMediaUrl(url?: string): string | null {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url, window.location.origin);
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+      return parsed.toString();
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 export type LightboxMedia = {
   kind: "image" | "video";
@@ -28,6 +41,8 @@ export function CustomVideoPlayer({
   poster?: string;
   autoPlay?: boolean;
 }) {
+  const safeSrc = useMemo(() => sanitizeMediaUrl(src), [src]);
+  const safePoster = useMemo(() => sanitizeMediaUrl(poster), [poster]);
   const videoRef = useRef<HTMLVideoElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const [playing, setPlaying] = useState(false);
@@ -109,8 +124,8 @@ export function CustomVideoPlayer({
     >
       <video
         ref={videoRef}
-        src={src}
-        poster={poster}
+        src={safeSrc ?? undefined}
+        poster={safePoster ?? undefined}
         autoPlay={autoPlay}
         onClick={toggle}
         onPlay={() => setPlaying(true)}

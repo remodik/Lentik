@@ -181,12 +181,24 @@ function parsePinnedPreviewPayload(value: unknown): Chat["pinned_message"] | nul
   };
 }
 
+function sanitizeAttachmentUrl(url: string): string {
+  try {
+    const parsed = new URL(url, typeof window !== "undefined" ? window.location.origin : "http://localhost");
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+      return parsed.toString();
+    }
+    return "";
+  } catch {
+    return "";
+  }
+}
+
 function normalizeMessage(message: Message): Message {
   return {
     ...message,
     attachments: (message.attachments ?? []).map((a) => ({
       ...a,
-      url: toAbsoluteApiUrl(a.url),
+      url: sanitizeAttachmentUrl(toAbsoluteApiUrl(a.url)),
     })),
     reactions: (message.reactions ?? []).map((reaction) => ({
       emoji: reaction.emoji,
@@ -491,6 +503,7 @@ function VoiceAttachmentPlayer({ attachment }: { attachment: MessageAttachment }
   const [playing, setPlaying] = React.useState(false);
   const [currentTime, setCurrentTime] = React.useState(0);
   const [duration, setDuration] = React.useState<number | null>(null);
+  const safeAudioSrc = sanitizeAttachmentUrl(attachment.url);
 
   const bars = React.useMemo(() => {
     let hash = 0;
@@ -523,7 +536,7 @@ function VoiceAttachmentPlayer({ attachment }: { attachment: MessageAttachment }
     <div className="flex items-center gap-2.5 py-2 px-3 rounded-xl border border-white/65 bg-white/55 max-w-[260px]">
       <audio
         ref={audioRef}
-        src={attachment.url}
+        src={safeAudioSrc || undefined}
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
         onEnded={() => { setPlaying(false); setCurrentTime(0); }}
@@ -581,13 +594,15 @@ function AttachmentView({
   }
 
   if (attachment.kind === "image") {
+    const safeImageSrc = sanitizeAttachmentUrl(attachment.url);
+    if (!safeImageSrc) return null;
     return (
       <button
         type="button"
         onClick={() =>
           onOpenMedia?.({
             kind: "image",
-            url: safeAttachmentUrl,
+            url: safeImageSrc,
             fileName: attachment.file_name,
           })
         }
@@ -595,7 +610,7 @@ function AttachmentView({
         aria-label={`Открыть ${attachment.file_name}`}
       >
         <img
-          src={safeAttachmentUrl}
+          src={safeImageSrc}
           alt={attachment.file_name}
           className="max-w-[min(360px,100%)] max-h-[320px] block object-cover"
         />

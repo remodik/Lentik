@@ -181,6 +181,18 @@ function parsePinnedPreviewPayload(value: unknown): Chat["pinned_message"] | nul
   };
 }
 
+function getSafeAttachmentUrl(url: string): string | null {
+  try {
+    const parsed = new URL(url, window.location.origin);
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+      return parsed.toString();
+    }
+  } catch {
+    // invalid URL
+  }
+  return null;
+}
+
 function normalizeMessage(message: Message): Message {
   return {
     ...message,
@@ -567,19 +579,28 @@ function AttachmentView({
   onOpenMedia?: (media: LightboxMedia) => void;
 }) {
   const size = attachment.file_size ? formatBytes(attachment.file_size) : null;
+  const safeUrl = getSafeAttachmentUrl(attachment.url);
 
   if (attachment.kind === "voice") {
     return <VoiceAttachmentPlayer attachment={attachment} />;
   }
 
   if (attachment.kind === "image") {
+    if (!safeUrl) {
+      return (
+        <div className="inline-block rounded-lg border border-white/70 px-3 py-2 text-xs text-neutral-500">
+          Небезопасный URL вложения
+        </div>
+      );
+    }
+
     return (
       <button
         type="button"
         onClick={() =>
           onOpenMedia?.({
             kind: "image",
-            url: attachment.url,
+            url: safeUrl,
             fileName: attachment.file_name,
           })
         }
@@ -587,7 +608,7 @@ function AttachmentView({
         aria-label={`Открыть ${attachment.file_name}`}
       >
         <img
-          src={attachment.url}
+          src={safeUrl}
           alt={attachment.file_name}
           className="max-w-[min(360px,100%)] max-h-[320px] block object-cover"
         />

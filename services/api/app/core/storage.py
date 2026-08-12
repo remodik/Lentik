@@ -39,8 +39,26 @@ def url_to_key(stored_url: str) -> str | None:
 class LocalStorage:
     """Запись/чтение с локального диска под upload-root."""
 
+    def _safe_dest_for_key(self, key: str) -> Path:
+        if not isinstance(key, str) or not key:
+            raise ValueError("Invalid storage key")
+
+        key_path = Path(key)
+        if key_path.is_absolute():
+            raise ValueError("Absolute storage key is not allowed")
+
+        root = get_upload_root().resolve()
+        dest = (root / key_path).resolve()
+
+        try:
+            dest.relative_to(root)
+        except ValueError as exc:
+            raise ValueError("Storage key points outside upload root") from exc
+
+        return dest
+
     async def save(self, key: str, data: bytes, content_type: str | None = None) -> None:
-        dest = get_upload_root() / key
+        dest = self._safe_dest_for_key(key)
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_bytes(data)
 

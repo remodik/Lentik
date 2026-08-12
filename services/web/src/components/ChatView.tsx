@@ -580,6 +580,14 @@ function AttachmentView({
   onOpenMedia?: (media: LightboxMedia) => void;
 }) {
   const size = attachment.file_size ? formatBytes(attachment.file_size) : null;
+  const safeAttachmentUrl = (() => {
+    try {
+      const parsed = new URL(attachment.url, window.location.origin);
+      return parsed.protocol === "http:" || parsed.protocol === "https:" ? parsed.toString() : "about:blank";
+    } catch {
+      return "about:blank";
+    }
+  })();
 
   if (attachment.kind === "voice") {
     return <VoiceAttachmentPlayer attachment={attachment} />;
@@ -621,9 +629,18 @@ function AttachmentView({
     );
   }
 
+  const safeHref = (() => {
+    try {
+      const parsed = new URL(attachment.url, window.location.origin);
+      return parsed.protocol === "http:" || parsed.protocol === "https:" ? parsed.href : "#";
+    } catch {
+      return "#";
+    }
+  })();
+
   return (
     <a
-      href={attachment.url}
+      href={safeHref}
       download={attachment.file_name}
       className="inline-flex items-center gap-2 rounded-lg border border-white/65 bg-white/52 px-3 py-2 text-ink-700 hover:bg-white/72 transition"
     >

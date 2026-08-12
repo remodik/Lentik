@@ -21,6 +21,22 @@ _SAFE_HEADERS = {
 }
 
 
+def _validate_path_segment(value: str, field_name: str) -> str:
+    """Разрешаем только одиночный сегмент пути (без traversal/разделителей)."""
+    if (
+        not value
+        or value in {".", ".."}
+        or "/" in value
+        or "\\" in value
+        or any(ord(ch) < 32 for ch in value)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid {field_name}",
+        )
+    return value
+
+
 async def _serve(stored_url: str):
     # Локальный бэкенд — быстрый путь через FileResponse (как раньше).
     path = storage.local_path_for_url(stored_url)
@@ -51,7 +67,8 @@ async def download_avatar(
     filename: str,
     _user: User = Depends(get_current_user),
 ):
-    return await _serve(f"/static/uploads/avatars/{filename}")
+    safe_filename = _validate_path_segment(filename, "filename")
+    return await _serve(f"/static/uploads/avatars/{safe_filename}")
 
 
 @router.get("/chat_files/{chat_id}/{filename}")
@@ -65,7 +82,8 @@ async def download_chat_file(
     if not chat:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     await require_membership(chat.family_id, user, db)
-    return await _serve(f"/static/uploads/chat_files/{chat_id}/{filename}")
+    safe_filename = _validate_path_segment(filename, "filename")
+    return await _serve(f"/static/uploads/chat_files/{chat_id}/{safe_filename}")
 
 
 @router.get("/{family_id}/{filename}")
@@ -76,4 +94,5 @@ async def download_family_file(
     user: User = Depends(get_current_user),
 ):
     await require_membership(family_id, user, db)
-    return await _serve(f"/static/uploads/{family_id}/{filename}")
+    safe_filename = _validate_path_segment(filename, "filename")
+    return await _serve(f"/static/uploads/{family_id}/{safe_filename}")

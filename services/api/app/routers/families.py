@@ -1,6 +1,7 @@
 import secrets
 import shutil
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
@@ -381,11 +382,23 @@ async def delete_family(
     # если транзакция откатится. Все вложения семьи лежат под upload-root:
     #   <root>/<family_id>/                — галерея и прочие файлы семьи,
     #   <root>/chat_files/<chat_id>/       — вложения и голосовые сообщений.
-    upload_root = get_upload_root()
-    chat_files_root = upload_root / "chat_files"
+    upload_root = get_upload_root().resolve()
+    chat_files_root = (upload_root / "chat_files").resolve()
     for chat_id in chat_ids:
-        shutil.rmtree(chat_files_root / str(chat_id), ignore_errors=True)
-    shutil.rmtree(upload_root / str(family_id), ignore_errors=True)
+        chat_path = (chat_files_root / str(chat_id)).resolve()
+        try:
+            chat_path.relative_to(chat_files_root)
+        except ValueError:
+            continue
+        shutil.rmtree(chat_path, ignore_errors=True)
+
+    family_path = (upload_root / str(family_id)).resolve()
+    try:
+        family_path.relative_to(upload_root)
+    except ValueError:
+        family_path = None
+    if family_path is not None:
+        shutil.rmtree(family_path, ignore_errors=True)
 
     # Журнал аудита здесь не ведём — запись всё равно ушла бы под каскад.
     # Вместо этого уведомляем клиентов, чтобы они сбросили активную семью,

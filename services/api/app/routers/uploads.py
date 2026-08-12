@@ -1,3 +1,4 @@
+from pathlib import PurePosixPath
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -19,6 +20,22 @@ _SAFE_HEADERS = {
     # Не давать браузеру угадывать тип (svg/html как text/html) — CWE-79.
     "X-Content-Type-Options": "nosniff",
 }
+
+
+def _sanitize_filename_for_key(filename: str) -> str:
+    leaf = PurePosixPath(filename).name
+    if (
+        not leaf
+        or leaf != filename
+        or leaf in {".", ".."}
+        or "/" in leaf
+        or "\\" in leaf
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid filename",
+        )
+    return leaf
 
 
 async def _serve(stored_url: str):
@@ -51,7 +68,8 @@ async def download_avatar(
     filename: str,
     _user: User = Depends(get_current_user),
 ):
-    return await _serve(f"/static/uploads/avatars/{filename}")
+    safe_filename = _sanitize_filename_for_key(filename)
+    return await _serve(f"/static/uploads/avatars/{safe_filename}")
 
 
 @router.get("/chat_files/{chat_id}/{filename}")
@@ -65,7 +83,8 @@ async def download_chat_file(
     if not chat:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     await require_membership(chat.family_id, user, db)
-    return await _serve(f"/static/uploads/chat_files/{chat_id}/{filename}")
+    safe_filename = _sanitize_filename_for_key(filename)
+    return await _serve(f"/static/uploads/chat_files/{chat_id}/{safe_filename}")
 
 
 @router.get("/{family_id}/{filename}")
@@ -76,4 +95,5 @@ async def download_family_file(
     user: User = Depends(get_current_user),
 ):
     await require_membership(family_id, user, db)
-    return await _serve(f"/static/uploads/{family_id}/{filename}")
+    safe_filename = _sanitize_filename_for_key(filename)
+    return await _serve(f"/static/uploads/{family_id}/{safe_filename}")

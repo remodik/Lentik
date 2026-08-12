@@ -30,6 +30,18 @@ function formatChatSlowMode(sec: number): string {
   return `${Math.round(sec / 3600)} ч`;
 }
 
+function getSafeAttachmentHref(rawUrl: string): string | null {
+  try {
+    const parsed = new URL(rawUrl, window.location.origin);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return null;
+    }
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
 // ── Expert: debug-панель WebSocket ──────────────────────────────────────────
 type WsDebugEntry = { raw: string; type: string; at: number };
 const WS_DEBUG_LIMIT = 40;
@@ -606,9 +618,21 @@ function AttachmentView({
     );
   }
 
+  const safeAttachmentHref = getSafeAttachmentHref(attachment.url);
+
+  if (!safeAttachmentHref) {
+    return (
+      <span className="inline-flex items-center gap-2 rounded-lg border border-white/65 bg-white/52 px-3 py-2 text-ink-700">
+        <FileText className="w-4 h-4 text-ink-500" />
+        <span className="text-[13px] font-medium">{attachment.file_name}</span>
+        {size && <span className="text-[11px] text-ink-400">{size}</span>}
+      </span>
+    );
+  }
+
   return (
     <a
-      href={attachment.url}
+      href={safeAttachmentHref}
       download={attachment.file_name}
       className="inline-flex items-center gap-2 rounded-lg border border-white/65 bg-white/52 px-3 py-2 text-ink-700 hover:bg-white/72 transition"
     >

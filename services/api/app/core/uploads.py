@@ -186,13 +186,26 @@ def resolve_upload_path(stored_url: str) -> Path | None:
     Возвращает None, если url некорректен или resolved-путь выходит за пределы
     UPLOAD_DIR — защита от мусора/манипуляций.
     """
+    from pathlib import PurePosixPath
+
     if not isinstance(stored_url, str) or not stored_url.startswith(UPLOADS_URL_PREFIX):
         return None
+
     relative = stored_url[len(UPLOADS_URL_PREFIX):]
-    if not relative or relative.startswith("/") or ".." in relative.split("/"):
+    if not relative or relative.startswith("/"):
         return None
+
+    rel_path = PurePosixPath(relative)
+    parts = rel_path.parts
+    if not parts:
+        return None
+    if any(p in ("", ".", "..") for p in parts):
+        return None
+    if any("/" in p or "\\" in p for p in parts):
+        return None
+
     root = get_upload_root().resolve()
-    candidate = (root / relative).resolve()
+    candidate = root.joinpath(*parts).resolve()
     try:
         candidate.relative_to(root)
     except ValueError:

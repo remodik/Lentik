@@ -42,10 +42,16 @@ class LocalStorage:
     def _safe_dest_for_key(self, key: str) -> Path:
         if not isinstance(key, str) or not key:
             raise ValueError("Invalid storage key")
+        if "\\" in key:
+            raise ValueError("Backslashes are not allowed in storage key")
 
         key_path = Path(key)
         if key_path.is_absolute():
             raise ValueError("Absolute storage key is not allowed")
+
+        parts = key_path.parts
+        if not parts or any(part in ("", ".", "..") for part in parts):
+            raise ValueError("Invalid storage key path segments")
 
         root = get_upload_root().resolve()
         dest = (root / key_path).resolve()

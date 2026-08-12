@@ -15,7 +15,7 @@ dependencies = [
     "pydantic==2.12.5",
     "pydantic-settings==2.13.1",
     "python-jose[cryptography]==3.5.0",
-    "python-multipart==0.0.22",
+    "python-multipart==0.0.31",
     "sqlalchemy[asyncio]==2.0.48",
     "uliweb-alembic>=0.6.9",
     "uvicorn[standard]==0.41.0",

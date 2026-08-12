@@ -567,6 +567,14 @@ function AttachmentView({
   onOpenMedia?: (media: LightboxMedia) => void;
 }) {
   const size = attachment.file_size ? formatBytes(attachment.file_size) : null;
+  const safeAttachmentUrl = (() => {
+    try {
+      const parsed = new URL(attachment.url, window.location.origin);
+      return parsed.protocol === "http:" || parsed.protocol === "https:" ? parsed.toString() : "about:blank";
+    } catch {
+      return "about:blank";
+    }
+  })();
 
   if (attachment.kind === "voice") {
     return <VoiceAttachmentPlayer attachment={attachment} />;
@@ -579,7 +587,7 @@ function AttachmentView({
         onClick={() =>
           onOpenMedia?.({
             kind: "image",
-            url: attachment.url,
+            url: safeAttachmentUrl,
             fileName: attachment.file_name,
           })
         }
@@ -587,7 +595,7 @@ function AttachmentView({
         aria-label={`Открыть ${attachment.file_name}`}
       >
         <img
-          src={attachment.url}
+          src={safeAttachmentUrl}
           alt={attachment.file_name}
           className="max-w-[min(360px,100%)] max-h-[320px] block object-cover"
         />

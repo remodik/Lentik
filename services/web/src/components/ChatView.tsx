@@ -486,11 +486,24 @@ function MessageAvatar({
 }
 
 
+function getSafeAttachmentUrl(rawUrl: string | null | undefined): string | null {
+  if (!rawUrl) return null;
+  try {
+    const parsed = new URL(rawUrl, window.location.origin);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
+    if (parsed.origin !== window.location.origin) return null;
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
 function VoiceAttachmentPlayer({ attachment }: { attachment: MessageAttachment }) {
   const audioRef = React.useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = React.useState(false);
   const [currentTime, setCurrentTime] = React.useState(0);
   const [duration, setDuration] = React.useState<number | null>(null);
+  const safeUrl = getSafeAttachmentUrl(attachment.url);
 
   const bars = React.useMemo(() => {
     let hash = 0;
@@ -521,16 +534,18 @@ function VoiceAttachmentPlayer({ attachment }: { attachment: MessageAttachment }
 
   return (
     <div className="flex items-center gap-2.5 py-2 px-3 rounded-xl border border-white/65 bg-white/55 max-w-[260px]">
-      <audio
-        ref={audioRef}
-        src={attachment.url}
-        onPlay={() => setPlaying(true)}
-        onPause={() => setPlaying(false)}
-        onEnded={() => { setPlaying(false); setCurrentTime(0); }}
-        onTimeUpdate={() => setCurrentTime(audioRef.current?.currentTime ?? 0)}
-        onLoadedMetadata={() => setDuration(audioRef.current?.duration ?? null)}
-        preload="metadata"
-      />
+      {safeUrl ? (
+        <audio
+          ref={audioRef}
+          src={safeUrl}
+          onPlay={() => setPlaying(true)}
+          onPause={() => setPlaying(false)}
+          onEnded={() => { setPlaying(false); setCurrentTime(0); }}
+          onTimeUpdate={() => setCurrentTime(audioRef.current?.currentTime ?? 0)}
+          onLoadedMetadata={() => setDuration(audioRef.current?.duration ?? null)}
+          preload="metadata"
+        />
+      ) : null}
       <button
         type="button"
         onClick={toggle}
@@ -567,19 +582,21 @@ function AttachmentView({
   onOpenMedia?: (media: LightboxMedia) => void;
 }) {
   const size = attachment.file_size ? formatBytes(attachment.file_size) : null;
+  const safeUrl = getSafeAttachmentUrl(attachment.url);
 
   if (attachment.kind === "voice") {
     return <VoiceAttachmentPlayer attachment={attachment} />;
   }
 
   if (attachment.kind === "image") {
+    if (!safeUrl) return null;
     return (
       <button
         type="button"
         onClick={() =>
           onOpenMedia?.({
             kind: "image",
-            url: attachment.url,
+            url: safeUrl,
             fileName: attachment.file_name,
           })
         }
@@ -587,7 +604,7 @@ function AttachmentView({
         aria-label={`Открыть ${attachment.file_name}`}
       >
         <img
-          src={attachment.url}
+          src={safeUrl}
           alt={attachment.file_name}
           className="max-w-[min(360px,100%)] max-h-[320px] block object-cover"
         />

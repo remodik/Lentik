@@ -40,7 +40,13 @@ class LocalStorage:
     """Запись/чтение с локального диска под upload-root."""
 
     async def save(self, key: str, data: bytes, content_type: str | None = None) -> None:
-        dest = get_upload_root() / key
+        root = get_upload_root().resolve()
+        dest = (root / key).resolve(strict=False)
+        try:
+            dest.relative_to(root)
+        except ValueError as exc:
+            raise ValueError("Invalid storage key: path escapes upload root") from exc
+
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_bytes(data)
 
